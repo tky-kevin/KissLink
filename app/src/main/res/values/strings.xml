@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NFC Transfer</string>
+    <string name="btn_send">傳送檔案</string>
+    <string name="btn_receive">接收檔案</string>
+    <string name="btn_history">傳輸紀錄</string>
+    <string name="btn_start_send">開始傳送</string>
+    <string name="btn_pick_file">選擇檔案</string>
+    <string name="status_waiting">等待接收中...</string>
+    <string name="status_connected">已連線，準備接收</string>
+    <string name="status_receiving">接收中...</string>
+    <string name="status_done">傳輸完成</string>
+    <string name="status_error">傳輸失敗</string>
+    <string name="history_empty">尚無傳輸紀錄</string>
+    <string name="history_clear">清除紀錄</string>
+    <string name="label_file_name">檔案名稱</string>
+    <string name="label_file_size">檔案大小</string>
+    <string name="label_direction_send">傳送</string>
+    <string name="label_direction_receive">接收</string>
+    <string name="tap_nfc_hint">請將裝置靠近對方以建立連線</string>
+    <string name="btn_start_receive">開始接收</string>
+    <string name="btn_stop_receive">停止接收</string>
+    <string name="btn_show_qr">顯示 QR Code</string>
+    <string name="nfc_enabled">NFC 已開啟</string>
+    <string name="nfc_disabled">NFC 未開啟 — 點此前往設定</string>
+    <string name="confirm_clear_title">清除紀錄</string>
+    <string name="confirm_clear_message">確定要清除所有傳輸紀錄？</string>
+    <string name="confirm_clear_ok">清除</string>
+    <string name="cancel">取消</string>
+    <string name="nfc_disabled_title">NFC 未開啟</string>
+    <string name="nfc_disabled_message">此應用程式需要 NFC 功能。請前往設定開啟 NFC。</string>
+    <string name="go_to_settings">前往設定</string>
+</resources>
