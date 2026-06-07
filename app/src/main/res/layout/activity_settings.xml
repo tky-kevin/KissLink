@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/notion_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Top bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="48dp"
+            android:paddingBottom="12dp">
+
+            <ImageButton
+                android:id="@+id/btnSettingsBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="返回"
+                android:padding="8dp"/>
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="設定"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/notion_text_primary"
+                android:gravity="center"/>
+
+            <View android:layout_width="40dp" android:layout_height="40dp"/>
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/notion_border"/>
+
+        <!-- Content -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- Section: 個人資料 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👤 個人資料"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/notion_text_tertiary"
+                android:layout_marginTop="20dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/notion_card"
+                android:layout_marginTop="8dp"
+                android:padding="20dp">
+
+                <!-- Avatar + change button -->
+                <LinearLayout
+                    android:id="@+id/avatarClickTarget"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:layout_gravity="center_horizontal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackgroundBorderless">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivSettingsAvatar"
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/avatar_placeholder"
+                        app:shapeAppearance="@style/CircleShapeAppearance"
+                        app:strokeWidth="3dp"
+                        app:strokeColor="?attr/colorPrimary"/>
+
+                    <TextView
+                        android:id="@+id/btnChangeAvatar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="更換頭像"
+                        android:textSize="12sp"
+                        android:textColor="?attr/colorPrimary"
+                        android:layout_marginTop="8dp"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/notion_border"
+                    android:layout_marginTop="16dp"/>
+
+                <!-- Name row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="姓名"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etName"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="textPersonName"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="你叫什麼名字？"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/notion_border"/>
+
+                <!-- Bio row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="簡介"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etBio"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="textMultiLine"
+                        android:maxLines="2"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="一句話介紹自己 ✨"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Section: 關於我 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎓 關於我"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/notion_text_tertiary"
+                android:layout_marginTop="24dp"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/notion_card"
+                android:layout_marginTop="8dp"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="學校"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etSchool"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="textCapWords"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="就讀學校"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/notion_border"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="科系"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etMajor"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="textCapWords"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="主修科系"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/notion_border"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Instagram"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etIg"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="@username"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/notion_border"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Line ID"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/notion_text_primary"/>
+
+                    <EditText
+                        android:id="@+id/etLineId"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:textSize="14sp"
+                        android:textColor="@color/notion_text_primary"
+                        android:hint="Line 帳號"
+                        android:gravity="end"
+                        android:background="@android:color/transparent"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Save button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSave"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="儲存變更"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:backgroundTint="?attr/colorPrimary"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="32dp"/>
+
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

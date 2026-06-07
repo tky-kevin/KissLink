@@ -1,12 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">KissLink</string>
+
+    <!-- 通用按鈕 -->
     <string name="btn_send">傳送</string>
     <string name="btn_receive">接收</string>
     <string name="btn_cancel">取消</string>
     <string name="btn_add_files">選擇檔案</string>
     <string name="btn_start_send">開始傳送</string>
+    <string name="btn_save">儲存</string>
+    <string name="btn_edit">編輯</string>
+
+    <!-- 狀態 -->
     <string name="status_waiting">等待連線…</string>
     <string name="status_connected">連線成功</string>
     <string name="history_empty">尚無傳輸紀錄</string>
+
+    <!-- 個人資料 / 設定 -->
+    <string name="settings">設定</string>
+    <string name="profile_name">姓名</string>
+    <string name="profile_tap_to_set">點此設定名稱</string>
+    <string name="change_avatar">更換頭像</string>
+    <string name="profile_saved">個人資料已儲存</string>
+
+    <!-- 名片 -->
+    <string name="my_card">我的名片</string>
+    <string name="received_card">收到的名片</string>
+    <string name="card_name">姓名</string>
+    <string name="card_title">職稱</string>
+    <string name="card_company">公司</string>
+    <string name="card_phone">電話</string>
+    <string name="card_email">電子郵件</string>
+    <string name="card_website">網站</string>
+    <string name="card_saved">名片已儲存</string>
+    <string name="card_no_name_hint">請先填寫名片姓名</string>
+    <string name="save_to_contacts">儲存至聯絡人</string>
+    <string name="no_contacts_app">找不到聯絡人應用程式</string>
+
+    <!-- 名片分享 -->
+    <string name="share_card">分享名片</string>
+    <string name="card_sharing_hint">靠近對方手機分享名片</string>
+    <string name="card_sharing_sub_hint">輕碰兩台手機 NFC 感應區</string>
+
+    <!-- 主題名稱 -->
+    <string name="theme_ink">墨水藍</string>
+    <string name="theme_coral">珊瑚</string>
+    <string name="theme_mint">薄荷</string>
+    <string name="theme_sunset">暖橙</string>
+    <string name="theme_lavender">薰衣草</string>
+    <string name="theme_rose">玫瑰</string>
+
+    <!-- 設定頁標籤 -->
+    <string name="settings_section_profile">個人資料</string>
+    <string name="settings_section_about">關於我</string>
+    <string name="settings_section_theme">配色主題</string>
+
+    <!-- 輸入提示 -->
+    <string name="hint_name">你叫什麼名字？</string>
+    <string name="hint_bio">一句話介紹自己</string>
+    <string name="hint_school">就讀學校</string>
+    <string name="hint_major">主修科系</string>
+    <string name="hint_ig">@username</string>
+    <string name="hint_line">Line 帳號</string>
+    <string name="save_changes">儲存變更</string>
 </resources>

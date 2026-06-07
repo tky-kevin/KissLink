@@ -21,6 +21,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.kisslink.R;
 import com.kisslink.transfer.SessionState;
 import com.kisslink.transfer.TransferProgress;
+import com.kisslink.ui.ThemeManager;
 
 import java.util.ArrayList;
 
@@ -101,6 +102,7 @@ public class TransferActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_transfer);
         role = getIntent().getStringExtra(EXTRA_ROLE);

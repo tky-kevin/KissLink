@@ -6,6 +6,7 @@ import android.nfc.Tag;
 import android.nfc.tech.IsoDep;
 import android.util.Log;
 
+import com.kisslink.model.BusinessCard;
 import com.kisslink.model.GroupCredential;
 
 import java.io.IOException;
@@ -13,20 +14,11 @@ import java.io.IOException;
 /**
  * 接收方使用的 NFC Reader 管理器。
  *
- * <p>啟用 NFC Reader 模式，當偵測到 HCE 卡片（傳送方手機）時：
- * <ol>
- *   <li>發送 SELECT AID APDU（{@link APDUHelper#buildSelectAidApdu()}）。</li>
- *   <li>讀取包含憑證 JSON 的回應。</li>
- *   <li>反序列化為 {@link GroupCredential} 並透過 {@link OnCredentialReceived} 回呼。</li>
- * </ol>
- *
- * <h3>使用方式（在 PairingActivity）</h3>
- * <pre>
- *   // onResume:
- *   nfcManager.enableReaderMode(this, cred -> viewModel.onNfcCredentialReceived(cred));
- *   // onPause:
- *   nfcManager.disableReaderMode(this);
- * </pre>
+ * <p>偵測到 HCE payload 後，依 type 欄位分派：
+ * <ul>
+ *   <li>"wifi"（或無 type）→ {@link OnCredentialReceived}</li>
+ *   <li>"card"            → {@link OnCardReceived}</li>
+ * </ul>
  */
 public class NFCManager {
 
@@ -34,6 +26,10 @@ public class NFCManager {
 
     public interface OnCredentialReceived {
         void onReceived(GroupCredential credential);
+    }
+
+    public interface OnCardReceived {
+        void onReceived(BusinessCard card);
     }
 
     public interface OnNfcError {
@@ -46,29 +42,19 @@ public class NFCManager {
         this.nfcAdapter = NfcAdapter.getDefaultAdapter(activity);
     }
 
-    /** 裝置是否支援 NFC。 */
-    public boolean isNfcAvailable() {
-        return nfcAdapter != null;
-    }
-
-    /** NFC 功能是否已由使用者開啟。 */
-    public boolean isNfcEnabled() {
-        return nfcAdapter != null && nfcAdapter.isEnabled();
-    }
+    public boolean isNfcAvailable() { return nfcAdapter != null; }
+    public boolean isNfcEnabled()   { return nfcAdapter != null && nfcAdapter.isEnabled(); }
 
     // ══════════════════════════════════════════════════════════
     //  Reader 模式
     // ══════════════════════════════════════════════════════════
 
     /**
-     * 啟用前景 NFC Reader 模式。在 Activity.onResume() 呼叫。
-     *
-     * @param activity  持有前景焦點的 Activity
-     * @param onReceived 成功讀取憑證後的回呼（在 NFC 執行緒呼叫）
-     * @param onError    讀取失敗時的回呼
+     * 啟用 NFC Reader 模式，同時處理 Wi-Fi 憑證與名片兩種 payload。
      */
     public void enableReaderMode(Activity activity,
                                  OnCredentialReceived onReceived,
+                                 OnCardReceived onCardReceived,
                                  OnNfcError onError) {
         if (!isNfcAvailable()) {
             if (onError != null) onError.onError("此裝置不支援 NFC");
@@ -81,17 +67,23 @@ public class NFCManager {
 
         nfcAdapter.enableReaderMode(
                 activity,
-                tag -> handleTag(tag, onReceived, onError),
-                // 僅掃描 ISO-DEP（HCE 使用的協定），跳過 NDEF 標籤處理
+                tag -> handleTag(tag, onReceived, onCardReceived, onError),
                 NfcAdapter.FLAG_READER_NFC_A
                         | NfcAdapter.FLAG_READER_NFC_B
                         | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
-                null // extras
-        );
+                null);
         Log.d(TAG, "NFC Reader mode enabled");
     }
 
-    /** 停用前景 NFC Reader 模式。在 Activity.onPause() 呼叫。 */
+    /**
+     * 向下相容的 3-param 版本（僅接收 Wi-Fi 憑證，忽略名片）。
+     */
+    public void enableReaderMode(Activity activity,
+                                 OnCredentialReceived onReceived,
+                                 OnNfcError onError) {
+        enableReaderMode(activity, onReceived, null, onError);
+    }
+
     public void disableReaderMode(Activity activity) {
         if (nfcAdapter != null) {
             nfcAdapter.disableReaderMode(activity);
@@ -103,7 +95,10 @@ public class NFCManager {
     //  標籤處理
     // ══════════════════════════════════════════════════════════
 
-    private void handleTag(Tag tag, OnCredentialReceived onReceived, OnNfcError onError) {
+    private void handleTag(Tag tag,
+                           OnCredentialReceived onReceived,
+                           OnCardReceived onCardReceived,
+                           OnNfcError onError) {
         IsoDep isoDep = IsoDep.get(tag);
         if (isoDep == null) {
             Log.w(TAG, "Tag does not support ISO-DEP");
@@ -113,14 +108,12 @@ public class NFCManager {
 
         try {
             isoDep.connect();
-            isoDep.setTimeout(3000); // 3 秒逾時
+            isoDep.setTimeout(3000);
 
-            // 1. 發送 SELECT AID
             byte[] selectApdu = APDUHelper.buildSelectAidApdu();
             Log.d(TAG, "Sending SELECT AID...");
             byte[] response = isoDep.transceive(selectApdu);
 
-            // 2. 解析回應
             byte[] payload = APDUHelper.extractPayload(response);
             if (payload == null) {
                 Log.e(TAG, "Invalid APDU response: " + bytesToHex(response));
@@ -128,17 +121,23 @@ public class NFCManager {
                 return;
             }
 
-            // 3. 反序列化憑證
-            GroupCredential credential = NFCCredential.fromBytes(payload);
-            Log.i(TAG, "Credential received via NFC: " + credential);
-            if (onReceived != null) onReceived.onReceived(credential);
+            String type = NFCCredential.parseType(payload);
+            if (NFCCredential.TYPE_CARD.equals(type)) {
+                BusinessCard card = NFCCredential.cardFromBytes(payload);
+                Log.i(TAG, "Business card received via NFC: " + card.getName());
+                if (onCardReceived != null) onCardReceived.onReceived(card);
+            } else {
+                GroupCredential credential = NFCCredential.fromBytes(payload);
+                Log.i(TAG, "Credential received via NFC: " + credential);
+                if (onReceived != null) onReceived.onReceived(credential);
+            }
 
         } catch (IOException e) {
             Log.e(TAG, "IsoDep transceive error", e);
             if (onError != null) onError.onError("NFC 通訊失敗，請再試一次");
         } catch (IllegalArgumentException e) {
-            Log.e(TAG, "Credential parse error", e);
-            if (onError != null) onError.onError("憑證格式錯誤：" + e.getMessage());
+            Log.e(TAG, "Payload parse error", e);
+            if (onError != null) onError.onError("資料格式錯誤：" + e.getMessage());
         } finally {
             try { isoDep.close(); } catch (IOException ignored) {}
         }

@@ -4,78 +4,126 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="@color/notion_bg">
 
-    <!-- 角色標籤（頂部）-->
-    <TextView
-        android:id="@+id/tvRole"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="傳送方"
-        android:textSize="14sp"
-        android:textColor="@color/on_surface_variant"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp"
-        android:background="@drawable/chip_bg"
+    <!-- Cancel button top-right -->
+    <ImageButton
+        android:id="@+id/btnCancel"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="取消"
+        android:padding="8dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="48dp"/>
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="16dp"/>
 
-    <!-- NFC 動畫區（中央）
-         正式版替換為 Lottie:
-         <com.airbnb.lottie.LottieAnimationView
-             app:lottie_rawRes="@raw/nfc_pulse"
-             app:lottie_autoPlay="true"
-             app:lottie_loop="true"/> -->
+    <!-- Outermost ring -->
     <View
-        android:id="@+id/nfcAnimView"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
-        android:background="@drawable/nfc_circle_bg"
-        app:layout_constraintTop_toBottomOf="@id/tvRole"
-        app:layout_constraintBottom_toTopOf="@id/tvStatus"
+        android:id="@+id/ring4"
+        android:layout_width="240dp"
+        android:layout_height="240dp"
+        android:background="@drawable/nfc_ring"
+        android:alpha="0.15"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="32dp"/>
+        android:layout_marginBottom="80dp"/>
 
-    <!-- 狀態文字 -->
+    <View
+        android:id="@+id/ring3"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:background="@drawable/nfc_ring"
+        android:alpha="0.25"
+        app:layout_constraintTop_toTopOf="@id/ring4"
+        app:layout_constraintBottom_toBottomOf="@id/ring4"
+        app:layout_constraintStart_toStartOf="@id/ring4"
+        app:layout_constraintEnd_toEndOf="@id/ring4"/>
+
+    <View
+        android:id="@+id/ring2"
+        android:layout_width="130dp"
+        android:layout_height="130dp"
+        android:background="@drawable/nfc_ring"
+        android:alpha="0.4"
+        app:layout_constraintTop_toTopOf="@id/ring4"
+        app:layout_constraintBottom_toBottomOf="@id/ring4"
+        app:layout_constraintStart_toStartOf="@id/ring4"
+        app:layout_constraintEnd_toEndOf="@id/ring4"/>
+
+    <!-- Inner ring: solid circle + NFC icon -->
+    <FrameLayout
+        android:id="@+id/ring1"
+        android:layout_width="88dp"
+        android:layout_height="88dp"
+        app:layout_constraintTop_toTopOf="@id/ring4"
+        app:layout_constraintBottom_toBottomOf="@id/ring4"
+        app:layout_constraintStart_toStartOf="@id/ring4"
+        app:layout_constraintEnd_toEndOf="@id/ring4">
+
+        <View
+            android:id="@+id/ring1Inner"
+            android:layout_width="88dp"
+            android:layout_height="88dp"
+            android:background="@drawable/avatar_placeholder"/>
+
+        <ImageView
+            android:id="@+id/ivNfcIcon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_nfc"
+            android:contentDescription="NFC"/>
+    </FrameLayout>
+
+    <!-- Status text -->
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="正在建立連線…"
-        android:textSize="18sp"
+        android:textSize="20sp"
         android:textStyle="bold"
-        android:textColor="@color/on_surface"
-        app:layout_constraintTop_toBottomOf="@id/nfcAnimView"
+        android:textColor="@color/notion_text_primary"
+        android:gravity="center"
+        app:layout_constraintTop_toBottomOf="@id/ring4"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="32dp"/>
 
-    <!-- 提示文字 -->
     <TextView
         android:id="@+id/tvHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="輕碰兩台手機 NFC 感應區"
         android:textSize="14sp"
-        android:textColor="@color/on_surface_variant"
+        android:textColor="@color/notion_text_tertiary"
+        android:gravity="center"
         app:layout_constraintTop_toBottomOf="@id/tvStatus"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="8dp"/>
 
-    <!-- 取消按鈕（底部）-->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnCancel"
+    <!-- Role chip -->
+    <TextView
+        android:id="@+id/tvRole"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="取消"
-        style="@style/Widget.Material3.Button.TextButton"
+        android:text="傳送方"
+        android:textSize="12sp"
+        android:textColor="@color/notion_text_tertiary"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/notion_card"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginBottom="48dp"/>
+        android:layout_marginBottom="40dp"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

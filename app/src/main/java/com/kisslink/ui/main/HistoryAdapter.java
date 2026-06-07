@@ -1,38 +1,32 @@
 package com.kisslink.ui.main;
 
+import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
-import com.kisslink.utils.FileUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/**
- * 傳輸歷史清單的 RecyclerView Adapter（使用 ListAdapter 支援 DiffUtil 動畫）。
- */
 public class HistoryAdapter extends ListAdapter<TransferRecordEntity, HistoryAdapter.VH> {
 
-    public interface OnDeleteClick { void onDelete(long id); }
-
-    private final OnDeleteClick onDelete;
     private final SimpleDateFormat sdf =
             new SimpleDateFormat("MM/dd HH:mm", Locale.getDefault());
 
-    public HistoryAdapter(OnDeleteClick onDelete) {
+    public HistoryAdapter() {
         super(DIFF);
-        this.onDelete = onDelete;
     }
 
     @NonNull
@@ -46,26 +40,37 @@ public class HistoryAdapter extends ListAdapter<TransferRecordEntity, HistoryAda
     @Override
     public void onBindViewHolder(@NonNull VH h, int pos) {
         TransferRecordEntity r = getItem(pos);
+
+        boolean isSend = "SEND".equals(r.direction);
+        h.tvDirectionIcon.setText(isSend ? "↑" : "↓");
+
         h.tvFileName.setText(r.fileName);
-        h.tvSize.setText(FileUtils.formatSize(r.fileSizeBytes));
-        h.tvTime.setText(sdf.format(new Date(r.timestampMs)));
-        h.tvDirection.setText("SEND".equals(r.direction) ? "↑ 傳送" : "↓ 接收");
-        h.tvStatus.setText(r.success ? "✓ 成功" : "✗ 失敗");
-        h.tvStatus.setTextColor(r.success ? 0xFF2E7D32 : 0xFFB71C1C);
-        h.btnDelete.setOnClickListener(v -> onDelete.onDelete(r.id));
+
+        String time = sdf.format(new Date(r.timestampMs));
+        String peer = (r.peerDeviceName != null && !r.peerDeviceName.isEmpty())
+                ? " · " + r.peerDeviceName : "";
+        h.tvMeta.setText(time + peer);
+
+        int statusColor = r.success
+                ? ContextCompat.getColor(h.itemView.getContext(), R.color.notion_success)
+                : ContextCompat.getColor(h.itemView.getContext(), R.color.notion_error);
+        if (h.ivStatus.getBackground() != null) {
+            Drawable bg = DrawableCompat.wrap(h.ivStatus.getBackground()).mutate();
+            DrawableCompat.setTint(bg, statusColor);
+            h.ivStatus.setBackground(bg);
+        }
     }
 
     static class VH extends RecyclerView.ViewHolder {
-        TextView tvFileName, tvSize, tvTime, tvDirection, tvStatus;
-        ImageButton btnDelete;
+        TextView tvDirectionIcon, tvFileName, tvMeta;
+        View ivStatus;
+
         VH(View v) {
             super(v);
-            tvFileName  = v.findViewById(R.id.tvFileName);
-            tvSize      = v.findViewById(R.id.tvSize);
-            tvTime      = v.findViewById(R.id.tvTime);
-            tvDirection = v.findViewById(R.id.tvDirection);
-            tvStatus    = v.findViewById(R.id.tvStatus);
-            btnDelete   = v.findViewById(R.id.btnDelete);
+            tvDirectionIcon = v.findViewById(R.id.tvDirectionIcon);
+            tvFileName      = v.findViewById(R.id.tvFileName);
+            tvMeta          = v.findViewById(R.id.tvMeta);
+            ivStatus        = v.findViewById(R.id.ivStatus);
         }
     }
 

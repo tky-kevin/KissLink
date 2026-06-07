@@ -1,16 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.KissLink" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/on_primary</item>
-        <item name="colorPrimaryContainer">@color/primary_container</item>
-        <item name="colorSecondary">@color/secondary</item>
-        <item name="colorOnSecondary">@color/on_secondary</item>
-        <item name="android:colorBackground">@color/background</item>
-        <item name="colorSurface">@color/surface</item>
-        <item name="colorOnSurface">@color/on_surface</item>
-        <item name="colorError">@color/error</item>
-        <item name="android:windowLightStatusBar">true</item>
+
+    <!-- Base — all 6 variants inherit this -->
+    <style name="Theme.KissLink.Base" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:colorBackground">@color/notion_bg</item>
+        <item name="colorSurface">@color/notion_surface</item>
+        <item name="colorOnSurface">@color/notion_text_primary</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/accent_text</item>
+        <item name="colorError">@color/notion_error</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:fontFamily">sans-serif</item>
     </style>
+
+    <!-- Manifest fallback — same look as Ink -->
+    <style name="Theme.KissLink" parent="Theme_KissLink_Ink"/>
+
+    <!-- 6 theme variants — names use underscores so R.style.Theme_KissLink_* resolves correctly -->
+    <style name="Theme_KissLink_Ink" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#2EAADC</item>
+        <item name="colorPrimaryContainer">#E8F4F8</item>
+    </style>
+
+    <style name="Theme_KissLink_Coral" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#FF6B6B</item>
+        <item name="colorPrimaryContainer">#FFF0F0</item>
+    </style>
+
+    <style name="Theme_KissLink_Mint" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#0F9D58</item>
+        <item name="colorPrimaryContainer">#E8F5EE</item>
+    </style>
+
+    <style name="Theme_KissLink_Sunset" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#F4A261</item>
+        <item name="colorPrimaryContainer">#FEF3EA</item>
+    </style>
+
+    <style name="Theme_KissLink_Lavender" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#9B5DE5</item>
+        <item name="colorPrimaryContainer">#F0E8FD</item>
+    </style>
+
+    <style name="Theme_KissLink_Rose" parent="Theme.KissLink.Base">
+        <item name="colorPrimary">#E91E8C</item>
+        <item name="colorPrimaryContainer">#FDE8F3</item>
+    </style>
+
+    <style name="CircleShapeAppearance" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
 </resources>

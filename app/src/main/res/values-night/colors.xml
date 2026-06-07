@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark base (always dark) -->
+    <!-- Dark palette (same as light — always dark) -->
     <color name="notion_bg">#141414</color>
     <color name="notion_surface">#1E1E1E</color>
     <color name="notion_surface2">#2A2A2A</color>
@@ -13,13 +13,12 @@
     <color name="accent">#2EAADC</color>
     <color name="accent_bg">#1A3A4A</color>
     <color name="accent_text">#FFFFFF</color>
-    <!-- Button colors -->
     <color name="btn_send">#E8960C</color>
     <color name="btn_receive">#D94F2A</color>
     <color name="btn_history">#1A7A4A</color>
     <color name="btn_profile_color">#3D6A9E</color>
 
-    <!-- Legacy aliases for unrewritten layouts -->
+    <!-- Legacy aliases -->
     <color name="bg_primary">#141414</color>
     <color name="bg_secondary">#1E1E1E</color>
     <color name="bg_tertiary">#2A2A2A</color>

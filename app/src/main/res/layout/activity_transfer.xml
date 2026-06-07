@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/background">
+    android:background="@color/bg_primary">
 
     <!-- 頂部狀態列 -->
     <LinearLayout
@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="@color/surface">
+        android:background="@color/surface_elevated">
 
         <TextView
             android:id="@+id/tvPhase"
@@ -21,14 +21,14 @@
             android:text="等待連線…"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/on_surface"/>
+            android:textColor="@color/label_primary"/>
 
         <TextView
             android:id="@+id/tvFileName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="13sp"
-            android:textColor="@color/on_surface_variant"
+            android:textColor="@color/label_tertiary"
             android:visibility="gone"
             android:layout_marginTop="4dp"/>
 
@@ -55,7 +55,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textSize="12sp"
-                android:textColor="@color/on_surface_variant"/>
+                android:textColor="@color/label_tertiary"/>
 
             <TextView
                 android:id="@+id/tvEta"
@@ -64,7 +64,7 @@
                 android:layout_weight="1"
                 android:gravity="center"
                 android:textSize="12sp"
-                android:textColor="@color/on_surface_variant"/>
+                android:textColor="@color/label_tertiary"/>
 
             <TextView
                 android:id="@+id/tvPercent"
@@ -73,7 +73,7 @@
                 android:layout_weight="1"
                 android:gravity="end"
                 android:textSize="12sp"
-                android:textColor="@color/on_surface_variant"/>
+                android:textColor="@color/label_tertiary"/>
         </LinearLayout>
     </LinearLayout>
 
@@ -107,7 +107,7 @@
             android:layout_height="wrap_content"
             android:text="等待傳送方選擇檔案…"
             android:textSize="16sp"
-            android:textColor="@color/on_surface_variant"
+            android:textColor="@color/label_tertiary"
             android:layout_marginTop="12dp"/>
 
         <TextView
@@ -115,7 +115,7 @@
             android:layout_height="wrap_content"
             android:text="檔案將儲存至 下載/KissLink"
             android:textSize="12sp"
-            android:textColor="@color/on_surface_variant"
+            android:textColor="@color/label_tertiary"
             android:layout_marginTop="4dp"/>
     </LinearLayout>
 
@@ -125,7 +125,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="12dp"
-        android:background="@color/surface">
+        android:background="@color/surface_elevated">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAddFiles"

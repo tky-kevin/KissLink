@@ -64,6 +64,30 @@
         <activity android:name=".ui.transfer.TransferActivity"
             android:exported="false"/>
 
+        <!-- ── 傳輸紀錄 ──────────────────────────────────────── -->
+        <activity android:name=".ui.main.HistoryActivity"
+            android:exported="false"/>
+
+        <!-- ── 設定畫面 ──────────────────────────────────────── -->
+        <activity android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:label="設定"/>
+
+        <!-- ── 我的名片 ──────────────────────────────────────── -->
+        <activity android:name=".ui.card.MyCardActivity"
+            android:exported="false"
+            android:label="我的名片"/>
+
+        <!-- ── 顯示收到的名片 ─────────────────────────────────── -->
+        <activity android:name=".ui.card.CardDisplayActivity"
+            android:exported="false"
+            android:label="收到的名片"/>
+
+        <!-- ── 名片分享等待畫面 ───────────────────────────────── -->
+        <activity android:name=".ui.card.CardSharingActivity"
+            android:exported="false"
+            android:label="分享名片"/>
+
         <!-- ── 除錯測試畫面（Release 可移除；不對外 export 以免成為攻擊面）── -->
         <activity android:name=".debug.WifiDirectTestActivity"
             android:exported="false"

@@ -27,4 +27,8 @@ public class MainViewModel extends AndroidViewModel {
     public void deleteRecord(long id) {
         repository.delete(id);
     }
+
+    public void clearAll() {
+        repository.clearAll();
+    }
 }

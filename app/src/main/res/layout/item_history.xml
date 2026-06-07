@@ -3,88 +3,78 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="12dp"
-    android:gravity="center_vertical"
-    android:background="@drawable/card_bg"
-    android:layout_marginHorizontal="4dp"
-    android:layout_marginVertical="3dp">
+    android:orientation="vertical"
+    android:background="@color/notion_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp"
+        android:gravity="center_vertical">
 
-        <!-- 方向 + 檔名 -->
+        <!-- Direction icon circle -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/notion_card"
+            android:gravity="center">
 
             <TextView
-                android:id="@+id/tvDirection"
+                android:id="@+id/tvDirectionIcon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="@color/primary"
-                android:layout_marginEnd="6dp"/>
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary"/>
+        </LinearLayout>
+
+        <!-- Content -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="8dp">
 
             <TextView
                 android:id="@+id/tvFileName"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:textSize="14sp"
-                android:textColor="@color/on_surface"
+                android:textStyle="bold"
+                android:textColor="@color/notion_text_primary"
                 android:maxLines="1"
-                android:ellipsize="middle"/>
-        </LinearLayout>
-
-        <!-- 大小 + 時間 + 狀態 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="4dp">
+                android:ellipsize="end"/>
 
             <TextView
-                android:id="@+id/tvSize"
+                android:id="@+id/tvMeta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/on_surface_variant"/>
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"/>
-
-            <TextView
-                android:id="@+id/tvTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textColor="@color/on_surface_variant"
-                android:layout_marginEnd="8dp"/>
-
-            <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="11sp"
-                android:textStyle="bold"/>
+                android:textColor="@color/notion_text_tertiary"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
+
+        <!-- Status dot -->
+        <View
+            android:id="@+id/ivStatus"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/theme_circle"/>
     </LinearLayout>
 
-    <ImageButton
-        android:id="@+id/btnDelete"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:src="@android:drawable/ic_menu_close_clear_cancel"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="刪除"
-        android:layout_marginStart="8dp"/>
+    <!-- Bottom separator -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/notion_border"/>
 
 </LinearLayout>
