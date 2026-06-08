@@ -7,100 +7,75 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
-import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
+import androidx.lifecycle.Observer;
 
 import com.kisslink.data.repository.TransferRepository;
-import com.kisslink.model.GroupCredential;
 import com.kisslink.nfc.KissLinkHCEService;
+import com.kisslink.pairing.PairingCoordinator;
+import com.kisslink.pairing.PairingToken;
 import com.kisslink.ui.transfer.TransferActivity;
-import com.kisslink.wifidirect.ConnectionState;
 import com.kisslink.wifidirect.WifiDirectManager;
 
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.List;
 
 /**
- * 檔案傳輸前景 Service —— 整個傳輸 session 的「單一擁有者」。
+ * 檔案傳輸前景 Service —— 整個 session 的「單一擁有者」（碰觸配對 + 雙向傳輸）。
  *
- * <h3>為何由 Service 擁有 Wi-Fi Direct 連線？</h3>
- * <p>連線（{@link WifiDirectManager}）的生命週期必須橫跨「配對 → 傳輸」兩個畫面。
- * 過去它被綁在短命的 PairingActivity/PairingViewModel 上，導致 Activity 結束時
- * {@code reset()} 在交接瞬間拆掉網路綁定。改由長命的 Service 持有後，連線從配對一路
- * 存活到傳輸結束，PairingActivity / TransferActivity 都只是「綁定並觀察」的薄客戶端。
- *
- * <h3>角色流程</h3>
+ * <h3>新模型（A+B2 + peer 雙向）</h3>
  * <pre>
- *  SENDER:   onStartCommand(SENDER) → createGroupAsGO()
- *              → credential 就緒 → HCE 注入 + TransferServer.startListening()（立即 listen）
- *              → 對方連入 → state=CONNECTED；TransferActivity 在握手後自動送檔
- *  RECEIVER: onStartCommand(RECEIVER) → 等 PairingActivity 由 NFC 取得憑證後呼叫
- *              submitReceiverCredential() → connectAsClient()
- *              → state=CONNECTED → TransferClient.connect() 開始接收
+ *   onCreate → WifiDirectManager + PairingCoordinator（產生本機 token）
+ *   前景畫面主控 NFC 切換，latch 後經 binder 餵入：
+ *      onNfcLatchedAsReader(peerToken) / onNfcLatchedAsTag()
+ *   Coordinator：BLE 換 token → GO 選舉 → GO 建群組+BLE 送憑證 / 非GO 收憑證後連線
+ *   onPaired(isGO) → 建 TCP socket（GO accept / client connect）→ PeerConnection（雙向）
+ *   之後雙方皆可 sendItems(...)（檔案/名片/照片），多輪互傳
  * </pre>
+ * 角色（GO/client）只是建立連線當下的技術身分；連上後對等。
  */
 @RequiresApi(api = Build.VERSION_CODES.Q)
 public class FileTransferService extends Service {
 
     private static final String TAG = "FileTransferService";
 
-    // ── Intent Keys ────────────────────────────────────────────
-    private static final String EXTRA_ROLE = "role";
-    public static final String ROLE_SENDER   = "SENDER";
-    public static final String ROLE_RECEIVER = "RECEIVER";
-
-    // ── Notification ───────────────────────────────────────────
     private static final String CHANNEL_ID = "kisslink_transfer";
     private static final int    NOTIF_ID   = 1001;
 
-    // ── Session 核心物件 ───────────────────────────────────────
-    private WifiDirectManager wifiManager;
-    private TransferServer    transferServer;
-    private TransferClient    transferClient;
-    private String            role;
-    @Nullable private GroupCredential credential;
+    // ── Session 核心 ───────────────────────────────────────────
+    private WifiDirectManager  wifi;
+    private PairingCoordinator coordinator;
+    @Nullable private PeerConnection peer;
+    private boolean isGroupOwner = false;
+    private volatile boolean peerStarting = false;
 
-    private boolean serverListening = false;
-    private boolean clientStarted   = false;
+    @Nullable private LiveData<TransferProgress> peerProgressSrc;
+    @Nullable private Observer<TransferProgress> peerProgressObs;
 
-    // ── 傳送方送檔的去 UI 耦合狀態 ─────────────────────────────
-    private boolean haveFiles   = false; // 已有待傳檔案入列
-    private boolean serverReady = false; // server 已與接收方握手完成
-    private boolean sendStarted = false; // 已開始送檔（避免重複）
-
-    /** 傳輸層進度匯總（內部用）—— server/client 的進度都橋接到此。 */
-    private final MutableLiveData<TransferProgress> serviceLd =
-            new MutableLiveData<>(TransferProgress.waiting());
-
-    /** 對 UI 公開的「單一狀態」—— 由連線狀態 + 連線錯誤 + 傳輸進度三者合併而成。 */
-    private final MediatorLiveData<SessionState> sessionLd = new MediatorLiveData<>();
-
-    // recomputeSession 用的最新來源值
-    private ConnectionState lastConn      = ConnectionState.IDLE;
-    @Nullable private String          lastConnError = null;
-    @Nullable private TransferProgress lastTransfer = null;
+    /** UI 唯一觀察點。 */
+    private final MutableLiveData<SessionState> sessionLd =
+            new MutableLiveData<>(SessionState.idle());
 
     private final TransferBinder binder = new TransferBinder();
 
     // ══════════════════════════════════════════════════════════
-    //  Intent Factory（只帶角色；憑證改由連線流程內部產生/傳入）
+    //  Intent Factory（角色中立）
     // ══════════════════════════════════════════════════════════
 
-    public static Intent senderIntent(Context ctx) {
-        return new Intent(ctx, FileTransferService.class).putExtra(EXTRA_ROLE, ROLE_SENDER);
-    }
-
-    public static Intent receiverIntent(Context ctx) {
-        return new Intent(ctx, FileTransferService.class).putExtra(EXTRA_ROLE, ROLE_RECEIVER);
+    public static Intent intent(Context ctx) {
+        return new Intent(ctx, FileTransferService.class);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -109,43 +84,33 @@ public class FileTransferService extends Service {
 
     public class TransferBinder extends Binder {
 
-        /** 單一 session 狀態（連線 + 傳輸 + 錯誤合一）—— UI 唯一需要觀察的對象。 */
         public LiveData<SessionState> getSessionState() { return sessionLd; }
 
-        @Nullable public GroupCredential getCredential() { return credential; }
+        /** 本機這場配對的 token（前景畫面寫進 NFC HCE 用）。 */
+        public PairingToken localToken() { return coordinator.localToken(); }
 
-        public String getRole() { return role; }
-
-        /** 接收方：PairingActivity 由 NFC 取得憑證後呼叫，觸發 silent P2P 連線。 */
-        public void submitReceiverCredential(GroupCredential cred) {
-            credential = cred;
-            wifiManager.connectAsClient(cred);
+        /** NFC：reader 相位讀到對方 token（本機當 BLE central）。 */
+        public void onNfcLatchedAsReader(@NonNull PairingToken peerToken) {
+            coordinator.onLatchedAsReader(peerToken);
         }
 
-        /**
-         * 傳送方：加入待傳檔案。實際開送由 Service 在「server 已握手 且 檔案已入列」時
-         * 自動觸發（{@link #maybeStartSending()}），不依賴 UI 導航時機。
-         */
-        public void enqueueFiles(List<Uri> uris) {
-            // 檔案集每場（每個 Service 實例）只接受一次：避免 PairingActivity 重建/多次綁定
-            // 重複 enqueue 造成 fileQueue 累加、同一批檔案被送多輪。
-            if (sendStarted || haveFiles) return;
-            if (transferServer != null && uris != null && !uris.isEmpty()) {
-                transferServer.enqueue(uris);
-                haveFiles = true;
-                maybeStartSending();
-            } else if (transferServer == null) {
-                Log.w(TAG, "enqueueFiles: transferServer is null (not a sender / not ready)");
-            }
+        /** NFC：自己 HCE 被讀（本機當 BLE peripheral）。 */
+        public void onNfcLatchedAsTag() {
+            coordinator.onLatchedAsTag();
         }
 
-        /** 相容舊呼叫端；語義同 {@link #enqueueFiles(List)}。 */
-        public void sendFiles(List<Uri> uris) { enqueueFiles(uris); }
+        /** 連上後送出內容（任一端皆可、可多輪）。 */
+        public void sendItems(@NonNull List<SendItem> items) {
+            if (peer != null) peer.sendItems(items);
+            else Log.w(TAG, "sendItems before connected");
+        }
 
-        /** 取消傳輸。 */
+        /** 第三台：拆掉目前 session，重開一場新配對。 */
+        public void rePair() { resetForNewSession(); }
+
         public void cancel() {
-            if (transferServer != null) transferServer.cancel();
-            if (transferClient != null) transferClient.cancel();
+            teardownPeer();
+            stopSelf();
         }
     }
 
@@ -160,158 +125,156 @@ public class FileTransferService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        // 連線層在 Service 一建立就準備好，並由 Service 註冊 Wi-Fi Direct 廣播（橫跨整個 session）。
-        wifiManager = new WifiDirectManager(this);
-        wifiManager.registerReceiver(this);
-        wireWifiObservers();
-
-        // 合併三個來源 → 單一 SessionState（UI 唯一觀察點）。
-        sessionLd.addSource(wifiManager.getState(), cs -> { lastConn = cs; recomputeSession(); });
-        sessionLd.addSource(wifiManager.getError(), e -> { lastConnError = e; recomputeSession(); });
-        sessionLd.addSource(serviceLd,             tp -> { lastTransfer = tp; recomputeSession(); });
-        recomputeSession();
-    }
-
-    /**
-     * 計算當前 SessionState：傳輸層事件優先（一旦進入傳輸階段就以它為準），
-     * 其次是連線錯誤，最後才是連線階段。
-     */
-    private void recomputeSession() {
-        if (lastTransfer != null && lastTransfer.phase != TransferProgress.Phase.WAITING) {
-            sessionLd.setValue(SessionState.fromTransfer(lastTransfer));
-        } else if (lastConnError != null && !lastConnError.isEmpty()) {
-            sessionLd.setValue(SessionState.error(lastConnError));
-        } else {
-            sessionLd.setValue(SessionState.fromConnection(lastConn));
-        }
+        wifi = new WifiDirectManager(this);
+        wifi.registerReceiver(this);
+        createCoordinator();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) { stopSelf(); return START_NOT_STICKY; }
-
-        if (role == null) {
-            role = intent.getStringExtra(EXTRA_ROLE);
-            startForeground(NOTIF_ID, buildNotification("準備中…", 0));
-
-            if (ROLE_SENDER.equals(role)) {
-                transferServer = new TransferServer(this);
-                transferServer.setEventListener(this::onFileCompleted);
-                bridgeToServiceLd(transferServer.getProgress());
-                wifiManager.createGroupAsGO(); // credential 就緒後 → HCE + 立即 listen（見 wireWifiObservers）
-            }
-            // RECEIVER：等待 PairingActivity 的 submitReceiverCredential()
-        }
+        startForeground(NOTIF_ID, buildNotification("準備配對…", 0));
         return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (transferServer != null) transferServer.release();
-        if (transferClient != null) transferClient.release();
-        if (wifiManager != null) {
-            wifiManager.unregisterReceiver(this);
-            wifiManager.reset(); // 真正的 session 結束點才拆連線（不再踩配對→傳輸的交接）
-        }
-        KissLinkHCEService.clearCredential();
+        teardownPeer();
+        if (coordinator != null) coordinator.reset();
+        if (wifi != null) { wifi.unregisterReceiver(this); wifi.reset(); }
+        KissLinkHCEService.clearToken();
         Log.d(TAG, "FileTransferService destroyed");
     }
 
     // ══════════════════════════════════════════════════════════
-    //  Wi-Fi Direct 觀察者（連線層 → 傳輸層的銜接）
+    //  配對協調
     // ══════════════════════════════════════════════════════════
 
-    private void wireWifiObservers() {
-        // 憑證就緒（GO 端群組已形成）：注入 HCE，並立即開始 listen。
-        wifiManager.getCredential().observeForever(cred -> {
-            if (cred == null) return;
-            credential = cred;
-            if (ROLE_SENDER.equals(role)) {
-                KissLinkHCEService.setCredential(cred);
-                if (transferServer != null && !serverListening) {
-                    serverListening = true;
-                    transferServer.startListening(); // 群組一形成就 listen → 消除 ECONNREFUSED 競態
-                    Log.i(TAG, "Sender: server listening early (group hosting)");
-                }
+    private void createCoordinator() {
+        coordinator = new PairingCoordinator(this, wifi, Build.MODEL, new PairingCoordinator.Listener() {
+            @Override public void onPhase(@NonNull PairingCoordinator.Phase phase) {
+                sessionLd.postValue(mapPhase(phase));
             }
-        });
-
-        // 連線成功：接收方此時才開始 TCP 接收。
-        wifiManager.getState().observeForever(state -> {
-            if (state == ConnectionState.CONNECTED
-                    && ROLE_RECEIVER.equals(role)
-                    && !clientStarted
-                    && credential != null) {
-                clientStarted = true;
-                transferClient = new TransferClient(this, credential);
-                transferClient.setEventListener(this::onFileCompleted);
-                bridgeToServiceLd(transferClient.getProgress());
-                transferClient.connect();
-                Log.i(TAG, "Receiver: P2P connected → starting TransferClient");
+            @Override public void onPaired(boolean groupOwner) {
+                isGroupOwner = groupOwner;
+                sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTING));
+                establishPeer(groupOwner);
+            }
+            @Override public void onError(@NonNull String message) {
+                sessionLd.postValue(SessionState.error(message));
             }
         });
     }
 
-    /**
-     * 傳送方：當「接收方已握手(serverReady)」且「檔案已入列(haveFiles)」兩個條件都滿足時開送。
-     * 兩個事件誰先誰後都行——後到的那一個負責觸發，徹底擺脫對 UI 導航時機的依賴。
-     */
-    private void maybeStartSending() {
-        if (ROLE_SENDER.equals(role) && serverReady && haveFiles && !sendStarted) {
-            sendStarted = true;
-            transferServer.startSending();
-            Log.i(TAG, "Sender: handshaked + files queued → start sending");
+    private static SessionState mapPhase(PairingCoordinator.Phase p) {
+        switch (p) {
+            case LATCHED:    return SessionState.of(SessionState.Phase.PAIRING_LATCHED);
+            case LINKING:    return SessionState.of(SessionState.Phase.PAIRING_LINKING);
+            case ELECTING:   return SessionState.of(SessionState.Phase.PAIRING_ELECTING);
+            case CONNECTING: return SessionState.of(SessionState.Phase.CONNECTING);
+            case CONNECTED:  return SessionState.of(SessionState.Phase.CONNECTED);
+            case IDLE:
+            default:         return SessionState.of(SessionState.Phase.IDLE);
         }
     }
 
-    /**
-     * 逐檔完成回呼（由 TransferServer/TransferClient 在背景執行緒同步呼叫）——
-     * 一檔一次、不經會合併的 LiveData，因此歷史紀錄數量永遠正確。
-     */
-    private void onFileCompleted(String fileName, long sizeBytes, long avgSpeedBps, boolean success) {
-        if (role == null) return;
-        String direction = ROLE_SENDER.equals(role) ? "SEND" : "RECEIVE";
-        TransferRepository repo = TransferRepository.getInstance(this);
-        repo.insert(repo.buildRecord(direction, fileName, sizeBytes, success, avgSpeedBps, null));
+    /** 第三台重連 / 取消後重置:拆 peer、reset 協調器與 Wi-Fi、重開一場新配對。 */
+    private void resetForNewSession() {
+        teardownPeer();
+        if (coordinator != null) coordinator.reset();
+        if (wifi != null) { wifi.removeGroup(); wifi.reset(); }
+        KissLinkHCEService.clearToken();
+        isGroupOwner = false;
+        createCoordinator();
+        sessionLd.postValue(SessionState.idle());
+        Log.i(TAG, "Session reset for new pairing");
     }
 
     // ══════════════════════════════════════════════════════════
-    //  進度橋接
+    //  建立雙向 socket → PeerConnection
     // ══════════════════════════════════════════════════════════
 
-    private void bridgeToServiceLd(LiveData<TransferProgress> src) {
-        src.observeForever(progress -> {
-            if (progress == null) return;
-            serviceLd.postValue(progress);
+    private void establishPeer(boolean groupOwner) {
+        if (peerStarting || peer != null) return;
+        peerStarting = true;
+        new Thread(() -> {
+            Socket socket = groupOwner ? acceptAsServer() : connectAsClient();
+            if (socket == null) {
+                peerStarting = false;
+                sessionLd.postValue(SessionState.error("建立傳輸通道失敗"));
+                return;
+            }
+            startPeer(socket);
+            peerStarting = false;
+        }, "peer-setup").start();
+    }
 
-            switch (progress.phase) {
-                case CONNECTED:
-                    // 傳送方：server 與接收方握手完成 → 標記就緒，必要時自動開送。
-                    if (ROLE_SENDER.equals(role)) {
-                        serverReady = true;
-                        maybeStartSending();
-                    }
-                    break;
-                case TRANSFERRING:
-                    updateNotification(progress.fileName, progress.percentInt());
-                    break;
-                case ALL_DONE:
-                    updateNotification("傳輸完成", 100);
-                    stopSelf();
-                    break;
-                case CANCELLED:
-                    updateNotification("已取消", 0);
-                    stopSelf();
-                    break;
-                case ERROR:
-                    updateNotification("傳輸失敗", 0);
-                    stopSelf();
-                    break;
-                default:
-                    break;
+    @Nullable
+    private Socket acceptAsServer() {
+        try (ServerSocket ss = new ServerSocket(WifiDirectManager.TRANSFER_PORT)) {
+            ss.setSoTimeout(20_000);
+            Log.i(TAG, "GO: waiting for peer socket…");
+            return ss.accept();
+        } catch (Exception e) {
+            Log.e(TAG, "acceptAsServer failed", e);
+            return null;
+        }
+    }
+
+    @Nullable
+    private Socket connectAsClient() {
+        for (int i = 0; i < 30; i++) {
+            try {
+                Socket s = new Socket();
+                s.connect(new InetSocketAddress(
+                        WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT), 2_000);
+                Log.i(TAG, "Client: socket connected on attempt " + (i + 1));
+                return s;
+            } catch (Exception e) {
+                try { Thread.sleep(400); } catch (InterruptedException ie) { return null; }
+            }
+        }
+        Log.e(TAG, "connectAsClient: all attempts failed");
+        return null;
+    }
+
+    private void startPeer(@NonNull Socket socket) {
+        peer = new PeerConnection(this, socket, new PeerConnection.Listener() {
+            @Override public void onItemCompleted(boolean sent, String name, long size,
+                                                  long avgSpeedBps, boolean success, byte itemType) {
+                String dir = sent ? "SEND" : "RECEIVE";
+                TransferRepository repo = TransferRepository.getInstance(FileTransferService.this);
+                repo.insert(repo.buildRecord(dir, name, size, success, avgSpeedBps, null));
+            }
+            @Override public void onDisconnected() {
+                Log.i(TAG, "Peer disconnected");
             }
         });
+
+        // 橋接進度 → SessionState
+        peerProgressSrc = peer.getProgress();
+        peerProgressObs = tp -> { if (tp != null) sessionLd.postValue(SessionState.fromTransfer(tp)); };
+        // observeForever 須在主執行緒
+        new android.os.Handler(getMainLooper()).post(() -> {
+            if (peerProgressSrc != null && peerProgressObs != null)
+                peerProgressSrc.observeForever(peerProgressObs);
+        });
+
+        peer.start();
+        updateNotification("已連線", 0);
+        sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTED));
+        Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
+    }
+
+    private void teardownPeer() {
+        if (peerProgressSrc != null && peerProgressObs != null) {
+            final LiveData<TransferProgress> src = peerProgressSrc;
+            final Observer<TransferProgress> obs = peerProgressObs;
+            new android.os.Handler(getMainLooper()).post(() -> src.removeObserver(obs));
+        }
+        peerProgressSrc = null;
+        peerProgressObs = null;
+        if (peer != null) { peer.close(); peer = null; }
     }
 
     // ══════════════════════════════════════════════════════════
@@ -321,32 +284,27 @@ public class FileTransferService extends Service {
     private void createNotificationChannel() {
         NotificationChannel ch = new NotificationChannel(
                 CHANNEL_ID, "KissLink 傳輸", NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription("顯示檔案傳輸進度");
+        ch.setDescription("顯示配對與檔案傳輸進度");
         getSystemService(NotificationManager.class).createNotificationChannel(ch);
     }
 
     private Notification buildNotification(String text, int progress) {
-        Intent tap = new Intent(this, TransferActivity.class);
-        tap.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pi = PendingIntent.getActivity(
-                this, 0, tap, PendingIntent.FLAG_IMMUTABLE);
+        Intent tap = new Intent(this, TransferActivity.class)
+                .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, tap, PendingIntent.FLAG_IMMUTABLE);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("KissLink 傳輸")
+                .setSmallIcon(android.R.drawable.stat_sys_upload)
+                .setContentTitle("KissLink")
                 .setContentText(text)
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .setSilent(true);
-
-        if (progress > 0 && progress < 100) {
-            b.setProgress(100, progress, false);
-        }
+        if (progress > 0 && progress < 100) b.setProgress(100, progress, false);
         return b.build();
     }
 
     private void updateNotification(String text, int progress) {
-        getSystemService(NotificationManager.class)
-                .notify(NOTIF_ID, buildNotification(text, progress));
+        getSystemService(NotificationManager.class).notify(NOTIF_ID, buildNotification(text, progress));
     }
 }

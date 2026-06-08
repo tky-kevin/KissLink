@@ -16,6 +16,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
 
 import com.kisslink.transfer.FileTransferService;
+import com.kisslink.transfer.SendItem;
 import com.kisslink.transfer.SessionState;
 
 import java.util.List;
@@ -86,12 +87,12 @@ public class TransferViewModel extends AndroidViewModel {
         }
     }
 
-    // ── 傳送方 API ────────────────────────────────────────────
+    // ── peer 傳送 API ─────────────────────────────────────────
 
-    /** 傳送方：傳入使用者選擇的檔案 URIs（送檔由 Service 在握手後驅動）。 */
-    public void sendFiles(List<Uri> uris) {
+    /** 連上後送出內容（任一端皆可、可多輪）。 */
+    public void sendItems(List<SendItem> items) {
         if (serviceBinder != null) {
-            serviceBinder.sendFiles(uris);
+            serviceBinder.sendItems(items);
         } else {
             Log.w(TAG, "Service not bound, cannot send");
         }

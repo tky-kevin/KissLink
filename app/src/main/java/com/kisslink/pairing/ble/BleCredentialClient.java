@@ -151,7 +151,7 @@ public class BleCredentialClient {
             }
         }
 
-        @SuppressLint({"MissingPermission", "deprecation"})
+        @SuppressLint("MissingPermission")
         @Override public void onServicesDiscovered(BluetoothGatt g, int status) {
             if (status != BluetoothGatt.GATT_SUCCESS || g.getService(BleConstants.SERVICE_UUID) == null) {
                 main.post(() -> callback.onError("找不到 KissLink BLE 服務"));
@@ -163,6 +163,13 @@ public class BleCredentialClient {
                 main.post(() -> callback.onError("BLE 特徵值缺失"));
                 return;
             }
+            // 先把 MTU 拉大:token(~90B)與憑證(~100B)都超過預設 23-byte MTU。
+            g.requestMtu(247);
+        }
+
+        @SuppressLint({"MissingPermission", "deprecation"})
+        @Override public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
+            Log.d(TAG, "MTU = " + mtu + " → writing own token");
             // 1) 寫自己的 token 給 peripheral
             peerTokenChar.setValue(localToken.toUri().getBytes(StandardCharsets.UTF_8));
             peerTokenChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);

@@ -17,8 +17,10 @@ import com.kisslink.wifidirect.ConnectionState;
 public final class SessionState {
 
     public enum Phase {
+        // ── 配對階段（碰觸 → BLE → 選舉）──
+        IDLE, PAIRING_LATCHED, PAIRING_LINKING, PAIRING_ELECTING,
         // ── 連線階段 ──
-        IDLE, CREATING_GROUP, HOSTING, CONNECTING, CONNECTED,
+        CREATING_GROUP, HOSTING, CONNECTING, CONNECTED,
         // ── 傳輸階段 ──
         TRANSFERRING, FILE_DONE, ALL_DONE,
         // ── 終態 ──
@@ -47,7 +49,20 @@ public final class SessionState {
                 || phase == Phase.ALL_DONE;
     }
 
+    /** 是否仍在配對/連線中（尚未可傳輸）。 */
+    public boolean isPairing() {
+        return phase == Phase.PAIRING_LATCHED
+                || phase == Phase.PAIRING_LINKING
+                || phase == Phase.PAIRING_ELECTING
+                || phase == Phase.CREATING_GROUP
+                || phase == Phase.HOSTING
+                || phase == Phase.CONNECTING;
+    }
+
     // ── 工廠 ────────────────────────────────────────────────────
+
+    /** 以指定 Phase 建立（配對階段用）。 */
+    public static SessionState of(Phase p) { return new SessionState(p, null, null); }
 
     static SessionState idle() { return new SessionState(Phase.IDLE, null, null); }
 
