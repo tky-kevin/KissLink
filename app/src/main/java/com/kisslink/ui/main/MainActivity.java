@@ -1,7 +1,6 @@
 package com.kisslink.ui.main;
 
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -63,8 +62,6 @@ public class MainActivity extends AppCompatActivity {
             PermissionHelper.requestPermissions(this);
         }
 
-        handlePairingDeepLink(getIntent());
-
         nfcHelper = new NfcForegroundHelper(this, new NfcForegroundHelper.Callback() {
             @Override public void onPeerToken(@NonNull PairingToken peer) {
                 Log.i("MainActivity", "NFC tap on main screen → start pairing as reader: " + peer);
@@ -78,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // 處理冷啟動時的 NFC intent (例如 ACTION_NDEF_DISCOVERED)
+        // 若本畫面是被 NFC tag 喚到前景,處理該 intent
         nfcHelper.handleIntent(getIntent());
     }
 
@@ -98,7 +95,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handlePairingDeepLink(intent);
         nfcHelper.handleIntent(intent);
     }
 
@@ -118,16 +114,5 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         startActivity(PairingActivity.newIntent(this));
-    }
-
-    /** 碰觸冷啟動:對方 HCE 的 kisslink://pair deep link 啟動本 App → 以 reader 接手。 */
-    private void handlePairingDeepLink(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
-        Uri data = intent.getData();
-        PairingToken token = PairingToken.fromUri(data);
-        if (token != null) {
-            Log.i("MainActivity", "Pairing deep link → cold-launch reader: " + token);
-            startActivity(PairingActivity.newIntentForColdLaunch(this, token));
-        }
     }
 }

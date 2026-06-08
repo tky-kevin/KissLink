@@ -4,15 +4,12 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.cardemulation.CardEmulation;
-import android.nfc.tech.Ndef;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Parcelable;
 import android.util.Log;
 
 import androidx.annotation.MainThread;
@@ -20,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.kisslink.nfc.KissLinkHCEService;
+import com.kisslink.nfc.NfcForegroundHelper;
 
 /**
  * 碰觸配對的 NFC 主控——<b>前景派發(foreground dispatch)+ 常駐 HCE</b>。
@@ -66,7 +64,7 @@ public class NfcPairingController {
 
     /** 設定本機這場要廣播的 token(常駐寫進 HCE)。 */
     public void setLocalToken(@NonNull PairingToken token) {
-        KissLinkHCEService.setActiveToken(token, activity.getPackageName());
+        KissLinkHCEService.setActiveToken(token);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -145,32 +143,14 @@ public class NfcPairingController {
             return;
         }
 
-        // 1) 系統若已預讀 NDEF,直接解析
-        Parcelable[] raw = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
-        if (raw != null && raw.length > 0 && raw[0] instanceof NdefMessage) {
-            PairingToken t = BootstrapCodec.parseNdef((NdefMessage) raw[0]);
-            if (t != null) { deliverPeer(t); return; }
-        }
-        // 2) 否則自己連上標籤讀 NDEF(背景執行緒)
+        // 連上標籤,用 IsoDep 送 SELECT AID 讀對方 token(背景執行緒)
         Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
         if (tag != null) readTagAsync(tag);
     }
 
     private void readTagAsync(@NonNull Tag tag) {
         new Thread(() -> {
-            Ndef ndef = Ndef.get(tag);
-            PairingToken t = null;
-            if (ndef != null) {
-                try {
-                    ndef.connect();
-                    t = BootstrapCodec.parseNdef(ndef.getNdefMessage());
-                } catch (Exception e) {
-                    Log.w(TAG, "readTagAsync failed: " + e.getMessage());
-                } finally {
-                    try { ndef.close(); } catch (Exception ignored) {}
-                }
-            }
-            final PairingToken peer = t;
+            PairingToken peer = NfcForegroundHelper.readToken(tag);
             if (peer != null) handler.post(() -> deliverPeer(peer));
         }, "nfc-read").start();
     }

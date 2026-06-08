@@ -69,14 +69,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- 碰觸冷啟動：對方 HCE 吐出的 kisslink://pair deep link 啟動本 App -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="kisslink" android:host="pair"/>
-            </intent-filter>
         </activity>
 
         <!-- ── 配對畫面 ──────────────────────────────────────── -->

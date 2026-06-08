@@ -4,33 +4,36 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.nfc.NdefMessage;
+import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.cardemulation.CardEmulation;
-import android.nfc.tech.Ndef;
+import android.nfc.tech.IsoDep;
 import android.os.Build;
-import android.os.Parcelable;
 import android.util.Log;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.kisslink.pairing.BootstrapCodec;
 import com.kisslink.pairing.LocalPairing;
 import com.kisslink.pairing.PairingToken;
 
+import java.nio.charset.StandardCharsets;
+
 /**
- * 在任何 Activity 啟用 NFC 前景攔截，防止系統 dispatch 跳出選擇器或導向 Google Play。
+ * 任何前景 Activity 的 NFC 碰觸配對主控:
+ * <ul>
+ *   <li>常駐把本機 token 寫進 HCE(自訂 AID),讓本機隨時是可被讀的 KissLink 標籤。</li>
+ *   <li>{@code enableForegroundDispatch} 攔下本機讀到的標籤,優先於系統 dispatch(不跳選擇器)。</li>
+ *   <li>{@code setPreferredService} 讓本機 HCE 在前景時優先(避免卡片模擬衝突)。</li>
+ * </ul>
+ * 讀到對方標籤後用 IsoDep 送 SELECT AID,取回對方 token。誰讀誰被讀由 NFC 射頻層仲裁。
  *
- * <p>使用方式：
  * <pre>
- *   private NfcForegroundHelper nfcHelper;
- *   onCreate:  nfcHelper = new NfcForegroundHelper(this, token -> { ... });
- *   onResume:  nfcHelper.onResume();
- *   onPause:   nfcHelper.onPause();
- *   onNewIntent: nfcHelper.handleIntent(intent);
+ *   onResume:    onResume();
+ *   onNewIntent: handleIntent(intent);
+ *   onPause:     onPause();
  * </pre>
  */
 public class NfcForegroundHelper {
@@ -38,9 +41,7 @@ public class NfcForegroundHelper {
     private static final String TAG = "NfcForegroundHelper";
 
     public interface Callback {
-        /** 碰觸到對方，解析出 token。在主執行緒呼叫。 */
         @MainThread void onPeerToken(@NonNull PairingToken peer);
-        /** 自己被當作標籤讀取。在主執行緒呼叫。 */
         @MainThread void onTagRead();
     }
 
@@ -61,15 +62,14 @@ public class NfcForegroundHelper {
 
         latched = false; // 回到前景 → 重新待命
 
-        // 0. 設定本機 HCE 對外廣播的 token(與 Coordinator 同源)——
-        //    讓「任何前景畫面」都是有效的 KissLink 標籤,對方才讀得到(否則一直震動)。
+        // 0. 設定本機 HCE 對外的 token(與 Coordinator 同源)——任何前景畫面都是有效標籤。
         try {
-            KissLinkHCEService.setActiveToken(LocalPairing.current(), activity.getPackageName());
+            KissLinkHCEService.setActiveToken(LocalPairing.current());
         } catch (Exception e) {
             Log.w(TAG, "setActiveToken failed: " + e.getMessage());
         }
 
-        // 1. 前景派發：攔下所有 NFC tag，不讓系統 dispatch
+        // 1. 前景派發:攔下所有 NFC tag,不讓系統 dispatch。
         int piFlags = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                 ? PendingIntent.FLAG_MUTABLE : 0;
         Intent dispatch = new Intent(activity, activity.getClass())
@@ -81,7 +81,7 @@ public class NfcForegroundHelper {
             Log.w(TAG, "enableForegroundDispatch failed: " + e.getMessage());
         }
 
-        // 2. 設定 preferred HCE service，避免 Samsung ConflictResolver
+        // 2. 前景優先 HCE,避免卡片模擬衝突。
         try {
             CardEmulation ce = CardEmulation.getInstance(nfcAdapter);
             if (ce != null) {
@@ -92,16 +92,9 @@ public class NfcForegroundHelper {
             Log.w(TAG, "setPreferredService failed: " + e.getMessage());
         }
 
-        // 3. 監聽自己被讀取
+        // 3. 監聽自己被讀取。
         KissLinkHCEService.setOnTagReadListener(() ->
                 activity.runOnUiThread(this::fireTagRead));
-    }
-
-    @MainThread
-    private void fireTagRead() {
-        if (latched || callback == null) return;
-        latched = true;
-        callback.onTagRead();
     }
 
     @MainThread
@@ -121,54 +114,32 @@ public class NfcForegroundHelper {
         }
     }
 
-    /**
-     * 處理 NFC intent，嘗試解析出 PairingToken。
-     * @return true if a token was found and delivered to callback
-     */
+    @MainThread
+    private void fireTagRead() {
+        if (latched || callback == null) return;
+        latched = true;
+        callback.onTagRead();
+    }
+
+    /** 處理前景派發送來的 NFC tag intent;用 IsoDep 讀對方 token。 */
     @MainThread
     public boolean handleIntent(@Nullable Intent intent) {
         if (intent == null || callback == null || latched) return false;
         String action = intent.getAction();
         if (!NfcAdapter.ACTION_TAG_DISCOVERED.equals(action)
-                && !NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action)
-                && !NfcAdapter.ACTION_TECH_DISCOVERED.equals(action)) {
+                && !NfcAdapter.ACTION_TECH_DISCOVERED.equals(action)
+                && !NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action)) {
             return false;
         }
-
-        // 嘗試從系統預讀的 NDEF 解析 token
-        Parcelable[] raw = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES);
-        if (raw != null && raw.length > 0 && raw[0] instanceof NdefMessage) {
-            PairingToken t = BootstrapCodec.parseNdef((NdefMessage) raw[0]);
-            if (t != null) {
-                latched = true;
-                callback.onPeerToken(t);
-                return true;
-            }
-        }
-
-        // 否則自己連上標籤讀
         Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
-        if (tag != null) {
-            readTagAsync(tag);
-            return true;
-        }
-        return false;
+        if (tag == null) return false;
+        readTagAsync(tag);
+        return true;
     }
 
     private void readTagAsync(@NonNull Tag tag) {
         new Thread(() -> {
-            Ndef ndef = Ndef.get(tag);
-            PairingToken t = null;
-            if (ndef != null) {
-                try {
-                    ndef.connect();
-                    t = BootstrapCodec.parseNdef(ndef.getNdefMessage());
-                } catch (Exception e) {
-                    Log.w(TAG, "readTagAsync failed: " + e.getMessage());
-                } finally {
-                    try { ndef.close(); } catch (Exception ignored) {}
-                }
-            }
+            PairingToken t = readToken(tag);
             if (t != null && callback != null) {
                 final PairingToken peer = t;
                 activity.runOnUiThread(() -> {
@@ -178,5 +149,25 @@ public class NfcForegroundHelper {
                 });
             }
         }, "nfc-fg-read").start();
+    }
+
+    /** 對 HCE 送 SELECT AID,取回 token bytes 並解析。在背景執行緒呼叫。 */
+    @Nullable
+    public static PairingToken readToken(@NonNull Tag tag) {
+        IsoDep iso = IsoDep.get(tag);
+        if (iso == null) return null;
+        try {
+            iso.connect();
+            iso.setTimeout(3000);
+            byte[] resp = iso.transceive(APDUHelper.buildSelectAidApdu());
+            byte[] payload = APDUHelper.extractPayload(resp);
+            if (payload == null) return null;
+            return PairingToken.fromUri(Uri.parse(new String(payload, StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            Log.w(TAG, "readToken failed: " + e.getMessage());
+            return null;
+        } finally {
+            try { iso.close(); } catch (Exception ignored) {}
+        }
     }
 }
