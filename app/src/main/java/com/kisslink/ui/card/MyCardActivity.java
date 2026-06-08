@@ -1,11 +1,11 @@
 package com.kisslink.ui.card;
 
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,11 +23,7 @@ public class MyCardActivity extends AppCompatActivity {
     private View viewModeContainer;
     private View editModeContainer;
     private Button btnEditCard;
-
-    private ShapeableImageView ivCardAvatar;
-    private TextView tvCardName, tvCardBio;
-    private LinearLayout rowSchool, rowIg, rowLine;
-    private TextView tvCardSchoolMajor, tvCardIg, tvCardLine;
+    private Button btnShareCard;
 
     private EditText etMyCardName, etMyCardBio, etMyCardSchool;
     private EditText etMyCardMajor, etMyCardIg, etMyCardLineId;
@@ -46,16 +42,7 @@ public class MyCardActivity extends AppCompatActivity {
         viewModeContainer  = findViewById(R.id.viewModeContainer);
         editModeContainer  = findViewById(R.id.editModeContainer);
         btnEditCard        = findViewById(R.id.btnEditCard);
-
-        ivCardAvatar       = findViewById(R.id.ivCardAvatar);
-        tvCardName         = findViewById(R.id.tvCardName);
-        tvCardBio          = findViewById(R.id.tvCardBio);
-        rowSchool          = findViewById(R.id.rowSchool);
-        rowIg              = findViewById(R.id.rowIg);
-        rowLine            = findViewById(R.id.rowLine);
-        tvCardSchoolMajor  = findViewById(R.id.tvCardSchoolMajor);
-        tvCardIg           = findViewById(R.id.tvCardIg);
-        tvCardLine         = findViewById(R.id.tvCardLine);
+        btnShareCard       = findViewById(R.id.btnShareCard);
 
         etMyCardName    = findViewById(R.id.etMyCardName);
         etMyCardBio     = findViewById(R.id.etMyCardBio);
@@ -69,6 +56,8 @@ public class MyCardActivity extends AppCompatActivity {
             if (isEditMode) saveCard();
             else enterEditMode();
         });
+        btnShareCard.setOnClickListener(v ->
+                startActivity(new Intent(this, CardSharingActivity.class)));
 
         loadCard();
     }
@@ -81,54 +70,78 @@ public class MyCardActivity extends AppCompatActivity {
     }
 
     private void populateViewMode(BusinessCard card, UserProfile profile) {
-        tvCardName.setText(card.hasName() ? card.getName() : "—");
-
-        String bio = card.getBio();
-        if (bio != null && !bio.isEmpty()) {
-            tvCardBio.setText(bio);
-            tvCardBio.setVisibility(View.VISIBLE);
-        } else {
-            tvCardBio.setVisibility(View.GONE);
+        // 姓名
+        TextView tvCardName = findViewById(R.id.tvCardName);
+        if (tvCardName != null) {
+            tvCardName.setText(card.hasName() ? card.getName() : "—");
         }
 
-        String school = card.getSchool();
-        String major  = card.getMajor();
-        if ((school != null && !school.isEmpty()) || (major != null && !major.isEmpty())) {
-            StringBuilder sb = new StringBuilder();
-            if (school != null && !school.isEmpty()) sb.append(school);
-            if (major  != null && !major.isEmpty()) {
-                if (sb.length() > 0) sb.append(" · ");
-                sb.append(major);
+        // Bio
+        TextView tvCardBio = findViewById(R.id.tvCardBio);
+        if (tvCardBio != null) {
+            String bio = card.getBio();
+            if (bio != null && !bio.isEmpty()) {
+                tvCardBio.setText(bio);
+                tvCardBio.setVisibility(View.VISIBLE);
+            } else {
+                tvCardBio.setVisibility(View.GONE);
             }
-            tvCardSchoolMajor.setText(sb.toString());
-            rowSchool.setVisibility(View.VISIBLE);
-        } else {
-            rowSchool.setVisibility(View.GONE);
         }
 
-        String ig = card.getIg();
-        if (ig != null && !ig.isEmpty()) {
-            tvCardIg.setText(ig.startsWith("@") ? ig : "@" + ig);
-            rowIg.setVisibility(View.VISIBLE);
-        } else {
-            rowIg.setVisibility(View.GONE);
+        // 學校 · 科系
+        TextView tvCardSchoolMajor = findViewById(R.id.tvCardSchoolMajor);
+        if (tvCardSchoolMajor != null) {
+            String school = card.getSchool();
+            String major  = card.getMajor();
+            if ((school != null && !school.isEmpty()) || (major != null && !major.isEmpty())) {
+                StringBuilder sb = new StringBuilder();
+                if (school != null && !school.isEmpty()) sb.append(school);
+                if (major  != null && !major.isEmpty()) {
+                    if (sb.length() > 0) sb.append(" · ");
+                    sb.append(major);
+                }
+                tvCardSchoolMajor.setText(sb.toString());
+                tvCardSchoolMajor.setVisibility(View.VISIBLE);
+            } else {
+                tvCardSchoolMajor.setVisibility(View.GONE);
+            }
         }
 
-        String lineId = card.getLineId();
-        if (lineId != null && !lineId.isEmpty()) {
-            tvCardLine.setText(lineId);
-            rowLine.setVisibility(View.VISIBLE);
-        } else {
-            rowLine.setVisibility(View.GONE);
+        // IG
+        TextView tvCardIg = findViewById(R.id.tvCardIg);
+        if (tvCardIg != null) {
+            String ig = card.getIg();
+            if (ig != null && !ig.isEmpty()) {
+                tvCardIg.setText("📸 " + (ig.startsWith("@") ? ig : "@" + ig));
+                tvCardIg.setVisibility(View.VISIBLE);
+            } else {
+                tvCardIg.setVisibility(View.GONE);
+            }
         }
 
-        String avatarUri = (card.getAvatarUri() != null && !card.getAvatarUri().isEmpty())
-                ? card.getAvatarUri()
-                : (profile != null ? profile.getAvatarUri() : null);
-        if (avatarUri != null) {
-            ivCardAvatar.setImageURI(Uri.parse(avatarUri));
-        } else {
-            ivCardAvatar.setImageResource(R.drawable.avatar_placeholder);
+        // LINE
+        TextView tvCardLine = findViewById(R.id.tvCardLine);
+        if (tvCardLine != null) {
+            String lineId = card.getLineId();
+            if (lineId != null && !lineId.isEmpty()) {
+                tvCardLine.setText("💬 " + lineId);
+                tvCardLine.setVisibility(View.VISIBLE);
+            } else {
+                tvCardLine.setVisibility(View.GONE);
+            }
+        }
+
+        // 頭像
+        ShapeableImageView ivCardAvatar = findViewById(R.id.ivCardAvatar);
+        if (ivCardAvatar != null) {
+            String avatarUri = (card.getAvatarUri() != null && !card.getAvatarUri().isEmpty())
+                    ? card.getAvatarUri()
+                    : (profile != null ? profile.getAvatarUri() : null);
+            if (avatarUri != null) {
+                ivCardAvatar.setImageURI(Uri.parse(avatarUri));
+            } else {
+                ivCardAvatar.setImageResource(R.drawable.avatar_placeholder);
+            }
         }
     }
 

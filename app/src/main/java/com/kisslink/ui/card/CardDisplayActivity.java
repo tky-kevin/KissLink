@@ -6,7 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.view.animation.OvershootInterpolator;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -37,68 +37,103 @@ public class CardDisplayActivity extends AppCompatActivity {
         BusinessCard card = getIntent().getParcelableExtra(EXTRA_CARD);
         if (card == null) { finish(); return; }
 
-        TextView tvName = findViewById(R.id.tvDisplayName);
-        TextView tvBio  = findViewById(R.id.tvDisplayBio);
-        ShapeableImageView ivAvatar = findViewById(R.id.ivDisplayAvatar);
-        LinearLayout rowSchool = findViewById(R.id.rowDisplaySchool);
-        LinearLayout rowIg     = findViewById(R.id.rowDisplayIg);
-        LinearLayout rowLine   = findViewById(R.id.rowDisplayLine);
-        TextView tvSchoolMajor = findViewById(R.id.tvDisplaySchoolMajor);
-        TextView tvIg          = findViewById(R.id.tvDisplayIg);
-        TextView tvLine        = findViewById(R.id.tvDisplayLine);
-
-        tvName.setText(card.getName() != null ? card.getName() : "");
-
-        String bio = card.getBio();
-        if (bio != null && !bio.isEmpty()) {
-            tvBio.setText(bio);
-            tvBio.setVisibility(View.VISIBLE);
-        } else {
-            tvBio.setVisibility(View.GONE);
-        }
-
-        String avatarUri = card.getAvatarUri();
-        if (avatarUri != null && !avatarUri.isEmpty()) {
-            ivAvatar.setImageURI(Uri.parse(avatarUri));
-        } else {
-            ivAvatar.setImageResource(R.drawable.avatar_placeholder);
-        }
-
-        String school = card.getSchool();
-        String major  = card.getMajor();
-        if ((school != null && !school.isEmpty()) || (major != null && !major.isEmpty())) {
-            StringBuilder sb = new StringBuilder();
-            if (school != null && !school.isEmpty()) sb.append(school);
-            if (major  != null && !major.isEmpty()) {
-                if (sb.length() > 0) sb.append(" · ");
-                sb.append(major);
-            }
-            tvSchoolMajor.setText(sb.toString());
-            rowSchool.setVisibility(View.VISIBLE);
-        } else {
-            rowSchool.setVisibility(View.GONE);
-        }
-
-        String ig = card.getIg();
-        if (ig != null && !ig.isEmpty()) {
-            tvIg.setText(ig.startsWith("@") ? ig : "@" + ig);
-            rowIg.setVisibility(View.VISIBLE);
-        } else {
-            rowIg.setVisibility(View.GONE);
-        }
-
-        String lineId = card.getLineId();
-        if (lineId != null && !lineId.isEmpty()) {
-            tvLine.setText(lineId);
-            rowLine.setVisibility(View.VISIBLE);
-        } else {
-            rowLine.setVisibility(View.GONE);
-        }
+        populateCard(card);
 
         MaterialButton btnSave = findViewById(R.id.btnSaveToContacts);
         btnSave.setOnClickListener(v -> saveToContacts(card));
 
         findViewById(R.id.btnDisplayBack).setOnClickListener(v -> finish());
+
+        playCardDropEntry();
+    }
+
+    private void populateCard(BusinessCard card) {
+        // 姓名
+        TextView tvName = findViewById(R.id.tvCardName);
+        if (tvName != null) {
+            tvName.setText(card.getName() != null ? card.getName() : "");
+        }
+
+        // Bio
+        TextView tvBio = findViewById(R.id.tvCardBio);
+        if (tvBio != null) {
+            String bio = card.getBio();
+            if (bio != null && !bio.isEmpty()) {
+                tvBio.setText(bio);
+                tvBio.setVisibility(View.VISIBLE);
+            } else {
+                tvBio.setVisibility(View.GONE);
+            }
+        }
+
+        // 頭像
+        ShapeableImageView ivAvatar = findViewById(R.id.ivCardAvatar);
+        if (ivAvatar != null) {
+            String avatarUri = card.getAvatarUri();
+            if (avatarUri != null && !avatarUri.isEmpty()) {
+                ivAvatar.setImageURI(Uri.parse(avatarUri));
+            } else {
+                ivAvatar.setImageResource(R.drawable.avatar_placeholder);
+            }
+        }
+
+        // 學校 · 科系
+        TextView tvSchoolMajor = findViewById(R.id.tvCardSchoolMajor);
+        if (tvSchoolMajor != null) {
+            String school = card.getSchool();
+            String major  = card.getMajor();
+            if ((school != null && !school.isEmpty()) || (major != null && !major.isEmpty())) {
+                StringBuilder sb = new StringBuilder();
+                if (school != null && !school.isEmpty()) sb.append(school);
+                if (major  != null && !major.isEmpty()) {
+                    if (sb.length() > 0) sb.append(" · ");
+                    sb.append(major);
+                }
+                tvSchoolMajor.setText(sb.toString());
+                tvSchoolMajor.setVisibility(View.VISIBLE);
+            } else {
+                tvSchoolMajor.setVisibility(View.GONE);
+            }
+        }
+
+        // IG
+        TextView tvIg = findViewById(R.id.tvCardIg);
+        if (tvIg != null) {
+            String ig = card.getIg();
+            if (ig != null && !ig.isEmpty()) {
+                tvIg.setText("📸 " + (ig.startsWith("@") ? ig : "@" + ig));
+                tvIg.setVisibility(View.VISIBLE);
+            } else {
+                tvIg.setVisibility(View.GONE);
+            }
+        }
+
+        // LINE
+        TextView tvLine = findViewById(R.id.tvCardLine);
+        if (tvLine != null) {
+            String lineId = card.getLineId();
+            if (lineId != null && !lineId.isEmpty()) {
+                tvLine.setText("💬 " + lineId);
+                tvLine.setVisibility(View.VISIBLE);
+            } else {
+                tvLine.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void playCardDropEntry() {
+        // 卡片從「上方」掉下來到正常位置
+        // 象徵「名片從對方手機飛來了」
+        View card = findViewById(R.id.cardAnimRoot);
+        if (card == null) return;
+        card.setTranslationY(-800f);
+        card.setAlpha(0f);
+        card.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(700)
+                .setInterpolator(new OvershootInterpolator(0.6f))
+                .start();
     }
 
     private void saveToContacts(BusinessCard card) {

@@ -27,11 +27,13 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.snackbar.Snackbar;
 import com.kisslink.R;
+import com.kisslink.model.BusinessCard;
 import com.kisslink.model.GroupCredential;
 import com.kisslink.nfc.NFCManager;
 import com.kisslink.transfer.FileTransferService;
 import com.kisslink.transfer.SessionState;
 import com.kisslink.transfer.TransferProgress;
+import com.kisslink.ui.card.CardDisplayActivity;
 
 import java.util.ArrayList;
 
@@ -205,11 +207,12 @@ public class TransferBottomSheet extends BottomSheetDialogFragment {
     @Override
     public void onResume() {
         super.onResume();
-        // RECEIVER：啟用 NFC Reader 等待碰觸
+        // RECEIVER：啟用 NFC Reader 等待碰觸（同時處理名片和 Wi-Fi 憑證）
         if (FileTransferService.ROLE_RECEIVER.equals(role)) {
             nfcManager.enableReaderMode(
                     requireActivity(),
                     cred -> requireActivity().runOnUiThread(() -> onNfcCredential(cred)),
+                    card -> requireActivity().runOnUiThread(() -> onNfcCard(card)),
                     err  -> requireActivity().runOnUiThread(() -> showError(err)));
         }
     }
@@ -249,6 +252,16 @@ public class TransferBottomSheet extends BottomSheetDialogFragment {
         } else {
             pendingCredential = cred;
         }
+    }
+
+    private void onNfcCard(BusinessCard card) {
+        // 收到名片：停止 Service、啟動 CardDisplayActivity（帶動畫），關閉 sheet
+        if (isAdded()) {
+            requireActivity().stopService(
+                    new Intent(requireActivity(), FileTransferService.class));
+            requireActivity().startActivity(CardDisplayActivity.newIntent(requireActivity(), card));
+        }
+        dismiss();
     }
 
     // ══════════════════════════════════════════════════════════
