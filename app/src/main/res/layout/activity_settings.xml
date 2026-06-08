@@ -328,6 +328,20 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- My Card button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMyCard"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="我的名片"
+                android:textSize="15sp"
+                android:textColor="?attr/colorPrimary"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="16dp"/>
+
             <!-- Save button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"

@@ -18,6 +18,7 @@ import com.kisslink.data.repository.UserProfileRepository;
 import com.kisslink.model.BusinessCard;
 import com.kisslink.model.UserProfile;
 import com.kisslink.ui.ThemeManager;
+import com.kisslink.ui.card.MyCardActivity;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -60,6 +61,9 @@ public class SettingsActivity extends AppCompatActivity {
 
         MaterialButton btnSave = findViewById(R.id.btnSave);
         btnSave.setOnClickListener(v -> save());
+
+        findViewById(R.id.btnMyCard).setOnClickListener(v ->
+                startActivity(new Intent(this, MyCardActivity.class)));
 
         findViewById(R.id.btnSettingsBack).setOnClickListener(v -> finish());
 
