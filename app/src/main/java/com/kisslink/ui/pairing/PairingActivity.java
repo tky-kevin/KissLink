@@ -124,8 +124,21 @@ public class PairingActivity extends AppCompatActivity {
             binder = (FileTransferService.TransferBinder) service;
             bound = true;
 
-            // 不在此重置 session。是否重置集中到 NFC latch 當下(Service.prepareForLatch):
-            // 連線存活 → 觀察者下面會直接帶回傳輸畫面;已死 → latch 時才重置出新場。
+            // 先處理 latch:coldLaunch/fromNfcTag 經 Service.prepareForLatch 會把殘留連線徹底重置,
+            // 再註冊觀察者——避免觀察者一註冊就讀到「上一場殘留的 CONNECTED」而誤跳回傳輸畫面。
+            if (coldLaunchPeer != null) {
+                // 本機是 reader,已知對方 token → 直接接手。
+                tvStatus.setText("連線中…");
+                binder.onNfcLatchedAsReader(coldLaunchPeer);
+            } else if (fromNfcTag) {
+                // 本機是 tag，已在其他 Activity 被讀取過 → 直接以 tag 身份接手。
+                tvStatus.setText("連線中…");
+                binder.onNfcLatchedAsTag();
+                fromNfcTag = false; // 避免重複觸發
+            } else {
+                enableNfcIfReady();
+            }
+
             binder.getSessionState().observe(PairingActivity.this, st -> {
                 updateStatus(st);
                 if (st.isTransferStartedOrConnected()) goToTransfer();
@@ -134,19 +147,6 @@ public class PairingActivity extends AppCompatActivity {
                     if (nfc != null) nfc.resetLatched();
                 }
             });
-
-            if (coldLaunchPeer != null) {
-                // 冷啟動:本機是 reader,已知對方 token → 直接接手。
-                tvStatus.setText("連線中…");
-                binder.onNfcLatchedAsReader(coldLaunchPeer);
-            } else if (fromNfcTag) {
-                // 本機是 tag，且在其他 Activity 已經被讀取過了 → 直接以 tag 身份接手。
-                tvStatus.setText("連線中…");
-                binder.onNfcLatchedAsTag();
-                fromNfcTag = false; // 避免重複觸發
-            } else {
-                enableNfcIfReady();
-            }
         }
         @Override public void onServiceDisconnected(ComponentName name) {
             bound = false; binder = null;

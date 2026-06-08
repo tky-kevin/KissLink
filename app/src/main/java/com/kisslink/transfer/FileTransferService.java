@@ -191,8 +191,12 @@ public class FileTransferService extends Service {
      * </ul>
      */
     private boolean prepareForLatch() {
-        if (peer != null) return false;
-        if (coordinator == null || coordinator.isFinished()) resetForNewSession();
+        // 配對進行中(coordinator 尚未結束)→ 不重置;coordinator 自身的 finished/peerToken
+        // 旗標會擋掉同一場的重複 latch,不會產生重疊。
+        if (coordinator != null && !coordinator.isFinished()) return true;
+        // 否則(已連線 / 已失敗 / 首次)→ 觸碰一律視為「重新配對」:徹底重置再 latch。
+        // 兩台都這樣做 → 對稱、同步重連;避免「一台保留舊連線、一台重配」永遠對不上。
+        resetForNewSession();
         return true;
     }
 
@@ -204,7 +208,9 @@ public class FileTransferService extends Service {
         KissLinkHCEService.clearToken();
         isGroupOwner = false;
         createCoordinator();
-        sessionLd.postValue(SessionState.idle());
+        // setValue(非 postValue):同步立即生效,讓緊接著註冊的觀察者不會讀到殘留的 CONNECTED
+        // 而誤跳轉。resetForNewSession 一律在主執行緒(由 binder latch 觸發)呼叫。
+        sessionLd.setValue(SessionState.idle());
         Log.i(TAG, "Session reset for new pairing");
     }
 
