@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">KissLink</string>
+    <string name="app_name">安卓抓噗</string>
 
     <!-- 通用按鈕 -->
     <string name="btn_send">傳送</string>
