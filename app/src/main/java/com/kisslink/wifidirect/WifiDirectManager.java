@@ -620,6 +620,12 @@ public class WifiDirectManager implements WifiDirectEventCallback {
     //  公開 Getters
     // ══════════════════════════════════════════════════════════
 
+    /** 是否仍在群組/連線中(非 IDLE)。供上層判斷是否需要先拆除等沉澱再重建。 */
+    public boolean isActive() {
+        ConnectionState s = stateLd.getValue();
+        return s != null && s != ConnectionState.IDLE;
+    }
+
     public LiveData<ConnectionState> getState()       { return stateLd; }
     public LiveData<GroupCredential> getCredential()  { return credentialLd; }
     public LiveData<String>          getError()       { return errorLd; }

@@ -17,6 +17,8 @@ import com.kisslink.wifidirect.ConnectionState;
 public final class SessionState {
 
     public enum Phase {
+        // ── 重置（重連前拆除舊場、等 stack 沉澱）──
+        RESETTING,
         // ── 配對階段（碰觸 → BLE → 選舉）──
         IDLE, PAIRING_LATCHED, PAIRING_LINKING, PAIRING_ELECTING,
         // ── 連線階段 ──
@@ -51,7 +53,8 @@ public final class SessionState {
 
     /** 是否仍在配對/連線中（尚未可傳輸）。 */
     public boolean isPairing() {
-        return phase == Phase.PAIRING_LATCHED
+        return phase == Phase.RESETTING
+                || phase == Phase.PAIRING_LATCHED
                 || phase == Phase.PAIRING_LINKING
                 || phase == Phase.PAIRING_ELECTING
                 || phase == Phase.CREATING_GROUP

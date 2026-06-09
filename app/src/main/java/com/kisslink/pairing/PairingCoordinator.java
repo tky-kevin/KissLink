@@ -61,6 +61,7 @@ public class PairingCoordinator {
     private boolean iAmGroupOwner;
     private boolean roleDecided = false;
     private boolean finished    = false;
+    private boolean started     = false; // 首次 latch 即鎖定;之後忽略任何 latch(含反向角色)
 
     @Nullable private BleCredentialServer bleServer; // tag 角色
     @Nullable private BleCredentialClient bleClient; // reader 角色
@@ -83,6 +84,9 @@ public class PairingCoordinator {
     /** 本場是否已結束(已連線或失敗)。供上層判斷是否需要重開新一場。 */
     public boolean isFinished() { return finished; }
 
+    /** 是否已收到第一次 latch 並鎖定角色。已 started 的場不再接受新 latch。 */
+    public boolean hasStarted() { return started; }
+
     // ══════════════════════════════════════════════════════════
     //  NFC latch 入口（由前景 Activity 經 binder 餵入）
     // ══════════════════════════════════════════════════════════
@@ -90,7 +94,8 @@ public class PairingCoordinator {
     /** reader 相位讀到對方 token → 本機當 BLE central。 */
     @MainThread
     public void onLatchedAsReader(@NonNull PairingToken peer) {
-        if (finished || peerToken != null) return;
+        if (finished || started) return; // 角色已鎖 → 忽略(含同一次貼合的反向 tag latch)
+        started = true;
         this.peerToken = peer;
         listener.onPhase(Phase.LATCHED);
         observeWifi();
@@ -112,7 +117,8 @@ public class PairingCoordinator {
     /** 自己 HCE 被讀 → 本機當 BLE peripheral。 */
     @MainThread
     public void onLatchedAsTag() {
-        if (finished || bleServer != null) return;
+        if (finished || started) return; // 角色已鎖 → 忽略(含同一次貼合的反向 reader latch)
+        started = true;
         listener.onPhase(Phase.LATCHED);
         observeWifi();
         listener.onPhase(Phase.LINKING);

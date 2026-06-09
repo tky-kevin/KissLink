@@ -63,6 +63,12 @@ public class FileTransferService extends Service {
     /** session 世代:每次重置 +1。舊 Coordinator 的回呼以世代不符被忽略,杜絕「殘留場以錯誤角色觸發 onPaired → GO 連到自己」。 */
     private int sessionGen = 0;
 
+    /** 重連:拆除舊場後等 Android Wi-Fi/BLE stack 非同步清理沉澱的時間,再重建新場。 */
+    private static final long RESET_SETTLE_MS = 1800;
+    private boolean pendingReset = false;
+    private final android.os.Handler mainHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+
     @Nullable private LiveData<TransferProgress> peerProgressSrc;
     @Nullable private Observer<TransferProgress> peerProgressObs;
 
@@ -93,12 +99,12 @@ public class FileTransferService extends Service {
 
         /** NFC：reader 相位讀到對方 token（本機當 BLE central）。 */
         public void onNfcLatchedAsReader(@NonNull PairingToken peerToken) {
-            if (prepareForLatch()) coordinator.onLatchedAsReader(peerToken);
+            onLatch(() -> coordinator.onLatchedAsReader(peerToken));
         }
 
         /** NFC：自己 HCE 被讀（本機當 BLE peripheral）。 */
         public void onNfcLatchedAsTag() {
-            if (prepareForLatch()) coordinator.onLatchedAsTag();
+            onLatch(() -> coordinator.onLatchedAsTag());
         }
 
         /** 連上後送出內容（任一端皆可、可多輪）。 */
@@ -145,6 +151,7 @@ public class FileTransferService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        mainHandler.removeCallbacksAndMessages(null); // 取消尚未觸發的重置重建
         teardownPeer();
         if (coordinator != null) coordinator.reset();
         if (wifi != null) { wifi.unregisterReceiver(this); wifi.reset(); }
@@ -197,28 +204,53 @@ public class FileTransferService extends Service {
      *       旗標會擋掉重複,不會產生重疊的 coordinator。</li>
      * </ul>
      */
-    private boolean prepareForLatch() {
-        // 配對進行中(coordinator 尚未結束)→ 不重置;coordinator 自身的 finished/peerToken
-        // 旗標會擋掉同一場的重複 latch,不會產生重疊。
-        if (coordinator != null && !coordinator.isFinished()) return true;
-        // 否則(已連線 / 已失敗 / 首次)→ 觸碰一律視為「重新配對」:徹底重置再 latch。
-        // 兩台都這樣做 → 對稱、同步重連;避免「一台保留舊連線、一台重配」永遠對不上。
-        resetForNewSession();
-        return true;
+    /**
+     * NFC latch 的單一序列化入口。所有「一場配對」的開始/重連決策都在這裡,避免散落多處互相打架。
+     * <ul>
+     *   <li><b>配對進行中</b>(coordinator 已 started 且未結束)→ 忽略;含「同一次貼合射頻雙向
+     *       讀取造成的反向 latch」與重複觸碰。</li>
+     *   <li><b>重置排程中</b> → 忽略額外觸碰。</li>
+     *   <li><b>乾淨</b>(Wi-Fi IDLE、無 peer、coordinator 未 started)→ 直接交付,瞬間配對。</li>
+     *   <li><b>髒</b>(剛斷線 / 已連線 / Wi-Fi 還在群組)→ 先徹底拆除,等 {@link #RESET_SETTLE_MS}
+     *       讓 Android Wi-Fi/BLE 非同步清理沉澱(否則立即重建會 GATT 卡死、群組殘留),
+     *       再建新 coordinator 並交付 latch。期間顯示 RESETTING。</li>
+     * </ul>
+     */
+    @androidx.annotation.MainThread
+    private void onLatch(@NonNull Runnable deliver) {
+        if (coordinator != null && coordinator.hasStarted() && !coordinator.isFinished()) return;
+        if (pendingReset) return;
+
+        boolean dirty = peer != null
+                || (coordinator != null && coordinator.isFinished())
+                || (wifi != null && wifi.isActive());
+
+        if (!dirty) {
+            if (coordinator == null) createCoordinator();
+            deliver.run();
+            return;
+        }
+
+        pendingReset = true;
+        teardownSession();
+        sessionLd.setValue(SessionState.of(SessionState.Phase.RESETTING));
+        Log.i(TAG, "Dirty state → teardown + settle " + RESET_SETTLE_MS + "ms before re-pair");
+        mainHandler.postDelayed(() -> {
+            pendingReset = false;
+            createCoordinator();
+            sessionLd.setValue(SessionState.idle());
+            deliver.run(); // 讀取的是當前(新)coordinator
+        }, RESET_SETTLE_MS);
     }
 
-    /** 第三台重連 / 取消後重置:拆 peer、reset 協調器與 Wi-Fi、重開一場新配對。 */
-    private void resetForNewSession() {
+    /** 拆除目前 session(peer + coordinator + Wi-Fi 群組 + BLE),但不建立新 coordinator。 */
+    private void teardownSession() {
         teardownPeer();
         if (coordinator != null) coordinator.reset();
         if (wifi != null) { wifi.removeGroup(); wifi.reset(); }
         KissLinkHCEService.clearToken();
         isGroupOwner = false;
-        createCoordinator();
-        // setValue(非 postValue):同步立即生效,讓緊接著註冊的觀察者不會讀到殘留的 CONNECTED
-        // 而誤跳轉。resetForNewSession 一律在主執行緒(由 binder latch 觸發)呼叫。
-        sessionLd.setValue(SessionState.idle());
-        Log.i(TAG, "Session reset for new pairing");
+        Log.i(TAG, "Session torn down");
     }
 
     // ══════════════════════════════════════════════════════════

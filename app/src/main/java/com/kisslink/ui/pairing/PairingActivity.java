@@ -186,6 +186,7 @@ public class PairingActivity extends AppCompatActivity {
 
     private void updateStatus(SessionState st) {
         switch (st.phase) {
+            case RESETTING:        tvStatus.setText("重置中…");              break;
             case PAIRING_LATCHED:  tvStatus.setText("已碰到…");              break;
             case PAIRING_LINKING:  tvStatus.setText("建立安全通道…");         break;
             case PAIRING_ELECTING: tvStatus.setText("協商中…");             break;

@@ -137,6 +137,11 @@ public class TransferActivity extends AppCompatActivity {
 
     private void onSession(SessionState st) {
         switch (st.phase) {
+            case RESETTING:
+                tvPhase.setText("重置中…");
+                btnSend.setEnabled(false);
+                break;
+
             case PAIRING_LATCHED:
             case PAIRING_LINKING:
             case PAIRING_ELECTING:
