@@ -1,21 +1,18 @@
 package com.kisslink.transfer;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Network;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
-import androidx.core.app.NotificationCompat;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
@@ -24,7 +21,6 @@ import com.kisslink.data.repository.TransferRepository;
 import com.kisslink.nfc.KissLinkHCEService;
 import com.kisslink.pairing.PairingCoordinator;
 import com.kisslink.pairing.PairingToken;
-import com.kisslink.ui.home.HomeActivity;
 import com.kisslink.wifidirect.WifiDirectManager;
 
 import java.net.InetSocketAddress;
@@ -51,9 +47,6 @@ public class FileTransferService extends Service {
 
     private static final String TAG = "FileTransferService";
 
-    private static final String CHANNEL_ID = "kisslink_transfer";
-    private static final int    NOTIF_ID   = 1001;
-
     // ── Session 核心 ───────────────────────────────────────────
     private WifiDirectManager  wifi;
     private PairingCoordinator coordinator;
@@ -66,8 +59,7 @@ public class FileTransferService extends Service {
     /** 重連:拆除舊場後等 Android Wi-Fi/BLE stack 非同步清理沉澱的時間,再重建新場。 */
     private static final long RESET_SETTLE_MS = 1800;
     private boolean pendingReset = false;
-    private final android.os.Handler mainHandler =
-            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(android.os.Looper.getMainLooper());
 
     /** 目前連線對方的 token——用於「同對象 resume」與「新對象切換」判別。 */
     @Nullable private PairingToken connectedPeerToken;
@@ -76,31 +68,14 @@ public class FileTransferService extends Service {
     @Nullable private volatile byte[] peerAvatarBytes;
     /** 傳輸中碰到新對象時排隊,等本場傳輸結束再切換。 */
     @Nullable private PairingToken pendingSwitchPeer;
+
+    // ── Extracted managers ─────────────────────────────────────
+    private IdleTeardownManager idleManager;
+    private ServiceNotificationHelper notificationHelper;
+    private WakeLockManager wakeLockManager;
+
     /** 是否正在傳檔(由進度橋接更新)。 */
     private boolean transferring = false;
-
-    /**
-     * 省電:離開 App(背景、UI 解綁)且非傳輸,閒置此時間後自動結束服務(拆 Wi-Fi 群組/SoftAP)。
-     * 取 45 秒折衷:夠長,短暫切換 app / 開系統選檔器(會讓 Activity onStop)返回不會誤斷;
-     * 夠短,放下手機後很快釋放 Wi-Fi Direct,不長時間背景常駐耗電。
-     */
-    private static final long IDLE_TEARDOWN_MS = 45_000;
-    private boolean uiBound = false;
-    private final Runnable idleTeardown = () -> {
-        if (!uiBound && !transferring) {
-            Log.i(TAG, "Idle in background → stopping service to release Wi-Fi Direct");
-            stopSelf();
-        }
-    };
-
-    private void cancelIdleTeardown() { mainHandler.removeCallbacks(idleTeardown); }
-
-    private void scheduleIdleTeardownIfIdle() {
-        cancelIdleTeardown();
-        if (!uiBound && !transferring) {
-            mainHandler.postDelayed(idleTeardown, IDLE_TEARDOWN_MS);
-        }
-    }
 
     @Nullable private LiveData<TransferProgress> peerProgressSrc;
     @Nullable private Observer<TransferProgress> peerProgressObs;
@@ -113,23 +88,6 @@ public class FileTransferService extends Service {
     private final MutableLiveData<byte[]> incomingCardLd = new MutableLiveData<>(null);
 
     private final TransferBinder binder = new TransferBinder();
-
-    /** 連線/傳輸期間持有，避免背景時 CPU 被節流導致 socket 中斷。 */
-    @Nullable private android.os.PowerManager.WakeLock wakeLock;
-
-    private void acquireWakeLock() {
-        if (wakeLock == null) {
-            android.os.PowerManager pm = getSystemService(android.os.PowerManager.class);
-            if (pm == null) return;
-            wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "KissLink:transfer");
-            wakeLock.setReferenceCounted(false);
-        }
-        if (!wakeLock.isHeld()) wakeLock.acquire(10 * 60 * 1000L); // 上限 10 分鐘，避免洩漏
-    }
-
-    private void releaseWakeLock() {
-        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
-    }
 
     // ══════════════════════════════════════════════════════════
     //  Intent Factory（角色中立）
@@ -191,8 +149,6 @@ public class FileTransferService extends Service {
         public void disconnect() {
             mainHandler.post(() -> {
                 if (pendingReset) return; // 重置沉澱中 → 忽略
-                // 使用者「主動」斷開:徹底拆除(含移除 Wi-Fi 群組/BLE),不保留 SoftAP 背景常駐。
-                // 隨即重建乾淨 coordinator(會重新發佈 HCE token)→ 回待機,可立即重新配對。
                 teardownSession();
                 createCoordinator();
                 sessionLd.setValue(SessionState.idle());
@@ -208,11 +164,11 @@ public class FileTransferService extends Service {
          */
         public void interruptPairing() {
             mainHandler.post(() -> {
-                if (pendingReset) return; // 重置沉澱中 → 忽略,避免打斷正在進行的拆除
+                if (pendingReset) return;
                 connectedPeerToken = null;
                 peerNameFromHello = null;
                 peerAvatarBytes = null;
-                transferring = false;
+                setTransferring(false);
                 peerStarting = false;
                 teardownPeer();
                 if (coordinator != null) coordinator.cancelLightweight();
@@ -223,19 +179,21 @@ public class FileTransferService extends Service {
     }
 
     @Override
-    public IBinder onBind(Intent intent) { uiBound = true; cancelIdleTeardown(); return binder; }
+    public IBinder onBind(Intent intent) {
+        idleManager.setUiBound(true);
+        return binder;
+    }
 
     @Override
     public boolean onUnbind(Intent intent) {
-        uiBound = false;
-        scheduleIdleTeardownIfIdle(); // 背景閒置 → 計時自動拆除省電
-        return true; // 讓之後重新綁定走 onRebind
+        idleManager.setUiBound(false);
+        idleManager.scheduleIfIdle();
+        return true;
     }
 
     @Override
     public void onRebind(Intent intent) {
-        uiBound = true;
-        cancelIdleTeardown();
+        idleManager.setUiBound(true);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -245,24 +203,24 @@ public class FileTransferService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannel();
+        idleManager = new IdleTeardownManager(mainHandler, this::stopSelf);
+        notificationHelper = new ServiceNotificationHelper(this);
+        wakeLockManager = new WakeLockManager(this);
         wifi = new WifiDirectManager(this);
         wifi.registerReceiver(this);
-        // 清掉「上一場被強制停止(kill,未經 removeGroup)」殘留在 OS 的 Wi-Fi Direct 群組。
-        // 無群組時 removeGroup 會優雅失敗,無害。
         wifi.removeGroup();
         createCoordinator();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIF_ID, buildNotification("準備配對…", 0));
+        startForeground(ServiceNotificationHelper.NOTIF_ID,
+                notificationHelper.build("準備配對…", 0));
         return START_NOT_STICKY;
     }
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // 使用者把 App 從最近清單滑掉 → 結束整個 session(配對畫面不再負責停服務)。
         super.onTaskRemoved(rootIntent);
         stopSelf();
     }
@@ -270,17 +228,15 @@ public class FileTransferService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mainHandler.removeCallbacksAndMessages(null); // 取消尚未觸發的重置重建
+        mainHandler.removeCallbacksAndMessages(null);
         teardownPeer();
         if (coordinator != null) coordinator.reset();
         if (wifi != null) {
-            // 服務結束（滑掉 App / 閒置自動拆除 / stopSelf）→ 主動移除 Wi-Fi Direct 群組，
-            // 立即釋放 SoftAP，不再殘留到下次啟動才清。removeGroup 為非同步盡力而為。
             wifi.removeGroup();
             wifi.unregisterReceiver(this);
             wifi.reset();
         }
-        releaseWakeLock();
+        wakeLockManager.release();
         KissLinkHCEService.clearToken();
         Log.d(TAG, "FileTransferService destroyed");
     }
@@ -297,9 +253,9 @@ public class FileTransferService extends Service {
                 sessionLd.postValue(mapPhase(phase));
             }
             @Override public void onPaired(boolean groupOwner) {
-                if (gen != sessionGen) return; // 殘留場 → 忽略,避免錯誤角色 establishPeer
+                if (gen != sessionGen) return;
                 isGroupOwner = groupOwner;
-                connectedPeerToken = coordinator.peerToken(); // 記住對象供 resume / 新對象判別
+                connectedPeerToken = coordinator.peerToken();
                 sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTING));
                 establishPeer(groupOwner);
             }
@@ -308,9 +264,6 @@ public class FileTransferService extends Service {
                 sessionLd.postValue(SessionState.error(message));
             }
         });
-        // Service 是 HCE token 的唯一擁有者:每建一個 coordinator 就(重新)發佈 token,
-        // 讓本機在 teardown→rebuild 後仍可被當作 NFC tag 讀取——不再依賴 Activity onResume
-        // 才補設 token(否則 dirty 重建清掉 token 後會留下「無法被碰」的死區)。token 為進程穩定值。
         KissLinkHCEService.setActiveToken(coordinator.localToken());
     }
 
@@ -327,48 +280,23 @@ public class FileTransferService extends Service {
     }
 
     /**
-     * NFC latch 進來時的單一決策點(集中所有「是否重置」邏輯,避免散落多處互相打架):
-     * <ul>
-     *   <li>連線存活中(peer != null)→ 回 false:不打擾,讓 UI 觀察者把使用者帶回傳輸畫面。</li>
-     *   <li>上一場已結束/不存在(coordinator finished/null)→ 重置出全新 Coordinator 再 latch。</li>
-     *   <li>正在配對中(coordinator 未 finished)→ 直接 latch;coordinator 自身的 finished/peerToken
-     *       旗標會擋掉重複,不會產生重疊的 coordinator。</li>
-     * </ul>
-     */
-    /**
-     * NFC latch 的單一序列化入口。所有「一場配對」的開始/重連決策都在這裡,避免散落多處互相打架。
-     * <ul>
-     *   <li><b>配對進行中</b>(coordinator 已 started 且未結束)→ 忽略;含「同一次貼合射頻雙向
-     *       讀取造成的反向 latch」與重複觸碰。</li>
-     *   <li><b>重置排程中</b> → 忽略額外觸碰。</li>
-     *   <li><b>乾淨</b>(Wi-Fi IDLE、無 peer、coordinator 未 started)→ 直接交付,瞬間配對。</li>
-     *   <li><b>髒</b>(剛斷線 / 已連線 / Wi-Fi 還在群組)→ 先徹底拆除,等 {@link #RESET_SETTLE_MS}
-     *       讓 Android Wi-Fi/BLE 非同步清理沉澱(否則立即重建會 GATT 卡死、群組殘留),
-     *       再建新 coordinator 並交付 latch。期間顯示 RESETTING。</li>
-     * </ul>
-     */
-    /**
      * NFC latch 單一序列化入口,先處理「已連線」情境,再決定是否重新配對。
      *
      * @param tappedPeer reader 端能立刻知道對方 token(辨識同/新對象);tag 端為 null(無法辨識)。
      */
     @androidx.annotation.MainThread
     private void handleLatch(@Nullable PairingToken tappedPeer, @NonNull Runnable deliver) {
-        // 配對進行中(已鎖角色、未結束)→ 忽略(含同一次貼合射頻反向 latch、重複觸碰)。
         if (coordinator != null && coordinator.hasStarted() && !coordinator.isFinished()) return;
         if (pendingReset) return;
 
         boolean alive = (peer != null && peer.isAlive());
         if (alive) {
-            // tag 端無法辨識對方 → 視為同對象(等效:連線中不接受新對象,避免誤拆)。
             boolean samePeer = (tappedPeer == null) || tappedPeer.sameSession(connectedPeerToken);
             if (samePeer) {
-                // 同對象 + 連線存活 → resume:不動連線,推 CONNECTED 讓 UI 直接回傳輸畫面。
                 sessionLd.setValue(SessionState.of(SessionState.Phase.CONNECTED));
                 Log.i(TAG, "Same-peer tap while connected → resume (no teardown)");
                 return;
             }
-            // 新對象(只有 reader 端能辨識到此)
             if (transferring) {
                 pendingSwitchPeer = tappedPeer;
                 mainHandler.post(() -> android.widget.Toast.makeText(
@@ -377,12 +305,10 @@ public class FileTransferService extends Service {
                 Log.i(TAG, "New peer while transferring → queued switch");
                 return;
             }
-            // 已連線但閒置 → 立即切換(走下面的髒狀態拆除+沉澱+重建)。
         }
         proceedWithLatch(deliver);
     }
 
-    /** 乾淨 → 直接交付;髒(剛斷線/已連線/Wi-Fi 還在)→ 拆除 + 等 stack 沉澱 + 重建後交付。 */
     @androidx.annotation.MainThread
     private void proceedWithLatch(@NonNull Runnable deliver) {
         boolean dirty = peer != null
@@ -403,11 +329,10 @@ public class FileTransferService extends Service {
             pendingReset = false;
             createCoordinator();
             sessionLd.setValue(SessionState.idle());
-            deliver.run(); // 讀取的是當前(新)coordinator
+            deliver.run();
         }, RESET_SETTLE_MS);
     }
 
-    /** 傳輸結束後,若有排隊的新對象 → 切換(以 reader 身分重新配對該對象)。 */
     @androidx.annotation.MainThread
     private void maybeSwitchToPendingPeer() {
         if (pendingSwitchPeer == null) return;
@@ -417,21 +342,28 @@ public class FileTransferService extends Service {
         handleLatch(p, () -> coordinator.onLatchedAsReader(p));
     }
 
-    /** 拆除目前 session(peer + coordinator + Wi-Fi 群組 + BLE),但不建立新 coordinator。 */
     private void teardownSession() {
         teardownPeer();
         if (coordinator != null) coordinator.reset();
         if (wifi != null) { wifi.removeGroup(); wifi.reset(); }
-        // 刻意不清 HCE token:teardownSession 之後一定接著 createCoordinator 重新發佈同一份
-        // (進程穩定的)token。若在此清掉,dirty 重建期間/之後本機會變成「無 token、無法被碰讀」
-        // 的死區,直到 Activity onResume 才補回——正是「中斷後立即重碰失效」的根因。
-        // 真正關機(onDestroy)才會 clearToken。
         isGroupOwner = false;
         connectedPeerToken = null;
         peerNameFromHello = null;
         peerAvatarBytes = null;
-        transferring = false;
+        setTransferring(false);
         Log.i(TAG, "Session torn down");
+    }
+
+    /** Transfer-completed-driven peer switch (called from progress observer). */
+    private void onTransferCompleted() {
+        maybeSwitchToPendingPeer();
+        idleManager.scheduleIfIdle();
+    }
+
+    /** Thread-safe setter for transferring flag that updates idle manager. */
+    private void setTransferring(boolean value) {
+        transferring = value;
+        idleManager.setTransferring(value);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -456,22 +388,30 @@ public class FileTransferService extends Service {
     @Nullable
     private Socket acceptAsServer() {
         try (ServerSocket ss = new ServerSocket()) {
-            ss.setReuseAddress(true); // 避免上一場 socket 殘留 TIME_WAIT → "Address already in use"
+            ss.setReuseAddress(true);
             ss.bind(new InetSocketAddress(WifiDirectManager.TRANSFER_PORT));
             ss.setSoTimeout(20_000);
             Log.i(TAG, "GO: waiting for peer socket…");
             return ss.accept();
         } catch (Exception e) {
-            Log.e(TAG, "acceptAsServer failed", e);
+            Log.e(TAG, "acceptAsClient failed", e);
             return null;
         }
     }
 
     @Nullable
     private Socket connectAsClient() {
+        // Fix WiFi routing: get the P2P network and bind socket to it
+        // This ensures TCP traffic goes through P2P interface, not the WiFi AP
+        Network p2pNetwork = wifi.getClientNetwork();
         for (int i = 0; i < 30; i++) {
             try {
                 Socket s = new Socket();
+                // Bind socket to P2P network if available (API 29+)
+                if (p2pNetwork != null) {
+                    p2pNetwork.bindSocket(s);
+                    Log.d(TAG, "Client: socket bound to P2P network");
+                }
                 s.connect(new InetSocketAddress(
                         WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT), 2_000);
                 Log.i(TAG, "Client: socket connected on attempt " + (i + 1));
@@ -485,7 +425,6 @@ public class FileTransferService extends Service {
     }
 
     private void startPeer(@NonNull Socket socket) {
-        // 本端名片：連上後經 HELLO 送給對方顯示。
         com.kisslink.profile.ProfileStore ps = com.kisslink.profile.ProfileStore.get(this);
         String selfName = ps.name();
         byte[] selfAvatar = ps.avatarThumbBytes();
@@ -504,12 +443,10 @@ public class FileTransferService extends Service {
             @Override public void onDisconnected() {
                 Log.i(TAG, "Peer disconnected");
                 mainHandler.post(() -> {
-                    // 不報「配對失敗」(會誤導)。心跳讓兩台幾乎同時偵測到 → 對稱回到 IDLE,
-                    // 使用者再碰即重連(handleLatch 會走髒狀態重建)。
                     connectedPeerToken = null;
                     peerNameFromHello = null;
                     peerAvatarBytes = null;
-                    transferring = false;
+                    setTransferring(false);
                     teardownPeer();
                     sessionLd.postValue(SessionState.idle());
                 });
@@ -517,7 +454,6 @@ public class FileTransferService extends Service {
             @Override public void onPeerProfile(@Nullable String name, @Nullable byte[] avatarThumb) {
                 peerNameFromHello = name;
                 peerAvatarBytes = avatarThumb;
-                // 重推 CONNECTED 讓 UI 重新讀對方名片刷新顯示。
                 mainHandler.post(() -> {
                     if (peer != null && peer.isAlive())
                         sessionLd.setValue(SessionState.of(SessionState.Phase.CONNECTED));
@@ -528,33 +464,29 @@ public class FileTransferService extends Service {
             }
         }, selfName, selfAvatar);
 
-        // 橋接進度 → SessionState,並追蹤傳輸狀態(供「傳完切換新對象」)。
         peerProgressSrc = peer.getProgress();
         peerProgressObs = tp -> {
             if (tp == null) return;
             sessionLd.postValue(SessionState.fromTransfer(tp));
             boolean now = (tp.phase == TransferProgress.Phase.TRANSFERRING);
             boolean ended = transferring && !now;
-            transferring = now;
+            setTransferring(now);
             if (ended) {
-                maybeSwitchToPendingPeer();
-                scheduleIdleTeardownIfIdle(); // 傳完且在背景 → 計時省電
+                onTransferCompleted();
             }
         };
-        // observeForever 須在主執行緒
-        new android.os.Handler(getMainLooper()).post(() -> {
+        new Handler(getMainLooper()).post(() -> {
             if (peerProgressSrc != null && peerProgressObs != null)
                 peerProgressSrc.observeForever(peerProgressObs);
         });
 
         peer.start();
-        acquireWakeLock();
-        updateNotification("已連線", 0);
+        wakeLockManager.acquire();
+        notificationHelper.update("已連線", 0);
         sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTED));
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
     }
 
-    /** 對方顯示名稱：HELLO 名片優先，其次配對 token。 */
     @Nullable
     private String currentPeerName() {
         if (peerNameFromHello != null && !peerNameFromHello.isEmpty()) return peerNameFromHello;
@@ -566,42 +498,11 @@ public class FileTransferService extends Service {
         if (peerProgressSrc != null && peerProgressObs != null) {
             final LiveData<TransferProgress> src = peerProgressSrc;
             final Observer<TransferProgress> obs = peerProgressObs;
-            new android.os.Handler(getMainLooper()).post(() -> src.removeObserver(obs));
+            new Handler(getMainLooper()).post(() -> src.removeObserver(obs));
         }
         peerProgressSrc = null;
         peerProgressObs = null;
         if (peer != null) { peer.close(); peer = null; }
-        releaseWakeLock();
-    }
-
-    // ══════════════════════════════════════════════════════════
-    //  通知
-    // ══════════════════════════════════════════════════════════
-
-    private void createNotificationChannel() {
-        NotificationChannel ch = new NotificationChannel(
-                CHANNEL_ID, "KissLink 傳輸", NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription("顯示配對與檔案傳輸進度");
-        getSystemService(NotificationManager.class).createNotificationChannel(ch);
-    }
-
-    private Notification buildNotification(String text, int progress) {
-        Intent tap = new Intent(this, HomeActivity.class)
-                .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent pi = PendingIntent.getActivity(this, 0, tap, PendingIntent.FLAG_IMMUTABLE);
-
-        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_upload)
-                .setContentTitle("KissLink")
-                .setContentText(text)
-                .setContentIntent(pi)
-                .setOngoing(true)
-                .setSilent(true);
-        if (progress > 0 && progress < 100) b.setProgress(100, progress, false);
-        return b.build();
-    }
-
-    private void updateNotification(String text, int progress) {
-        getSystemService(NotificationManager.class).notify(NOTIF_ID, buildNotification(text, progress));
+        wakeLockManager.release();
     }
 }

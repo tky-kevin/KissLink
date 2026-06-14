@@ -108,7 +108,6 @@ dependencies {
 // ── Linter 配置 ────────────────────────────────────────────────
 
 ktlint {
-    reporter = arrayReporter(ReporterType.CHECKSTYLE, ReporterType.SARIF)
     ignoreFailures = false
     enableExperimentalRules = true
     filter {
