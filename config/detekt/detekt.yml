@@ -1,0 +1,40 @@
+build:
+  maxIssues: 0  # CI 中不允許任何 issue
+
+complexity:
+  LongMethod:
+    threshold: 50
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  ComplexMethod:
+    threshold: 15
+  TooManyFunctions:
+    thresholdInFiles: 20
+    thresholdInClasses: 20
+  LargeClass:
+    threshold: 400
+
+style:
+  MaxLineLength:
+    maxLineLength: 120
+  MagicNumber:
+    active: false  # KissLink 有大量協議常數，暫時關閉
+  ReturnCount:
+    max: 3
+  NestedBlockDepth:
+    max: 4
+
+naming:
+  FunctionNaming:
+    functionPattern: '[a-z][a-zA-Z0-9]*'
+  ClassNaming:
+    classPattern: '[A-Z][a-zA-Z0-9]*'
+
+empty:
+  EmptyFunctionBlock:
+    ignoreOverridden: true
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
