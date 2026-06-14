@@ -250,18 +250,18 @@ public class FileTransferService extends Service {
         coordinator = new PairingCoordinator(this, wifi, new PairingCoordinator.Listener() {
             @Override public void onPhase(@NonNull PairingCoordinator.Phase phase) {
                 if (gen != sessionGen) return;
-                sessionLd.postValue(mapPhase(phase));
+                sessionLd.setValue(mapPhase(phase));
             }
             @Override public void onPaired(boolean groupOwner) {
                 if (gen != sessionGen) return;
                 isGroupOwner = groupOwner;
                 connectedPeerToken = coordinator.peerToken();
-                sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTING));
+                sessionLd.setValue(SessionState.of(SessionState.Phase.CONNECTING));
                 establishPeer(groupOwner);
             }
             @Override public void onError(@NonNull String message) {
                 if (gen != sessionGen) return;
-                sessionLd.postValue(SessionState.error(message));
+                sessionLd.setValue(SessionState.error(message));
             }
         });
         KissLinkHCEService.setActiveToken(coordinator.localToken());
@@ -370,58 +370,26 @@ public class FileTransferService extends Service {
     //  建立雙向 socket → PeerConnection
     // ══════════════════════════════════════════════════════════
 
+    private final PeerConnector peerConnector = new PeerConnector();
+
     private void establishPeer(boolean groupOwner) {
         if (peerStarting || peer != null) return;
         peerStarting = true;
-        new Thread(() -> {
-            Socket socket = groupOwner ? acceptAsServer() : connectAsClient();
-            if (socket == null) {
+        PeerConnector.Callback cb = new PeerConnector.Callback() {
+            @Override public void onSocketReady(Socket socket) {
+                startPeer(socket);
                 peerStarting = false;
-                sessionLd.postValue(SessionState.error("建立傳輸通道失敗"));
-                return;
             }
-            startPeer(socket);
-            peerStarting = false;
-        }, "peer-setup").start();
-    }
-
-    @Nullable
-    private Socket acceptAsServer() {
-        try (ServerSocket ss = new ServerSocket()) {
-            ss.setReuseAddress(true);
-            ss.bind(new InetSocketAddress(WifiDirectManager.TRANSFER_PORT));
-            ss.setSoTimeout(20_000);
-            Log.i(TAG, "GO: waiting for peer socket…");
-            return ss.accept();
-        } catch (Exception e) {
-            Log.e(TAG, "acceptAsClient failed", e);
-            return null;
-        }
-    }
-
-    @Nullable
-    private Socket connectAsClient() {
-        // Fix WiFi routing: get the P2P network and bind socket to it
-        // This ensures TCP traffic goes through P2P interface, not the WiFi AP
-        Network p2pNetwork = wifi.getClientNetwork();
-        for (int i = 0; i < 30; i++) {
-            try {
-                Socket s = new Socket();
-                // Bind socket to P2P network if available (API 29+)
-                if (p2pNetwork != null) {
-                    p2pNetwork.bindSocket(s);
-                    Log.d(TAG, "Client: socket bound to P2P network");
-                }
-                s.connect(new InetSocketAddress(
-                        WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT), 2_000);
-                Log.i(TAG, "Client: socket connected on attempt " + (i + 1));
-                return s;
-            } catch (Exception e) {
-                try { Thread.sleep(400); } catch (InterruptedException ie) { return null; }
+            @Override public void onError(String message) {
+                peerStarting = false;
+                sessionLd.postValue(SessionState.error(message));
             }
+        };
+        if (groupOwner) {
+            peerConnector.acceptAsServer(cb);
+        } else {
+            peerConnector.connectAsClient(wifi.getClientNetwork(), cb);
         }
-        Log.e(TAG, "connectAsClient: all attempts failed");
-        return null;
     }
 
     private void startPeer(@NonNull Socket socket) {
@@ -448,7 +416,7 @@ public class FileTransferService extends Service {
                     peerAvatarBytes = null;
                     setTransferring(false);
                     teardownPeer();
-                    sessionLd.postValue(SessionState.idle());
+                    sessionLd.setValue(SessionState.idle());
                 });
             }
             @Override public void onPeerProfile(@Nullable String name, @Nullable byte[] avatarThumb) {
@@ -460,14 +428,14 @@ public class FileTransferService extends Service {
                 });
             }
             @Override public void onCardReceived(@Nullable byte[] vcard, String name) {
-                incomingCardLd.postValue(vcard);
+                incomingCardLd.setValue(vcard);
             }
         }, selfName, selfAvatar);
 
         peerProgressSrc = peer.getProgress();
         peerProgressObs = tp -> {
             if (tp == null) return;
-            sessionLd.postValue(SessionState.fromTransfer(tp));
+            sessionLd.setValue(SessionState.fromTransfer(tp));
             boolean now = (tp.phase == TransferProgress.Phase.TRANSFERRING);
             boolean ended = transferring && !now;
             setTransferring(now);
@@ -483,7 +451,7 @@ public class FileTransferService extends Service {
         peer.start();
         wakeLockManager.acquire();
         notificationHelper.update("已連線", 0);
-        sessionLd.postValue(SessionState.of(SessionState.Phase.CONNECTED));
+        sessionLd.setValue(SessionState.of(SessionState.Phase.CONNECTED));
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
     }
 
