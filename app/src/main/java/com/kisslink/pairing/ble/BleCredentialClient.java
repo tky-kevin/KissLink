@@ -62,10 +62,20 @@ public class BleCredentialClient {
     private boolean scanning = false;
     private final Runnable timeoutRunnable;
 
+    // ── GATT 連線重試：吸收 Android BLE 常見的暫時性 status 133（密集重碰下高發），
+    //    避免單次失敗就乾等 coordinator 看門狗；失敗的 gatt 務必 close 以免 client 介面堆疊洩漏。
+    @Nullable private BluetoothDevice peerDevice;
+    private int  gattAttempts = 0;
+    private boolean servicesDiscovered = false;
+    private volatile boolean ready = false;   // token 交握完成（onReady 已發）
+    private static final int  MAX_GATT_ATTEMPTS = 3;
+    private static final long GATT_RETRY_BACKOFF_MS = 400L;
+
     // 非 GO 端的憑證讀取後備:notify 可能因 notify-before-subscribe race 或丟包而沒收到,
     // 改主動 READ credentialChar(GO 在 notify 前已 setValue)。雙保險,杜絕「卡在連線逾時」。
     private boolean credentialDelivered = false;
     @Nullable private Runnable credentialReadPoll;
+    private volatile boolean stopped = false;
 
     public BleCredentialClient(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
@@ -133,6 +143,7 @@ public class BleCredentialClient {
 
     @SuppressLint("MissingPermission")
     public void stop() {
+        stopped = true;
         main.removeCallbacks(timeoutRunnable);
         if (credentialReadPoll != null) { main.removeCallbacks(credentialReadPoll); credentialReadPoll = null; }
         try { if (scanning && scanner != null) scanner.stopScan(scanCallback); } catch (Exception ignored) {}
@@ -155,9 +166,8 @@ public class BleCredentialClient {
             if (!scanning) return;
             scanning = false;
             try { if (scanner != null) scanner.stopScan(this); } catch (Exception ignored) {}
-            BluetoothDevice device = result.getDevice();
-            Log.i(TAG, "Peer found, connecting GATT…");
-            gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+            peerDevice = result.getDevice();
+            connectGatt();
         }
 
         @Override public void onScanFailed(int errorCode) {
@@ -166,6 +176,15 @@ public class BleCredentialClient {
         }
     };
 
+    /** 連 GATT（可重試）：每次都用新的 connectGatt，前一次失敗的 gatt 已在 onConnectionStateChange close。 */
+    @SuppressLint("MissingPermission")
+    private void connectGatt() {
+        if (stopped || peerDevice == null) return;
+        gattAttempts++;
+        Log.i(TAG, "Peer found, connecting GATT (attempt " + gattAttempts + ")…");
+        gatt = peerDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+    }
+
     // ══════════════════════════════════════════════════════════
     //  GATT
     // ══════════════════════════════════════════════════════════
@@ -173,14 +192,24 @@ public class BleCredentialClient {
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @SuppressLint("MissingPermission")
         @Override public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
-            if (newState == BluetoothGatt.STATE_CONNECTED) {
+            if (newState == BluetoothGatt.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
                 // BLE 已連上 → 取消逾時。後續 token/憑證走 live link(快),
                 // Wi-Fi 建群有 WifiDirectManager 自己的逾時保護,不該再算進 BLE 額度。
                 main.removeCallbacks(timeoutRunnable);
                 Log.d(TAG, "GATT connected → discovering services");
                 g.discoverServices();
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
-                Log.w(TAG, "GATT disconnected");
+                // 連線失敗(常見 status 133)或交握完成前掉線。務必 close 釋放 client 介面,
+                // 否則密集重碰會讓失敗的 GATT 物件堆疊洩漏、BLE 越來越不穩。
+                Log.w(TAG, "GATT disconnected (status=" + status + ")");
+                try { g.close(); } catch (Exception ignored) {}
+                if (gatt == g) gatt = null;
+                if (ready || credentialDelivered) return;          // 交握已過,正常收尾,不介入
+                if (!servicesDiscovered && gattAttempts < MAX_GATT_ATTEMPTS) {
+                    main.postDelayed(BleCredentialClient.this::connectGatt, GATT_RETRY_BACKOFF_MS); // 早期 133 → 自動重試
+                } else {
+                    main.post(() -> callback.onError("BLE 連線失敗，請再碰一下重試"));               // 重試用盡或交握中掉線
+                }
             }
         }
 
@@ -190,6 +219,7 @@ public class BleCredentialClient {
                 main.post(() -> callback.onError("找不到 KissLink BLE 服務"));
                 return;
             }
+            servicesDiscovered = true; // 進入交握階段：之後的掉線不再當作可重試的早期 133
             peerTokenChar  = g.getService(BleConstants.SERVICE_UUID).getCharacteristic(BleConstants.CHAR_PEER_TOKEN);
             credentialChar = g.getService(BleConstants.SERVICE_UUID).getCharacteristic(BleConstants.CHAR_CREDENTIAL);
             if (peerTokenChar == null || credentialChar == null) {
@@ -220,6 +250,7 @@ public class BleCredentialClient {
                     cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                     g.writeDescriptor(cccd);
                 } else {
+                    ready = true;
                     main.post(callback::onReady);
                 }
             }
@@ -228,6 +259,7 @@ public class BleCredentialClient {
         @Override public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor d, int status) {
             if (d != null && BleConstants.CCCD.equals(d.getUuid())) {
                 // 3) notify 開啟 → 就緒
+                ready = true;
                 main.post(callback::onReady);
             }
         }
