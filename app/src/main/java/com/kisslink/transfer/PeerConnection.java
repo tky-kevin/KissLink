@@ -3,6 +3,7 @@ package com.kisslink.transfer;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -72,6 +73,9 @@ public class PeerConnection {
     @Nullable private final String selfName;
     @Nullable private final byte[] selfAvatarThumb;
 
+    /** 是否輸出 PERF/LINK 量測 log——僅 debuggable build，正式版不輸出。 */
+    private final boolean verbose;
+
     private final BlockingQueue<Object> outQueue = new LinkedBlockingQueue<>();
     private static final Object STOP = new Object();
 
@@ -121,6 +125,7 @@ public class PeerConnection {
         this.listener = listener;
         this.selfName = selfName;
         this.selfAvatarThumb = selfAvatarThumb;
+        this.verbose  = (this.context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 
     public LiveData<TransferProgress> getProgress() { return progressLd; }
@@ -151,7 +156,7 @@ public class PeerConnection {
         readerThread.start();
         senderThread.start();
         heartbeatThread.start();
-        logLinkInfo();
+        if (verbose) logLinkInfo();
         Log.i(TAG, "PeerConnection started");
     }
 
@@ -290,7 +295,7 @@ public class PeerConnection {
             }
             IOException re = readErr.get();
             if (re != null) throw re;
-            logThroughput("SEND", item.name, sent, started);
+            if (verbose) logThroughput("SEND", item.name, sent, started);
             // COMPLETE
             writeFrame(TransferProtocol.encodeHeader(TransferProtocol.makeComplete(0)), null, 0, 0);
             ok = true;
@@ -387,7 +392,7 @@ public class PeerConnection {
                     case TransferProtocol.TYPE_COMPLETE: {
                         if (cur != null) {
                             boolean ok = cur.finish();
-                            logThroughput("RECV", cur.name, cur.received, cur.started);
+                            if (verbose) logThroughput("RECV", cur.name, cur.received, cur.started);
                             long avg = avgSpeed(cur.size, cur.started);
                             lastRecvActivity = System.currentTimeMillis();
                             String uri = cur.target != null ? cur.target.toString() : null;
