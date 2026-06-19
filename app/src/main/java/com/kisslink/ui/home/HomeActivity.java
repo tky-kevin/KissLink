@@ -25,6 +25,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.IntentCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -298,10 +299,11 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         List<Uri> uris = new ArrayList<>();
         if (single) {
-            Uri u = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            Uri u = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri.class);
             if (u != null) uris.add(u);
         } else {
-            ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            ArrayList<Uri> list =
+                    IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri.class);
             if (list != null) uris.addAll(list);
         }
         if (uris.isEmpty()) { toast(getString(R.string.share_unsupported)); clearShareIntent(); return; }
@@ -368,14 +370,15 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         nfc = new NfcPairingController(this, new NfcPairingController.Callback() {
             @Override public void onPeerToken(@NonNull PairingToken peer) {
                 haptic();
-                // 建立任何連線前先確認權限與無線電都就緒;否則提示開啟並放掉這次 latch(可立即再碰)。
                 if (!connectivityReadyOrPrompt()) { if (nfc != null) nfc.resetLatched(); return; }
-                if (binder != null) binder.onNfcLatchedAsReader(peer);
+                final FileTransferService.TransferBinder b = binder;
+                if (b != null) b.onNfcLatchedAsReader(peer);
             }
             @Override public void onTagRead() {
                 haptic();
                 if (!connectivityReadyOrPrompt()) { if (nfc != null) nfc.resetLatched(); return; }
-                if (binder != null) binder.onNfcLatchedAsTag();
+                final FileTransferService.TransferBinder b = binder;
+                if (b != null) b.onNfcLatchedAsTag();
             }
             @Override public void onError(@NonNull String message) { toast(message); }
         });

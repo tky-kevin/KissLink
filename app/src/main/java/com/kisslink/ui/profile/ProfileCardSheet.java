@@ -1,5 +1,10 @@
 package com.kisslink.ui.profile;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -11,6 +16,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.AccelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -94,6 +100,8 @@ public class ProfileCardSheet extends DialogFragment {
         btnAddField     = v.findViewById(R.id.btnAddField);
         btnSendCard     = v.findViewById(R.id.btnSendCard);
         v.findViewById(R.id.btnClose).setOnClickListener(x -> dismiss());
+        // 全螢幕視窗：點卡片外的透明區域 → 關閉（卡片本身為 NestedScrollView，會自行吃掉點擊）
+        v.findViewById(R.id.dialogRoot).setOnClickListener(x -> { if (isCancelable()) dismiss(); });
 
         Profile p = ProfileStore.get(requireContext()).load();
         etName.setText(p.getName());
@@ -114,20 +122,49 @@ public class ProfileCardSheet extends DialogFragment {
         applyEditState();
     }
 
-    // ── 傳送：卡片縮小飛向對方（有機感）後直接送 ──
+    // ── 傳送：名片往上後翻（繞 X 軸）、上浮縮小淡出後送出；縮小採減速（前快後慢＝遠離快再放慢）──
     private void flyAndSend() {
         if (editing) saveAndExit();
-        card.animate()
-                .scaleX(0.28f).scaleY(0.28f)
-                .translationY(-card.getHeight() * 0.7f)
-                .alpha(0f)
-                .setDuration(460)
-                .setInterpolator(new DecelerateInterpolator(1.6f))
-                .withEndAction(() -> {
-                    if (getActivity() instanceof Host) ((Host) getActivity()).sendMyProfileCard();
-                    dismissAllowingStateLoss();
-                })
-                .start();
+
+        card.setPivotX(card.getWidth() / 2f);
+        card.setPivotY(card.getHeight() / 2f);
+        // 加大相機距離，降低 3D 翻轉的透視變形，讓後翻自然不誇張
+        card.setCameraDistance(8000f * getResources().getDisplayMetrics().density);
+
+        ObjectAnimator flip = ObjectAnimator.ofFloat(card, View.ROTATION_X, 0f, 118f); // 往後翻
+        ObjectAnimator lift = ObjectAnimator.ofFloat(card, View.TRANSLATION_Y, 0f, -card.getHeight() * 1.0f);
+        ObjectAnimator sx = ObjectAnimator.ofFloat(card, View.SCALE_X, 1f, 0.4f);
+        ObjectAnimator sy = ObjectAnimator.ofFloat(card, View.SCALE_Y, 1f, 0.4f);
+        ObjectAnimator fade = ObjectAnimator.ofFloat(card, View.ALPHA, 1f, 0f);
+
+        // 背景暗化 + 模糊同步淡出：避免卡片飛走後黑底/模糊還殘留一小段才回到主畫面
+        final Window win = getDialog() != null ? getDialog().getWindow() : null;
+        ValueAnimator clearBg = ValueAnimator.ofFloat(1f, 0f);
+        clearBg.addUpdateListener(a -> {
+            if (win == null) return;
+            float pr = (float) a.getAnimatedValue();
+            WindowManager.LayoutParams lp = win.getAttributes();
+            lp.dimAmount = 0.55f * pr;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                lp.setBlurBehindRadius((int) (48 * pr));
+            }
+            win.setAttributes(lp);
+        });
+
+        AnimatorSet set = new AnimatorSet();
+        set.playTogether(flip, lift, sx, sy, fade, clearBg);
+        set.setDuration(640);
+        // 減速：前半段快速縮小遠離、後半段放慢
+        set.setInterpolator(new DecelerateInterpolator(1.8f));
+        set.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator a) {
+                card.setLayerType(View.LAYER_TYPE_NONE, null);
+                if (getActivity() instanceof Host) ((Host) getActivity()).sendMyProfileCard();
+                dismissAllowingStateLoss();
+            }
+        });
+        card.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        set.start();
     }
 
     // ── 編輯切換 ──
