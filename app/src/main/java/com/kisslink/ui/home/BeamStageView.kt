@@ -208,14 +208,17 @@ private fun BeamStage(
                 val ringR = avatarPx + ringGap.toPx()
                 val strokeW = 5.dp.toPx()
 
-                // 常駐 NFC 漣漪（像素網格）。傳輸時從進度環往外擴散；其餘狀態從中央往外。
-                val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else avatarPx * 0.5f
+                // 常駐 NFC 漣漪（像素網格）。傳輸時從進度環往外擴散；其餘狀態從中心點往外（避免突現）。
+                val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else 0f
                 val rippleMax = (if (transferring || done) ringR else avatarPx) + 46.dp.toPx()
                 val px = 4.dp.toPx()
                 for (i in 0..2) {
                     val t = (ripple + i / 3f) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
-                    val a = (1f - t).coerceIn(0f, 1f) * 0.55f
+                    // 淡入（t < 0.15）+ 淡出（t > 0.5），避免波紋在起點突然出現
+                    val fadeIn  = (t / 0.15f).coerceIn(0f, 1f)
+                    val fadeOut = (1f - t).coerceIn(0f, 1f)
+                    val a = fadeIn * fadeOut * 0.55f
                     if (a <= 0f) continue
                     val ringW = px * 2.5f
                     val rIn = (r - ringW / 2f).coerceAtLeast(0f)
@@ -237,39 +240,20 @@ private fun BeamStage(
                     }
                 }
 
-                // 傳輸/完成：頭像外圈進度環
+                // 傳輸/完成：頭像外圈進度環（像素格）
                 if (transferring || done) {
-                    drawCircle(TRACK, radius = ringR, center = c, style = Stroke(width = strokeW))
-                    val sweep = animProgress * 360f
-                    drawArc(
-                        color = ACCENT, startAngle = -90f, sweepAngle = sweep, useCenter = false,
-                        topLeft = Offset(c.x - ringR, c.y - ringR),
-                        size = Size(ringR * 2f, ringR * 2f),
-                        style = Stroke(width = strokeW, cap = StrokeCap.Round)
-                    )
-                    val ang = Math.toRadians((-90f + sweep).toDouble())
-                    val dot = Offset(c.x + ringR * cos(ang).toFloat(), c.y + ringR * sin(ang).toFloat())
-                    drawCircle(ACCENT, radius = 4.5.dp.toPx(), center = dot)
-                    drawCircle(Color.White.copy(alpha = 0.9f), radius = 2.dp.toPx(), center = dot)
+                    drawPixelRing(c, ringR, px, TRACK, 1f)           // 底環
+                    drawPixelRing(c, ringR, px, ACCENT, animProgress) // 進度環
                 }
             }
 
-            // ── 中央節點 ──
+            // ── 中央節點（像素方格）──
             if (!connected) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(ACCENT.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(ACCENT)
-                    )
-                }
+                        .size(18.dp)
+                        .background(ACCENT)
+                )
             } else {
                 Box(modifier = Modifier.size(avatarR * 2), contentAlignment = Alignment.Center) {
                     // 頭像（依 avatarAlpha 淡入/縮放）
@@ -357,25 +341,68 @@ private fun BeamStage(
     }
 }
 
-/** 畫勾，依 fraction f（0..1）逐段繪出。 */
+/**
+ * 像素風打勾：11 個固定像素格，依 fraction f（0..1）逐格點亮。
+ * 格子座標以 (-5..5, -5..5) 的 11×11 網格定義，單格 = px 大小。
+ */
 private fun DrawScope.drawCheckMark(
     c: Offset, s: Float, f: Float, color: Color, w: Float, alpha: Float
 ) {
-    val p0 = Offset(c.x - s * 0.62f, c.y + s * 0.04f)
-    val p1 = Offset(c.x - 0.12f * s, c.y + s * 0.5f)
-    val p2 = Offset(c.x + s * 0.66f, c.y - s * 0.42f)
-    val len1 = hypot((p1.x - p0.x).toDouble(), (p1.y - p0.y).toDouble()).toFloat()
-    val len2 = hypot((p2.x - p1.x).toDouble(), (p2.y - p1.y).toDouble()).toFloat()
-    val tot = len1 + len2
-    val drawn = f * tot
+    // 像素勾：以中心為原點的相對格座標（col, row），從左下往右上
+    val pixels = listOf(
+        Pair(-4,  0),
+        Pair(-3, -1),
+        Pair(-2, -2),
+        Pair(-1, -1),
+        Pair( 0,  0),
+        Pair( 1,  1),
+        Pair( 2,  2),
+        Pair( 3,  1),
+        Pair( 4,  0),
+        Pair( 5, -1),
+        Pair( 6, -2)
+    )
     val col = color.copy(alpha = alpha)
+    val cell = s * 0.28f          // 單格大小（s ≒ size.minDimension * 0.30）
+    val count = (f * pixels.size).toInt().coerceAtMost(pixels.size)
+    for (i in 0 until count) {
+        val (gx, gy) = pixels[i]
+        drawRect(
+            col,
+            topLeft = Offset(c.x + gx * cell - cell / 2f, c.y - gy * cell - cell / 2f),
+            size    = Size(cell, cell)
+        )
+    }
+}
 
-    val f1 = (min(drawn, len1) / len1).coerceIn(0f, 1f)
-    val a1 = Offset(lerp(p0.x, p1.x, f1), lerp(p0.y, p1.y, f1))
-    drawLine(col, p0, a1, strokeWidth = w, cap = StrokeCap.Round)
-    if (drawn > len1) {
-        val f2 = ((drawn - len1) / len2).coerceIn(0f, 1f)
-        val a2 = Offset(lerp(p1.x, p2.x, f2), lerp(p1.y, p2.y, f2))
-        drawLine(col, p1, a2, strokeWidth = w, cap = StrokeCap.Round)
+/**
+ * 像素格圓環：把半徑 r 附近的像素格著色，fraction 控制繞圓的比例（0..1）。
+ * 從 12 點鐘方向順時針繪出。
+ */
+private fun DrawScope.drawPixelRing(
+    c: Offset, r: Float, px: Float, color: Color, fraction: Float
+) {
+    // 遍歷包圍環的方格，取落在環寬範圍內的格子
+    val halfW = px * 1.5f
+    val rIn   = r - halfW
+    val rOut  = r + halfW
+    val x0 = ((c.x - rOut) / px).toInt().coerceAtLeast(0)
+    val x1 = ((c.x + rOut) / px).toInt().coerceAtMost((size.width / px).toInt())
+    val y0 = ((c.y - rOut) / px).toInt().coerceAtLeast(0)
+    val y1 = ((c.y + rOut) / px).toInt().coerceAtMost((size.height / px).toInt())
+    for (gx in x0..x1) {
+        for (gy in y0..y1) {
+            val cx = gx * px + px / 2f
+            val cy = gy * px + px / 2f
+            val d  = hypot((cx - c.x).toDouble(), (cy - c.y).toDouble()).toFloat()
+            if (d !in rIn..rOut) continue
+            // 計算此格的角度（0 = 12 點鐘，順時針）
+            val angle = (Math.toDegrees(
+                Math.atan2((cy - c.y).toDouble(), (cx - c.x).toDouble())
+            ).toFloat() + 90f + 360f) % 360f
+            if (angle <= fraction * 360f) {
+                drawRect(color, topLeft = Offset(gx * px, gy * px), size = Size(px, px))
+            }
+        }
     }
 }
