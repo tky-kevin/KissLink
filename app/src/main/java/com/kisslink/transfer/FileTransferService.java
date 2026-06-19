@@ -34,6 +34,12 @@ public class FileTransferService extends Service {
 
     private static final String TAG = "FileTransferService";
 
+    /**
+     * Dirty-state 重新配對前的沉澱延遲（ms）：拆掉舊 session 後，需給 Wi-Fi Direct 框架
+     * 時間移除群組、釋放 P2P 介面，再建立新 coordinator，否則殘留狀態會干擾下一次選舉。
+     */
+    private static final long RESET_SETTLE_MS = 1800L;
+
     // ── Core components ───────────────────────────────────────
     private WifiDirectManager wifi;
     private PairingCoordinator coordinator;
@@ -253,7 +259,7 @@ public class FileTransferService extends Service {
             createCoordinator();
             sessionMgr.transitionTo(SessionState.idle());
             deliver.run();
-        }, 1800);
+        }, RESET_SETTLE_MS);
     }
 
     private void teardownSession() {

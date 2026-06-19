@@ -292,6 +292,10 @@ public class BleCredentialClient {
     private static GroupCredential parseCredential(@Nullable byte[] value) {
         if (value == null) return null;
         try { return NFCCredential.fromBytes(value); }
-        catch (Exception e) { return null; }
+        catch (Exception e) {
+            // 解析失敗不該靜默：留下診斷，否則只會表現為「卡在連線逾時」難以定位。
+            Log.w(TAG, "parseCredential failed (" + value.length + "B): " + e.getMessage());
+            return null;
+        }
     }
 }

@@ -112,7 +112,10 @@ public class PeerConnection {
     private volatile boolean running = false;
     private Thread readerThread, senderThread, heartbeatThread;
     private final Object writeLock = new Object();
-    @Nullable private BufferedOutputStream out;
+    // volatile：於 start()（thread.start() 之前）寫入一次，writeFrame 在 writeLock 內讀取。
+    // happens-before 已涵蓋初始可見性；volatile 為廉價的明示防禦，避免日後若有人在執行緒
+    // 啟動後重設 out 時悄然引入 race。
+    @Nullable private volatile BufferedOutputStream out;
 
     public PeerConnection(@NonNull Context context, @NonNull Socket socket, @NonNull Listener listener) {
         this(context, socket, listener, null, null);
@@ -383,8 +386,8 @@ public class PeerConnection {
                                     recvBatchId, cur.fileIndex, cur.fileCount);
                         } else {
                             // 無進行中項目：仍須把這塊 payload 從 socket 讀掉以維持框架對齊。
-                            byte[] skip = new byte[h.chunkLen];
-                            readFully(in, skip, h.chunkLen);
+                            // 以小型暫存緩衝分段丟棄，避免在此異常路徑每次配置 512KB 造成 GC 壓力。
+                            discard(in, h.chunkLen);
                         }
                         break;
                     }
@@ -423,7 +426,10 @@ public class PeerConnection {
         } catch (EOFException e) {
             Log.i(TAG, "Peer closed the connection");
         } catch (Exception e) {
-            Log.w(TAG, "readLoop ended: " + e.getMessage());
+            // 保留 stack：在 debuggable build 印出完整 throwable，正式版維持精簡訊息。
+            // 否則 NPE/JSONException 等程式錯誤會被 getMessage() 吞成 "null"，難以定位。
+            if (verbose) Log.w(TAG, "readLoop ended", e);
+            else Log.w(TAG, "readLoop ended: " + e.getMessage());
         } finally {
             // 中途斷線：清掉進行中項目的 writer 執行緒與半成品檔，避免執行緒/串流洩漏。
             if (cur != null) cur.abort();
@@ -616,6 +622,18 @@ public class PeerConnection {
             int r = in.read(buf, off, len - off);
             if (r < 0) throw new EOFException();
             off += r;
+        }
+    }
+
+    /** 從 socket 讀掉並丟棄 {@code len} 個位元組，以維持框架對齊。用小型暫存緩衝分段讀，
+     *  避免為一塊待丟棄資料配置最大可達 512KB 的緩衝。 */
+    private static void discard(InputStream in, int len) throws IOException {
+        byte[] tmp = new byte[Math.min(len, 8192)];
+        int remaining = len;
+        while (remaining > 0) {
+            int r = in.read(tmp, 0, Math.min(remaining, tmp.length));
+            if (r < 0) throw new EOFException();
+            remaining -= r;
         }
     }
 }

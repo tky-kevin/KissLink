@@ -3,6 +3,8 @@ package com.kisslink.transfer;
 import android.net.Network;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 import com.kisslink.wifidirect.WifiDirectManager;
 
 import java.net.InetSocketAddress;
@@ -57,8 +59,9 @@ public final class PeerConnector {
             int attempt = 0;
             while (System.currentTimeMillis() < deadline) {
                 attempt++;
+                Socket s = null;
                 try {
-                    Socket s = new Socket();
+                    s = new Socket();
                     if (p2pNetwork != null) {
                         p2pNetwork.bindSocket(s);
                         Log.d(TAG, "Client: socket bound to P2P network");
@@ -67,9 +70,12 @@ public final class PeerConnector {
                             WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT),
                             CONNECT_ATTEMPT_TIMEOUT_MS);
                     Log.i(TAG, "Client: socket connected on attempt " + attempt);
-                    callback.onSocketReady(s);
+                    callback.onSocketReady(s); // 所有權移交給呼叫端，不在此 close
                     return;
                 } catch (Exception e) {
+                    // 連線失敗務必關閉本次 socket，否則每次重試都洩漏一個 native FD
+                    // （bind 後 connect 逾時／被拒的 Socket 仍持有未釋放的描述子）。
+                    closeQuietly(s);
                     if (System.currentTimeMillis() >= deadline) break;
                     try { Thread.sleep(CONNECT_RETRY_SLEEP_MS); } catch (InterruptedException ie) {
                         callback.onError("連線中斷");
@@ -80,5 +86,10 @@ public final class PeerConnector {
             Log.e(TAG, "connectAsClient: budget exhausted after " + attempt + " attempts");
             callback.onError("建立傳輸通道失敗");
         }, "peer-connect").start();
+    }
+
+    private static void closeQuietly(@Nullable Socket s) {
+        if (s == null) return;
+        try { s.close(); } catch (Exception ignored) {}
     }
 }

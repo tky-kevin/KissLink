@@ -30,7 +30,9 @@ public final class SessionManager {
     private boolean pendingReset = false;
 
     // ── Peer identity ─────────────────────────────────────────
-    @Nullable private PairingToken connectedPeerToken;
+    // volatile：在主執行緒（onPaired / clearPeerIdentity）寫入，但 currentPeerName() 會被
+    // PeerConnection 的 reader/sender 執行緒經 FileTransferService.onItemCompleted 讀取，故需可見性保證。
+    @Nullable private volatile PairingToken connectedPeerToken;
     @Nullable private volatile String peerNameFromHello;
     @Nullable private volatile byte[] peerAvatarBytes;
     @Nullable private PairingToken pendingSwitchPeer;
@@ -214,14 +216,7 @@ public final class SessionManager {
     // ══════════════════════════════════════════════════════════
 
     static SessionState mapPhase(PairingCoordinator.Phase p) {
-        switch (p) {
-            case LATCHED:    return SessionState.of(SessionState.Phase.PAIRING_LATCHED);
-            case LINKING:    return SessionState.of(SessionState.Phase.PAIRING_LINKING);
-            case ELECTING:   return SessionState.of(SessionState.Phase.PAIRING_ELECTING);
-            case CONNECTING: return SessionState.of(SessionState.Phase.CONNECTING);
-            case CONNECTED:  return SessionState.of(SessionState.Phase.CONNECTED);
-            case IDLE:
-            default:         return SessionState.of(SessionState.Phase.IDLE);
-        }
+        // 單一真相：委派至 SessionState.mapPhase，避免兩處 phase→state 對照表漂移。
+        return SessionState.mapPhase(p);
     }
 }

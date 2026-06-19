@@ -6,7 +6,10 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 
+import androidx.annotation.Nullable;
+
 import com.kisslink.R;
+import com.kisslink.transfer.TransferProtocol;
 
 /**
  * 檔案相關工具函式（SAF / ContentResolver 適配）。
@@ -45,13 +48,27 @@ public final class FileUtils {
         return -1;
     }
 
-    /** 格式化位元組數為人類可讀字串，例如「12.3 MB」。 */
-    public static String formatSize(long bytes) {
-        if (bytes < 0)         return "未知大小";
-        if (bytes < 1024)      return bytes + " B";
-        if (bytes < 1024*1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024L*1024*1024) return String.format("%.1f MB", bytes / (1024.0*1024));
-        return String.format("%.2f GB", bytes / (1024.0*1024*1024));
+    /**
+     * 格式化位元組數為清單顯示字串，例如「12.3 MB」；未知大小（負值）回傳空字串。
+     * UI（待傳清單、歷史）共用的單一真相，取代先前散落於 HomeActivity / HistorySheet 的副本。
+     */
+    public static String sizeLabel(long bytes) {
+        if (bytes < 0)               return "";
+        if (bytes < 1024)            return bytes + " B";
+        if (bytes < 1024 * 1024)     return String.format(java.util.Locale.US, "%.1f KB", bytes / 1024.0);
+        if (bytes < 1024L * 1024 * 1024) return String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024));
+        return String.format(java.util.Locale.US, "%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    }
+
+    /**
+     * 依項目類型 + MIME + 檔名挑選圖示，集中 SendListAdapter / HomeActivity 先前各自的副本：
+     * 名片→人像、相片/影片→圖片，其餘依 MIME（次之依副檔名）推測。
+     */
+    public static int iconFor(byte itemType, @Nullable String mime, @Nullable String name) {
+        if (itemType == TransferProtocol.ITEM_VCARD) return R.drawable.ic_person;
+        if (itemType == TransferProtocol.ITEM_PHOTO) return R.drawable.ic_image;
+        if (mime != null) return guessIconFromMime(mime);
+        return guessIcon(name);
     }
 
     /** 依 MIME 類型推測圖示資源 ID。 */

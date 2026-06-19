@@ -867,19 +867,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                             : getString(R.string.home_connected_title);
     }
 
-    private static int iconFor(byte t) {
-        switch (t) {
-            case TransferProtocol.ITEM_PHOTO: return R.drawable.ic_image;
-            case TransferProtocol.ITEM_VCARD: return R.drawable.ic_person;
-            default: return R.drawable.ic_file;
-        }
-    }
-
     private static int iconForItem(SendItem it) {
-        if (it.itemType == TransferProtocol.ITEM_VCARD) return R.drawable.ic_person;
-        if (it.itemType == TransferProtocol.ITEM_PHOTO) return R.drawable.ic_image;
-        if (it.mime != null) return com.kisslink.utils.FileUtils.guessIconFromMime(it.mime);
-        return com.kisslink.utils.FileUtils.guessIcon(it.name);
+        return com.kisslink.utils.FileUtils.iconFor(it.itemType, it.mime, it.name);
     }
 
     /** 傳送中：以待傳清單為基底，更新對應列的進度/完成（接收端改用收到橫幅，不進清單）。 */
@@ -980,11 +969,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     private static String sizeLabel(long bytes) {
-        if (bytes < 0) return "";
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024L * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+        return com.kisslink.utils.FileUtils.sizeLabel(bytes);
     }
 
     public static Intent intent(Context ctx) {

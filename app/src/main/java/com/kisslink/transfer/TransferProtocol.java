@@ -58,6 +58,15 @@ public final class TransferProtocol {
     /** 每次讀寫的資料塊大小（512 KB），在 Wi-Fi Direct 上平衡記憶體與吞吐量。 */
     public static final int CHUNK_SIZE = 512 * 1024;
 
+    /**
+     * 任一封包 payload（CHUNK / HELLO profile）的上限——等於 {@link #CHUNK_SIZE}。
+     * 對端宣告的 chunkLen 必須落在 [0, MAX_PAYLOAD]，否則視為惡意/損毀封包並斷線；
+     * 這同時保護接收端 pooled buffer（容量 = CHUNK_SIZE）不被超長宣告溢位。
+     */
+    public static final int MAX_PAYLOAD = CHUNK_SIZE;
+    /** FILE_META 的 JSON 長度上限（檔名/MIME 等小欄位，遠小於此）。 */
+    public static final int MAX_META_LEN = 32 * 1024;
+
     // ── Packet Types ───────────────────────────────────────────
     public static final byte TYPE_HANDSHAKE     = 0x01;
     public static final byte TYPE_HANDSHAKE_ACK = 0x02;
@@ -136,6 +145,12 @@ public final class TransferProtocol {
         h.itemType  = buf.get();
         if (h.magic != MAGIC)
             throw new InvalidPacketException("Bad magic: 0x" + Integer.toHexString(h.magic));
+        // 對端宣告的長度一律驗證上限：杜絕惡意/損毀 header 觸發 `new byte[巨值]`（OOM）
+        // 或讓 readFully 寫爆固定大小的 pooled buffer（chunkLen > CHUNK_SIZE）。
+        if (h.chunkLen < 0 || h.chunkLen > MAX_PAYLOAD)
+            throw new InvalidPacketException("chunkLen out of range: " + h.chunkLen);
+        if (h.metaLen < 0 || h.metaLen > MAX_META_LEN)
+            throw new InvalidPacketException("metaLen out of range: " + h.metaLen);
         return h;
     }
 

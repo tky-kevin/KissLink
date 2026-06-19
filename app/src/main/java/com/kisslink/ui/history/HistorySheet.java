@@ -3,8 +3,6 @@ package com.kisslink.ui.history;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -28,8 +26,8 @@ import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
 import com.kisslink.data.repository.TransferRepository;
 import com.kisslink.utils.FileUtils;
+import com.kisslink.utils.ThumbUtils;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -137,12 +135,23 @@ public class HistorySheet extends BottomSheetDialogFragment {
     private final class Adapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         private static final int T_HEADER = 0, T_FILE = 1;
         private final List<Object> items = new ArrayList<>();
-        private final ExecutorService thumbPool = Executors.newFixedThreadPool(2);
+        // daemon 執行緒並在 onDetachedFromRecyclerView 關閉：避免每次開啟歷史 sheet 殘留 2 條縮圖執行緒。
+        private final ExecutorService thumbPool = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "history-thumb");
+            t.setDaemon(true);
+            return t;
+        });
         private final Handler main = new Handler(Looper.getMainLooper());
 
         @SuppressWarnings("NotifyDataSetChanged")
         void submit(List<Object> next) {
             items.clear(); items.addAll(next); notifyDataSetChanged();
+        }
+
+        @Override
+        public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
+            super.onDetachedFromRecyclerView(recyclerView);
+            thumbPool.shutdownNow();
         }
 
         @Override public int getItemViewType(int position) {
@@ -199,8 +208,8 @@ public class HistorySheet extends BottomSheetDialogFragment {
             final String want = r.filePath;
             final Uri uri = Uri.parse(r.filePath);
             thumbPool.execute(() -> {
-                Bitmap bm = isVideo ? decodeVideoThumb(ctx, uri, dp(ctx, 64))
-                                    : decodeThumb(ctx, uri, dp(ctx, 64));
+                Bitmap bm = isVideo ? ThumbUtils.decodeVideo(ctx, uri, dp(ctx, 64))
+                                    : ThumbUtils.decodeImage(ctx, uri, dp(ctx, 64));
                 if (bm == null) return;
                 main.post(() -> {
                     if (want.equals(vh.thumbTag)) {
@@ -272,53 +281,6 @@ public class HistorySheet extends BottomSheetDialogFragment {
     }
 
     private static String sizeLabel(long bytes) {
-        if (bytes < 0) return "";
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
-        if (bytes < 1024L * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
-        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
-    }
-
-    @Nullable
-    private static Bitmap decodeThumb(Context ctx, Uri uri, int targetPx) {
-        try {
-            BitmapFactory.Options bounds = new BitmapFactory.Options();
-            bounds.inJustDecodeBounds = true;
-            try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-                BitmapFactory.decodeStream(in, null, bounds);
-            }
-            int sample = 1;
-            int half = Math.min(bounds.outWidth, bounds.outHeight) / 2;
-            while (half / sample > targetPx) sample *= 2;
-            BitmapFactory.Options opt = new BitmapFactory.Options();
-            opt.inSampleSize = Math.max(1, sample);
-            try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-                return BitmapFactory.decodeStream(in, null, opt);
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    @Nullable
-    private static Bitmap decodeVideoThumb(Context ctx, Uri uri, int targetPx) {
-        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-        try {
-            retriever.setDataSource(ctx, uri);
-            Bitmap bm = retriever.getFrameAtTime(0);
-            if (bm == null) return null;
-            int w = bm.getWidth();
-            int h = bm.getHeight();
-            float scale = Math.max((float) targetPx / w, (float) targetPx / h);
-            int nw = Math.round(w * scale);
-            int nh = Math.round(h * scale);
-            Bitmap scaled = Bitmap.createScaledBitmap(bm, nw, nh, true);
-            if (scaled != bm) bm.recycle();
-            return scaled;
-        } catch (Exception e) {
-            return null;
-        } finally {
-            try { retriever.release(); } catch (Exception ignored) {}
-        }
+        return FileUtils.sizeLabel(bytes);
     }
 }
