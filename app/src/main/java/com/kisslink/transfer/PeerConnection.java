@@ -75,6 +75,17 @@ public class PeerConnection {
     private final BlockingQueue<Object> outQueue = new LinkedBlockingQueue<>();
     private static final Object STOP = new Object();
 
+    // ── Pipelined I/O：可重用緩衝持有者 + 池大小 ──────────────────
+    /** 送/收 pipeline 的 bounded buffer pool 大小（×CHUNK_SIZE）。4 足以讓磁碟與網路重疊。 */
+    private static final int CHUNK_POOL = 4;
+    /** 可重用緩衝持有者（含實際長度），避免每 chunk 配置 512KB 造成 GC 壓力。 */
+    private static final class Chunk {
+        final byte[] data; int len;
+        Chunk(int cap) { this.data = new byte[cap]; }
+    }
+    /** 送端 prefetch 佇列的「讀畢」哨兵。 */
+    private static final Chunk CHUNK_EOF = new Chunk(0);
+
     // 接收端批次：META 到達時若距上次活動超過此間隔即視為新批次
     private static final long RECV_BATCH_GAP_MS = 4000;
     private long recvBatchId = 0;
@@ -140,6 +151,7 @@ public class PeerConnection {
         readerThread.start();
         senderThread.start();
         heartbeatThread.start();
+        logLinkInfo();
         Log.i(TAG, "PeerConnection started");
     }
 
@@ -238,20 +250,47 @@ public class PeerConnection {
                     TransferProtocol.makeItemMeta(0, item.itemType, size, metaBytes.length);
             writeFrame(TransferProtocol.encodeHeader(mh), metaBytes, 0, metaBytes.length);
 
-            // CHUNKS
-            byte[] buf = new byte[TransferProtocol.CHUNK_SIZE];
-            long sent = 0; long offset = 0;
-            try (InputStream in = openItemInput(item)) {
-                int r;
-                while ((r = in.read(buf)) > 0) {
-                    int crc = TransferProtocol.crc32(buf, 0, r);
-                    TransferProtocol.Header ch =
-                            TransferProtocol.makeDataChunk(0, offset, r, crc);
-                    writeFrame(TransferProtocol.encodeHeader(ch), buf, 0, r);
-                    offset += r; sent += r;
-                    emitProgress(true, item.name, size, sent, started, item.itemType, batchId, index, count);
+            // CHUNKS — pipelined：prefetch 執行緒先把磁碟讀進 bounded buffer pool，本執行緒
+            // 同時做 CRC + socket 寫入,讓磁碟讀取與網路寫入重疊（wire 變快後可再榨 ~15-20%）。
+            long sent = 0, offset = 0;
+            final java.util.concurrent.ArrayBlockingQueue<Chunk> free  = new java.util.concurrent.ArrayBlockingQueue<>(CHUNK_POOL);
+            final java.util.concurrent.ArrayBlockingQueue<Chunk> ready = new java.util.concurrent.ArrayBlockingQueue<>(CHUNK_POOL + 1);
+            for (int i = 0; i < CHUNK_POOL; i++) free.add(new Chunk(TransferProtocol.CHUNK_SIZE));
+            final java.util.concurrent.atomic.AtomicReference<IOException> readErr = new java.util.concurrent.atomic.AtomicReference<>();
+            Thread prefetch = new Thread(() -> {
+                try (InputStream in = openItemInput(item)) {
+                    while (true) {
+                        Chunk c = free.take();
+                        int r = in.read(c.data);
+                        if (r <= 0) { ready.put(CHUNK_EOF); return; }
+                        c.len = r;
+                        ready.put(c);
+                    }
+                } catch (IOException e) {
+                    readErr.set(e);
+                    try { ready.put(CHUNK_EOF); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
+            }, "peer-send-read");
+            prefetch.start();
+            try {
+                while (true) {
+                    Chunk c = ready.take();
+                    if (c == CHUNK_EOF) break;
+                    int crc = TransferProtocol.crc32(c.data, 0, c.len);
+                    TransferProtocol.Header ch = TransferProtocol.makeDataChunk(0, offset, c.len, crc);
+                    writeFrame(TransferProtocol.encodeHeader(ch), c.data, 0, c.len);
+                    offset += c.len; sent += c.len;
+                    emitProgress(true, item.name, size, sent, started, item.itemType, batchId, index, count);
+                    free.put(c); // 歸還緩衝供 prefetch 重用，避免每 chunk 配置
+                }
+            } finally {
+                prefetch.interrupt();
             }
+            IOException re = readErr.get();
+            if (re != null) throw re;
+            logThroughput("SEND", item.name, sent, started);
             // COMPLETE
             writeFrame(TransferProtocol.encodeHeader(TransferProtocol.makeComplete(0)), null, 0, 0);
             ok = true;
@@ -283,10 +322,10 @@ public class PeerConnection {
     // ══════════════════════════════════════════════════════════
 
     private void readLoop() {
+        ReceivingItem cur = null;
         try {
             InputStream in = socket.getInputStream();
             byte[] header = new byte[TransferProtocol.HEADER_SIZE];
-            ReceivingItem cur = null;
 
             while (running) {
                 readFully(in, header, header.length);
@@ -320,14 +359,27 @@ public class PeerConnection {
                     }
 
                     case TransferProtocol.TYPE_DATA_CHUNK: {
-                        byte[] data = new byte[h.chunkLen];
-                        readFully(in, data, data.length);
                         if (cur != null) {
-                            int crc = TransferProtocol.crc32(data, 0, data.length);
+                            // pipelined：讀進池中緩衝（take 提供背壓）→ CRC → 交給 writer 執行緒寫 MediaStore，
+                            // 讓 socket 讀取與磁碟寫入重疊。
+                            Chunk c = cur.wfree.take();
+                            try {
+                                readFully(in, c.data, h.chunkLen);
+                            } catch (IOException e) {
+                                cur.wfree.put(c);
+                                throw e;
+                            }
+                            c.len = h.chunkLen;
+                            int crc = TransferProtocol.crc32(c.data, 0, c.len);
                             if (crc != h.crc32) { Log.w(TAG, "CRC mismatch"); cur.corrupt = true; }
-                            cur.write(data);
+                            cur.received += c.len;
+                            cur.wqueue.put(c);
                             emitProgress(false, cur.name, cur.size, cur.received, cur.started, cur.itemType,
                                     recvBatchId, cur.fileIndex, cur.fileCount);
+                        } else {
+                            // 無進行中項目：仍須把這塊 payload 從 socket 讀掉以維持框架對齊。
+                            byte[] skip = new byte[h.chunkLen];
+                            readFully(in, skip, h.chunkLen);
                         }
                         break;
                     }
@@ -335,6 +387,7 @@ public class PeerConnection {
                     case TransferProtocol.TYPE_COMPLETE: {
                         if (cur != null) {
                             boolean ok = cur.finish();
+                            logThroughput("RECV", cur.name, cur.received, cur.started);
                             long avg = avgSpeed(cur.size, cur.started);
                             lastRecvActivity = System.currentTimeMillis();
                             String uri = cur.target != null ? cur.target.toString() : null;
@@ -367,6 +420,8 @@ public class PeerConnection {
         } catch (Exception e) {
             Log.w(TAG, "readLoop ended: " + e.getMessage());
         } finally {
+            // 中途斷線：清掉進行中項目的 writer 執行緒與半成品檔，避免執行緒/串流洩漏。
+            if (cur != null) cur.abort();
             running = false;
             listener.onDisconnected();
         }
@@ -379,11 +434,17 @@ public class PeerConnection {
         final byte itemType;
         final int fileIndex, fileCount;
         final long started = System.currentTimeMillis();
-        long received = 0;
+        long received = 0;          // 已從 socket 讀入的位元組（進度用，reader 執行緒更新）
         boolean corrupt = false;
         @Nullable Uri target;
         @Nullable OutputStream out;
         @Nullable java.io.ByteArrayOutputStream cardBuf; // 名片：另存記憶體供 UI 開啟
+
+        // ── Pipelined 磁碟寫入：reader 交付緩衝、writer 執行緒寫 MediaStore ──
+        final java.util.concurrent.ArrayBlockingQueue<Chunk> wfree  = new java.util.concurrent.ArrayBlockingQueue<>(CHUNK_POOL);
+        final java.util.concurrent.ArrayBlockingQueue<Chunk> wqueue = new java.util.concurrent.ArrayBlockingQueue<>(CHUNK_POOL + 1);
+        @Nullable volatile IOException writeErr;
+        final Thread writer;
 
         @Nullable byte[] cardBytes() { return cardBuf != null ? cardBuf.toByteArray() : null; }
 
@@ -405,14 +466,40 @@ public class PeerConnection {
             } catch (Exception e) {
                 Log.e(TAG, "open receive output failed: " + name, e);
             }
+            for (int i = 0; i < CHUNK_POOL; i++) wfree.add(new Chunk(TransferProtocol.CHUNK_SIZE));
+            writer = new Thread(this::writeLoop, "peer-recv-write");
+            writer.start();
         }
 
-        void write(byte[] data) throws IOException {
-            if (out != null) { out.write(data); received += data.length; }
-            if (cardBuf != null) cardBuf.write(data);
+        /** writer 執行緒：把交付的緩衝寫入 MediaStore，寫完歸還池中（出錯仍歸還以免 reader 卡死）。 */
+        private void writeLoop() {
+            try {
+                while (true) {
+                    Chunk c = wqueue.take();
+                    if (c == CHUNK_EOF) return;
+                    if (writeErr == null && out != null) {
+                        try {
+                            out.write(c.data, 0, c.len);
+                            if (cardBuf != null) cardBuf.write(c.data, 0, c.len);
+                        } catch (IOException e) {
+                            writeErr = e; corrupt = true;
+                        }
+                    }
+                    wfree.put(c);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        /** 送 EOF 哨兵並等 writer 排空所有已交付的緩衝。 */
+        private void drainWriter() {
+            try { wqueue.put(CHUNK_EOF); writer.join(); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
 
         boolean finish() {
+            drainWriter();
             try { if (out != null) { out.flush(); out.close(); } } catch (IOException ignored) {}
             out = null;
             try {
@@ -422,10 +509,11 @@ public class PeerConnection {
                     context.getContentResolver().update(target, v, null, null);
                 }
             } catch (Exception ignored) {}
-            return !corrupt && target != null;
+            return !corrupt && writeErr == null && target != null;
         }
 
         void abort() {
+            drainWriter();
             try { if (out != null) out.close(); } catch (IOException ignored) {}
             out = null;
             try { if (target != null) context.getContentResolver().delete(target, null, null); }
@@ -484,6 +572,31 @@ public class PeerConnection {
         } catch (Exception e) {
             Log.w(TAG, "parsePeerProfile failed: " + e.getMessage());
         }
+    }
+
+    /** 單一項目的牆鐘吞吐量（pipelined 後磁碟與網路重疊，per-leg 拆解已無意義，只記總吞吐）。 */
+    private static void logThroughput(String dir, String name, long bytes, long startedMs) {
+        long wallMs = System.currentTimeMillis() - startedMs;
+        if (bytes <= 0 || wallMs <= 0) return;
+        double mb = bytes / 1048576.0;
+        double mbps = (bytes * 8.0 / 1e6) / (wallMs / 1000.0);
+        Log.i(TAG, String.format(java.util.Locale.US,
+                "PERF %s %.1fMB wall=%.2fs (%.0f Mbps / %.1f MB/s) | %s",
+                dir, mb, wallMs / 1000.0, mbps, mb / (wallMs / 1000.0),
+                name.length() > 24 ? name.substring(0, 24) : name));
+    }
+
+    /** 連線建立時記錄 Wi-Fi 連結速率/訊號（best-effort；部分裝置回報的是 STA 而非 P2P 介面）。 */
+    private void logLinkInfo() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                    context.getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return;
+            android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
+            if (wi == null) return;
+            Log.i(TAG, "LINK linkSpeed=" + wi.getLinkSpeed() + "Mbps rssi=" + wi.getRssi()
+                    + "dBm freq=" + wi.getFrequency() + "MHz");
+        } catch (Exception ignored) {}
     }
 
     private static long avgSpeed(long size, long startedMs) {
