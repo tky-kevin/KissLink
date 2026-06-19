@@ -9,3 +9,6 @@
 
 # Room：實體/DAO 由產生碼存取，預設規則已涵蓋；此處不額外處理。
 # Jetpack Compose：compose 函式庫自帶 keep 規則，無需手動保留。
+
+# OkHttp/Okio: javax.annotation 僅供註解，安全忽略
+-dontwarn javax.annotation.**
