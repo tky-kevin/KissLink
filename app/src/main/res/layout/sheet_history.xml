@@ -4,23 +4,19 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@color/beam_surface"
-    android:paddingTop="10dp"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="20dp"
     android:paddingBottom="8dp">
-
-    <View
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="14dp"
-        android:background="@color/beam_track" />
 
     <TextView
         android:id="@+id/tvSheetTitle"
-        style="@style/Beam.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="10dp"
+        android:textColor="@color/beam_ink"
+        android:textSize="18sp"
+        android:textStyle="bold"
         android:text="@string/history_title" />
 
     <TextView
@@ -39,7 +35,6 @@
         android:id="@+id/rvHistory"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="520dp"
         android:paddingBottom="12dp"
         android:clipToPadding="false"
         android:overScrollMode="never" />
