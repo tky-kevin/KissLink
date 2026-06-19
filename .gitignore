@@ -70,3 +70,6 @@ Icon\r
 
 # Windows thumbnail db
 Thumbs.db
+
+# MiMoCode local files
+.mimocode/
