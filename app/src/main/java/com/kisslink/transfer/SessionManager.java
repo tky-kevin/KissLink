@@ -1,6 +1,7 @@
 package com.kisslink.transfer;
 
 import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -74,24 +75,39 @@ public final class SessionManager {
     // ══════════════════════════════════════════════════════════
 
     public void transitionTo(@NonNull SessionState state) {
-        sessionLd.setValue(state);
+        publish(state);
     }
 
     public void onPhase(@NonNull PairingCoordinator.Phase phase, int currentGen) {
         if (currentGen != sessionGen) return;
-        sessionLd.setValue(mapPhase(phase));
+        publish(mapPhase(phase));
     }
 
     public void onPaired(boolean groupOwner, int currentGen,
                          @NonNull PairingCoordinator coordinator) {
         if (currentGen != sessionGen) return;
         connectedPeerToken = coordinator.peerToken();
-        sessionLd.setValue(SessionState.of(SessionState.Phase.CONNECTING));
+        publish(SessionState.of(SessionState.Phase.CONNECTING));
     }
 
     public void onError(@NonNull String message, int currentGen) {
         if (currentGen != sessionGen) return;
-        sessionLd.setValue(SessionState.error(message));
+        publish(SessionState.error(message));
+    }
+
+    /**
+     * Publish a session state to LiveData safely from any thread.
+     * LiveData.setValue() must run on the main thread; PeerConnector callbacks
+     * (peer-accept / peer-connect threads) reach us off the main thread, so we
+     * fall back to postValue there. Main-thread callers keep synchronous setValue
+     * so existing ordering/test semantics are preserved.
+     */
+    private void publish(@NonNull SessionState state) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            sessionLd.setValue(state);
+        } else {
+            sessionLd.postValue(state);
+        }
     }
 
     // ══════════════════════════════════════════════════════════
