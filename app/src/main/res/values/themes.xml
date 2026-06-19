@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.KissLink" parent="Theme.Material3.Light.NoActionBar">
+        <!-- 全域 zpix 字體 -->
+        <item name="android:fontFamily">@font/zpix</item>
+        <item name="fontFamily">@font/zpix</item>
+
         <item name="colorPrimary">@color/beam_accent</item>
         <item name="colorOnPrimary">@color/beam_on_accent</item>
         <item name="colorSecondary">@color/beam_accent</item>
@@ -19,7 +23,29 @@
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
 
         <!-- Bottom sheet 樣式 -->
-        <item name="bottomSheetDialogTheme">@style/Theme.KissLink.BottomSheet</item>
+        <item name="bottomSheetStyle">@style/Beam.BottomSheet.Modal</item>
+
+        <!-- 全域按鈕樣式（補償 zpix 字體的非對稱 metrics） -->
+        <item name="materialButtonStyle">@style/Beam.Button.Base</item>
+
+        <!-- 全域 TextView 樣式（移除額外字體邊距，確保 zpix 置中） -->
+        <item name="android:textViewStyle">@style/Beam.TextView.Base</item>
+    </style>
+
+    <!-- 全域按鈕基底樣式 -->
+    <style name="Beam.Button.Base" parent="Widget.Material3.Button">
+        <item name="android:insetTop">12dp</item>
+        <item name="android:insetBottom">4dp</item>
+    </style>
+
+    <style name="Beam.Button.Text.Base" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetTop">12dp</item>
+        <item name="android:insetBottom">4dp</item>
+    </style>
+
+    <!-- 全域 TextView 基底樣式 -->
+    <style name="Beam.TextView.Base" parent="android:Widget.TextView">
+        <item name="android:includeFontPadding">false</item>
     </style>
 
     <style name="Theme.KissLink.BottomSheet" parent="Theme.Material3.Light.BottomSheetDialog">
