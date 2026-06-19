@@ -214,6 +214,11 @@ public class WifiDirectManager implements WifiDirectEventCallback {
         final String ssid       = SSID_PREFIX + generateShortId(); // e.g. "DIRECT-KL-A3F2"
         final String passphrase = generatePassphrase();            // 16 char
 
+        // 注意：實測強制 setGroupOperatingBand(5GHZ) 在 Redmi Note 14 Pro / Xiaomi 14T 上
+        // 會讓群組成形卻破壞 GO 的 192.168.49.x 子網路由（client TCP 連不上 192.168.49.1、
+        // GO accept 逾時），且不是在 createGroup 失敗 → legacy fallback 不會觸發。故維持
+        // 系統自選頻段。Wi-Fi Direct 頻段實質由裝置當前 STA Wi-Fi 連線（SCC）決定，
+        // 速度優化應從「配對時讓手機連 5GHz AP 或斷 Wi-Fi」著手，而非強制 P2P 頻段。
         WifiP2pConfig config = new WifiP2pConfig.Builder()
                 .setNetworkName(ssid)
                 .setPassphrase(passphrase)
@@ -627,6 +632,29 @@ public class WifiDirectManager implements WifiDirectEventCallback {
     public boolean isActive() {
         ConnectionState s = stateLd.getValue();
         return s != null && s != ConnectionState.IDLE;
+    }
+
+    /**
+     * 本機若當 GO 是否能在 5GHz 開 Wi-Fi Direct 群組——供 GO 選舉偏置用
+     * （見 {@link com.kisslink.pairing.PairingToken#shouldBeGroupOwner}）。
+     *
+     * <p>SCC：P2P 群組頻段 = GO 的 STA 頻段。STA 掛在 2.4GHz AP → 群組被鎖 2.4GHz
+     * （實測 ~13Mbps）；未連 STA 或 STA 在 5GHz → GO 可在 5GHz 開群組（數百 Mbps）。
+     * 任何不確定一律樂觀回 {@code true}（退回原 goIntent 選舉，絕不比舊版差）。
+     */
+    public static boolean canHostFastGroup(@NonNull Context ctx) {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                    ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return true;
+            if (!wm.is5GHzBandSupported()) return false;          // 硬體不支援 5GHz → 當 GO 必慢
+            android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
+            if (wi == null || wi.getNetworkId() == -1) return true; // 未連 STA → GO 可自選 5GHz
+            int freq = wi.getFrequency();
+            return freq <= 0 || freq >= 4900;                     // 5GHz/未知 → 可；2.4GHz → 不可
+        } catch (Exception e) {
+            return true;
+        }
     }
 
     public LiveData<ConnectionState> getState()       { return stateLd; }

@@ -52,6 +52,11 @@ public class PairingCoordinator {
         /** Wi-Fi Direct 已連線;isGroupOwner 表本機是否為 GO。 */
         @MainThread void onPaired(boolean isGroupOwner);
         @MainThread void onError(@NonNull String message);
+        /**
+         * 兩台都被 2.4GHz STA 綁住,GO 選舉無法挑出 5GHz 主機 → 傳輸會被鎖在 2.4GHz。
+         * 非錯誤,僅提示使用者改善連線(改連 5GHz 或關 Wi-Fi)。預設不處理。
+         */
+        @MainThread default void onSlowLinkWarning() {}
     }
 
     private final Context context;
@@ -161,6 +166,12 @@ public class PairingCoordinator {
         emit(Phase.ELECTING);
         Log.i(TAG, "GO election: iAmGO=" + iAmGroupOwner
                 + " (local=" + localToken + ", peer=" + peerToken + ")");
+
+        // 任一台被 2.4GHz STA 綁住 → 群組只能落在 2.4GHz(連線優先),傳輸偏慢,提示使用者。
+        if (!localToken.canHost5G || !peerToken.canHost5G) {
+            Log.w(TAG, "A peer is pinned to 2.4GHz STA → group limited to 2.4GHz (slow)");
+            listener.onSlowLinkWarning();
+        }
 
         if (iAmGroupOwner) {
             // 我是 GO：建群組,憑證就緒後經 BLE 交給對方。

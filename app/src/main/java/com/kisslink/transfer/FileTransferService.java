@@ -18,6 +18,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.kisslink.data.repository.TransferRepository;
 import com.kisslink.nfc.KissLinkHCEService;
+import com.kisslink.pairing.LocalPairing;
 import com.kisslink.pairing.PairingCoordinator;
 import com.kisslink.pairing.PairingToken;
 import com.kisslink.wifidirect.WifiDirectManager;
@@ -186,6 +187,9 @@ public class FileTransferService extends Service {
 
     private void createCoordinator() {
         final int gen = sessionMgr.nextSessionGen();
+        // 在建 coordinator（讀 LocalPairing.current()）與設 HCE token 前，刷新本機 5GHz
+        // 開群組能力旗標，讓對方碰一下讀到的 token 反映最新 Wi-Fi 狀態，GO 選舉才準。
+        LocalPairing.setCanHost5G(WifiDirectManager.canHostFastGroup(this));
         coordinator = new PairingCoordinator(this, wifi, new PairingCoordinator.Listener() {
             @Override public void onPhase(@NonNull PairingCoordinator.Phase phase) {
                 sessionMgr.onPhase(phase, gen);
@@ -197,6 +201,11 @@ public class FileTransferService extends Service {
             }
             @Override public void onError(@NonNull String message) {
                 sessionMgr.onError(message, gen);
+            }
+            @Override public void onSlowLinkWarning() {
+                android.widget.Toast.makeText(FileTransferService.this,
+                        "有裝置連在 2.4GHz Wi-Fi，傳輸會較慢；兩台都關閉 Wi-Fi 或改連 5GHz 可大幅加速",
+                        android.widget.Toast.LENGTH_LONG).show();
             }
         });
         KissLinkHCEService.setActiveToken(coordinator.localToken());

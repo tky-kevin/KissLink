@@ -22,14 +22,28 @@ public final class LocalPairing {
     private static volatile PairingToken token;
     /** 對外顯示名稱（對方碰一下即看到）。預設裝置型號，可由名片姓名覆寫。 */
     private static volatile String displayName = Build.MODEL;
+    /** 本機若當 GO 是否能在 5GHz 開群組（供 GO 選舉偏置）。未知時樂觀 true。 */
+    private static volatile boolean canHost5G = true;
 
     private LocalPairing() {}
 
     /** 取得本機目前 token(首次呼叫時產生)。 */
     @NonNull
     public static synchronized PairingToken current() {
-        if (token == null) token = PairingToken.create(displayName);
+        if (token == null) token = PairingToken.create(displayName, canHost5G);
         return token;
+    }
+
+    /**
+     * 更新「本機能否在 5GHz 開群組」旗標（由 {@link com.kisslink.wifidirect.WifiDirectManager#canHostFastGroup}
+     * 在設定 HCE token 前刷新）。值有變才換發 token（nonce 跨非重疊場次重用無妨），
+     * 確保對方碰一下讀到的能力旗標是最新的，GO 選舉才會把「能跑 5GHz」的那台選為 GO。
+     * 應在閒置時呼叫，避免換掉正在配對中的 token。
+     */
+    public static synchronized void setCanHost5G(boolean value) {
+        if (token != null && value == canHost5G) return;
+        canHost5G = value;
+        token = PairingToken.create(displayName, canHost5G);
     }
 
     /**
@@ -41,13 +55,13 @@ public final class LocalPairing {
         if (name.trim().isEmpty()) return;
         if (name.equals(displayName)) return;
         displayName = name;
-        if (token != null) token = PairingToken.create(displayName);
+        if (token != null) token = PairingToken.create(displayName, canHost5G);
     }
 
     /** 強制換一份新 token(目前未使用;保留給未來需要輪替 nonce 的情境)。 */
     @NonNull
     public static synchronized PairingToken renew() {
-        token = PairingToken.create(displayName);
+        token = PairingToken.create(displayName, canHost5G);
         return token;
     }
 }

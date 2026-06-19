@@ -63,7 +63,10 @@ public class NfcForegroundHelper {
         latched = false; // 回到前景 → 重新待命
 
         // 0. 設定本機 HCE 對外的 token(與 Coordinator 同源)——任何前景畫面都是有效標籤。
+        //    先刷新 5GHz 開群組能力旗標，確保對方碰一下讀到的 token 反映最新 Wi-Fi 狀態。
         try {
+            LocalPairing.setCanHost5G(
+                    com.kisslink.wifidirect.WifiDirectManager.canHostFastGroup(activity));
             KissLinkHCEService.setActiveToken(LocalPairing.current());
         } catch (Exception e) {
             Log.w(TAG, "setActiveToken failed: " + e.getMessage());
