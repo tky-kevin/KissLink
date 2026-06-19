@@ -7,7 +7,7 @@ complexity:
   LongParameterList:
     functionThreshold: 8
     constructorThreshold: 10
-  ComplexMethod:
+  CyclomaticComplexMethod:
     threshold: 15
   TooManyFunctions:
     thresholdInFiles: 20
@@ -22,8 +22,6 @@ style:
     active: false  # KissLink 有大量協議常數，暫時關閉
   ReturnCount:
     max: 3
-  NestedBlockDepth:
-    max: 4
 
 naming:
   FunctionNaming:
@@ -31,7 +29,7 @@ naming:
   ClassNaming:
     classPattern: '[A-Z][a-zA-Z0-9]*'
 
-empty:
+empty-blocks:
   EmptyFunctionBlock:
     ignoreOverridden: true
 

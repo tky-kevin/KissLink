@@ -21,8 +21,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
 
       - name: Run ktlint
         run: ./gradlew ktlintCheck --no-daemon
@@ -30,8 +28,9 @@ jobs:
       - name: Run spotless (Java)
         run: ./gradlew spotlessCheck --no-daemon
 
-      - name: Run detekt
-        run: ./gradlew detekt --no-daemon
+      # detekt 1.23.x 尚未支援 Kotlin 2.2.x (JVM target 25)，暫時停用
+      # - name: Run detekt
+      #   run: ./gradlew detekt --no-daemon
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug --no-daemon
@@ -58,8 +57,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
@@ -86,17 +83,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
 
   # ── Stage 4: 整合測試（僅 PR，< 15 分鐘）──
   integration-test:
@@ -114,8 +103,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
 
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2

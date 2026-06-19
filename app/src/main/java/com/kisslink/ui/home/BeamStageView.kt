@@ -15,27 +15,19 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.LottieConstants
-import com.airbnb.lottie.compose.rememberLottieComposition
-import nl.dionsegijn.konfetti.compose.KonfettiView
-import nl.dionsegijn.konfetti.core.Party
-import nl.dionsegijn.konfetti.core.Position
-import nl.dionsegijn.konfetti.core.emitter.Emitter
-import java.util.concurrent.TimeUnit
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,10 +43,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.isSystemInDarkTheme
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.rememberLottieComposition
 import kotlinx.coroutines.delay
+import nl.dionsegijn.konfetti.compose.KonfettiView
+import nl.dionsegijn.konfetti.core.Party
+import nl.dionsegijn.konfetti.core.Position
+import nl.dionsegijn.konfetti.core.emitter.Emitter
+import java.util.concurrent.TimeUnit
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 
 /**
  * 中央視覺模組（Compose）。
@@ -66,94 +65,118 @@ import kotlin.math.roundToInt
  *  - **完成**：頭像處先播打勾動畫（此時隱藏頭像），再淡回頭像。
  *  - **名片飛出**：[playCardFly] genie 縮入頭像。
  */
-class BeamStageView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null
-) : AbstractComposeView(context, attrs) {
+class BeamStageView
+    @JvmOverloads
+    constructor(
+        context: Context,
+        attrs: AttributeSet? = null,
+    ) : AbstractComposeView(context, attrs) {
+        companion object {
+            const val READY = 0
+            const val CONNECTING = 1
+            const val CONNECTED = 2
+            const val TRANSFERRING = 3
+            const val DONE = 4
+            const val ERROR = 5
+            const val SEND = 0
+            const val RECEIVE = 1
+        }
 
-    companion object {
-        const val READY = 0
-        const val CONNECTING = 1
-        const val CONNECTED = 2
-        const val TRANSFERRING = 3
-        const val DONE = 4
-        const val ERROR = 5
-        const val SEND = 0
-        const val RECEIVE = 1
+        private val phaseState = mutableStateOf(READY)
+        private val directionState = mutableStateOf(SEND)
+        private val progressState = mutableStateOf(0f)
+        private val peerAvatarState = mutableStateOf<Bitmap?>(null)
+        private val selfAvatarState = mutableStateOf<Bitmap?>(null)
+        private val peerNameState = mutableStateOf<String?>(null)
+        private val selfNameState = mutableStateOf<String?>(null)
+
+        fun setPhase(p: Int) {
+            phaseState.value = p
+        }
+
+        fun setDirection(d: Int) {
+            directionState.value = d
+        }
+
+        fun setProgress(p: Float) {
+            progressState.value = p.coerceIn(0f, 1f)
+        }
+
+        fun setPeerAvatar(b: Bitmap?) {
+            peerAvatarState.value = b
+        }
+
+        fun setSelfAvatar(b: Bitmap?) {
+            selfAvatarState.value = b
+        }
+
+        fun setPeerIdentity(name: String?) {
+            peerNameState.value = monogram(name)
+        }
+
+        fun setSelfIdentity(name: String?) {
+            selfNameState.value = monogram(name)
+        }
+
+        /** 名片飛出動畫已移除；保留無作用的呼叫點以相容傳送流程。 */
+        fun playCardFly() { /* no-op */ }
+
+        private fun monogram(name: String?): String? {
+            val s = name?.trim().orEmpty()
+            return if (s.isEmpty()) null else s.substring(0, 1).uppercase()
+        }
+
+        @Composable
+        override fun Content() {
+            beamStage(
+                phase = phaseState.value,
+                rawProgress = progressState.value,
+                peerAvatar = peerAvatarState.value,
+                peerMono = peerNameState.value,
+            )
+        }
     }
-
-    private val phaseState = mutableStateOf(READY)
-    private val directionState = mutableStateOf(SEND)
-    private val progressState = mutableStateOf(0f)
-    private val peerAvatarState = mutableStateOf<Bitmap?>(null)
-    private val selfAvatarState = mutableStateOf<Bitmap?>(null)
-    private val peerNameState = mutableStateOf<String?>(null)
-    private val selfNameState = mutableStateOf<String?>(null)
-
-    fun setPhase(p: Int) { phaseState.value = p }
-    fun setDirection(d: Int) { directionState.value = d }
-    fun setProgress(p: Float) { progressState.value = p.coerceIn(0f, 1f) }
-    fun setPeerAvatar(b: Bitmap?) { peerAvatarState.value = b }
-    fun setSelfAvatar(b: Bitmap?) { selfAvatarState.value = b }
-    fun setPeerIdentity(name: String?) { peerNameState.value = monogram(name) }
-    fun setSelfIdentity(name: String?) { selfNameState.value = monogram(name) }
-
-    /** 名片飛出動畫已移除；保留無作用的呼叫點以相容傳送流程。 */
-    fun playCardFly() { /* no-op */ }
-
-    private fun monogram(name: String?): String? {
-        val s = name?.trim().orEmpty()
-        return if (s.isEmpty()) null else s.substring(0, 1).uppercase()
-    }
-
-    @Composable
-    override fun Content() {
-        BeamStage(
-            phase = phaseState.value,
-            rawProgress = progressState.value,
-            peerAvatar = peerAvatarState.value,
-            peerMono = peerNameState.value
-        )
-    }
-}
 
 private val ACCENT = Color(0xFF1A73E8)
 
 @Composable
-private fun BeamStage(
+private fun beamStage(
     phase: Int,
     rawProgress: Float,
     peerAvatar: Bitmap?,
-    peerMono: String?
+    peerMono: String?,
 ) {
     // 動態顏色：跟隨深/淺模式（不依賴 Material3，直接讀系統主題）
-    val dark  = isSystemInDarkTheme()
-    val TRACK = if (dark) Color(0xFF38342F) else Color(0xFFDCD8CF)
-    val PANEL = if (dark) Color(0xFF242220) else Color(0xFFF4F2EC)
+    val dark = isSystemInDarkTheme()
+    val track = if (dark) Color(0xFF38342F) else Color(0xFFDCD8CF)
+    val panel = if (dark) Color(0xFF242220) else Color(0xFFF4F2EC)
 
-    val connected = phase == BeamStageView.CONNECTED ||
-        phase == BeamStageView.TRANSFERRING || phase == BeamStageView.DONE
+    val connected =
+        phase == BeamStageView.CONNECTED ||
+            phase == BeamStageView.TRANSFERRING || phase == BeamStageView.DONE
     val transferring = phase == BeamStageView.TRANSFERRING
     val done = phase == BeamStageView.DONE
 
     // 常駐 NFC 漣漪
     val infinite = rememberInfiniteTransition(label = "beam")
     val ripple by infinite.animateFloat(
-        initialValue = 0f, targetValue = 1f,
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
-        label = "ripple"
+        label = "ripple",
     )
 
     // #4 平滑進度
     // 線性補間：配合外層已單調化的進度，視覺速度穩定（不忽快忽慢、不回退）
     val animProgress by animateFloatAsState(
-        targetValue = when {
-            done -> 1f
-            transferring -> rawProgress
-            else -> 0f
-        },
+        targetValue =
+            when {
+                done -> 1f
+                transferring -> rawProgress
+                else -> 0f
+            },
         animationSpec = tween(400, easing = LinearEasing),
-        label = "progress"
+        label = "progress",
     )
 
     // 完成打勾 / 頭像切換動畫
@@ -163,30 +186,33 @@ private fun BeamStage(
     LaunchedEffect(phase) {
         when (phase) {
             BeamStageView.DONE -> {
-                avatarAlpha.animateTo(0f, tween(140))      // 隱藏頭像
-                checkDraw.snapTo(0f); checkAlpha.snapTo(1f)
+                avatarAlpha.animateTo(0f, tween(140)) // 隱藏頭像
+                checkDraw.snapTo(0f)
+                checkAlpha.snapTo(1f)
                 checkDraw.animateTo(1f, tween(440, easing = FastOutSlowInEasing)) // 畫勾
                 delay(560)
-                checkAlpha.animateTo(0f, tween(220))       // 勾淡出
+                checkAlpha.animateTo(0f, tween(220)) // 勾淡出
                 avatarAlpha.animateTo(1f, tween(380, easing = FastOutSlowInEasing)) // 切回頭像
             }
             BeamStageView.CONNECTED, BeamStageView.TRANSFERRING -> {
-                checkAlpha.snapTo(0f); checkDraw.snapTo(0f)
+                checkAlpha.snapTo(0f)
+                checkDraw.snapTo(0f)
                 if (avatarAlpha.value < 1f) avatarAlpha.animateTo(1f, tween(340))
             }
             else -> {
-                avatarAlpha.snapTo(0f); checkAlpha.snapTo(0f); checkDraw.snapTo(0f)
+                avatarAlpha.snapTo(0f)
+                checkAlpha.snapTo(0f)
+                checkDraw.snapTo(0f)
             }
         }
     }
 
-    val avatarR = 56.dp        // 比之前(48dp)更大
+    val avatarR = 56.dp // 比之前(48dp)更大
     val ringGap = 16.dp
 
     // 用整個可用空間置中（不再用固定 240dp，避免畫面較矮時上/下緣被裁切）
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-
             // ── 環/波紋層 ──
             Canvas(modifier = Modifier.matchParentSize()) {
                 val c = Offset(size.width / 2f, size.height / 2f)
@@ -200,20 +226,20 @@ private fun BeamStage(
                 for (i in 0..2) {
                     val t = (ripple + i / 3f) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
-                    val fadeIn  = (t / 0.15f).coerceIn(0f, 1f)
+                    val fadeIn = (t / 0.15f).coerceIn(0f, 1f)
                     val fadeOut = (1f - t).coerceIn(0f, 1f)
                     val a = fadeIn * fadeOut * 0.35f
                     if (a > 0f) {
                         drawCircle(
                             color = ACCENT.copy(alpha = a),
                             radius = r,
-                            center = c
+                            center = c,
                         )
                         drawCircle(
                             color = ACCENT.copy(alpha = a * 1.5f),
                             radius = r,
                             center = c,
-                            style = Stroke(width = 1.5.dp.toPx())
+                            style = Stroke(width = 1.5.dp.toPx()),
                         )
                     }
                 }
@@ -221,13 +247,13 @@ private fun BeamStage(
                 // 傳輸/完成：頭像外圈進度環 (現代平滑風格)
                 if (transferring || done) {
                     drawArc(
-                        color = TRACK,
+                        color = track,
                         startAngle = 0f,
                         sweepAngle = 360f,
                         useCenter = false,
                         style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
                         topLeft = Offset(c.x - ringR, c.y - ringR),
-                        size = Size(ringR * 2, ringR * 2)
+                        size = Size(ringR * 2, ringR * 2),
                     )
                     drawArc(
                         color = ACCENT,
@@ -236,7 +262,7 @@ private fun BeamStage(
                         useCenter = false,
                         style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
                         topLeft = Offset(c.x - ringR, c.y - ringR),
-                        size = Size(ringR * 2, ringR * 2)
+                        size = Size(ringR * 2, ringR * 2),
                     )
                 }
             }
@@ -248,21 +274,23 @@ private fun BeamStage(
                     LottieAnimation(
                         composition = composition,
                         iterations = LottieConstants.IterateForever,
-                        modifier = Modifier.matchParentSize()
+                        modifier = Modifier.matchParentSize(),
                     )
                 }
             } else {
                 Box(modifier = Modifier.size(avatarR * 2), contentAlignment = Alignment.Center) {
                     // 頭像（依 avatarAlpha 淡入/縮放）
                     Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .graphicsLayer {
-                                alpha = avatarAlpha.value
-                                val sc = 0.86f + 0.14f * avatarAlpha.value
-                                scaleX = sc; scaleY = sc
-                            },
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .matchParentSize()
+                                .graphicsLayer {
+                                    alpha = avatarAlpha.value
+                                    val sc = 0.86f + 0.14f * avatarAlpha.value
+                                    scaleX = sc
+                                    scaleY = sc
+                                },
+                        contentAlignment = Alignment.Center,
                     ) {
                         val bmp = peerAvatar
                         if (bmp != null) {
@@ -270,27 +298,30 @@ private fun BeamStage(
                                 bitmap = bmp.asImageBitmap(),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(CircleShape)
-                                    .border(1.5.dp, TRACK, CircleShape)
+                                modifier =
+                                    Modifier
+                                        .matchParentSize()
+                                        .clip(CircleShape)
+                                        .border(1.5.dp, track, CircleShape),
                             )
                         } else {
                             // 對方沒有自訂頭像 → 顯示預設頭像圖（不再顯示姓名首字）
                             Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(CircleShape)
-                                    .background(PANEL)
-                                    .border(1.5.dp, TRACK, CircleShape),
-                                contentAlignment = Alignment.Center
+                                modifier =
+                                    Modifier
+                                        .matchParentSize()
+                                        .clip(CircleShape)
+                                        .background(panel)
+                                        .border(1.5.dp, track, CircleShape),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Image(
                                     painter = painterResource(com.kisslink.R.drawable.ic_avatar_default),
                                     contentDescription = null,
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .padding(avatarR * 0.30f)
+                                    modifier =
+                                        Modifier
+                                            .matchParentSize()
+                                            .padding(avatarR * 0.30f),
                                 )
                             }
                         }
@@ -320,17 +351,18 @@ private fun BeamStage(
                 key(celebrateKey) {
                     KonfettiView(
                         modifier = Modifier.fillMaxSize(),
-                        parties = listOf(
-                            Party(
-                                speed = 0f,
-                                maxSpeed = 30f,
-                                damping = 0.9f,
-                                spread = 360,
-                                colors = listOf(0xFFFCE18A.toInt(), 0xFFFF726D.toInt(), 0xFFF4306D.toInt(), 0xFFB48DEF.toInt()),
-                                emitter = Emitter(duration = 100, TimeUnit.MILLISECONDS).max(100),
-                                position = Position.Relative(0.5, 0.5)
-                            )
-                        )
+                        parties =
+                            listOf(
+                                Party(
+                                    speed = 0f,
+                                    maxSpeed = 30f,
+                                    damping = 0.9f,
+                                    spread = 360,
+                                    colors = listOf(0xFFFCE18A.toInt(), 0xFFFF726D.toInt(), 0xFFF4306D.toInt(), 0xFFB48DEF.toInt()),
+                                    emitter = Emitter(duration = 100, TimeUnit.MILLISECONDS).max(100),
+                                    position = Position.Relative(0.5, 0.5),
+                                ),
+                            ),
                     )
                 }
             }
@@ -342,33 +374,40 @@ private fun BeamStage(
  * 現代平滑打勾線條：依 fraction f（0..1）繪出長度
  */
 private fun DrawScope.drawModernCheckMark(
-    c: Offset, s: Float, f: Float, color: Color, w: Float, alpha: Float
+    c: Offset,
+    s: Float,
+    f: Float,
+    color: Color,
+    w: Float,
+    alpha: Float,
 ) {
     if (f <= 0f) return
     val p1 = Offset(c.x - s * 0.4f, c.y)
     val p2 = Offset(c.x - s * 0.1f, c.y + s * 0.3f)
     val p3 = Offset(c.x + s * 0.5f, c.y - s * 0.4f)
-    
+
     val l1 = hypot(p2.x - p1.x, p2.y - p1.y)
     val l2 = hypot(p3.x - p2.x, p3.y - p2.y)
     val totalL = l1 + l2
-    
+
     val drawL = totalL * f
     val col = color.copy(alpha = alpha)
-    
+
     if (drawL <= l1) {
-        val curP = Offset(
-            p1.x + (p2.x - p1.x) * (drawL / l1),
-            p1.y + (p2.y - p1.y) * (drawL / l1)
-        )
+        val curP =
+            Offset(
+                p1.x + (p2.x - p1.x) * (drawL / l1),
+                p1.y + (p2.y - p1.y) * (drawL / l1),
+            )
         drawLine(col, p1, curP, strokeWidth = w, cap = StrokeCap.Round)
     } else {
         drawLine(col, p1, p2, strokeWidth = w, cap = StrokeCap.Round)
         val rem = drawL - l1
-        val curP = Offset(
-            p2.x + (p3.x - p2.x) * (rem / l2),
-            p2.y + (p3.y - p2.y) * (rem / l2)
-        )
+        val curP =
+            Offset(
+                p2.x + (p3.x - p2.x) * (rem / l2),
+                p2.y + (p3.y - p2.y) * (rem / l2),
+            )
         drawLine(col, p2, curP, strokeWidth = w, cap = StrokeCap.Round)
     }
 }
