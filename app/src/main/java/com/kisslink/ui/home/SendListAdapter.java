@@ -3,6 +3,7 @@ package com.kisslink.ui.home;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.transfer.TransferProtocol;
+import com.kisslink.utils.FileUtils;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -31,13 +33,16 @@ import java.util.concurrent.Executors;
 public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
     public interface OnRemove { void onRemove(int position); }
+    public interface OnItemClickListener { void onItemClick(SendRow row); }
 
     private final List<SendRow> rows = new ArrayList<>();
     private final ExecutorService thumbPool = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
     @androidx.annotation.Nullable private OnRemove onRemove;
+    @androidx.annotation.Nullable private OnItemClickListener onItemClickListener;
 
     public void setOnRemove(@androidx.annotation.Nullable OnRemove l) { this.onRemove = l; }
+    public void setOnItemClickListener(@androidx.annotation.Nullable OnItemClickListener l) { this.onItemClickListener = l; }
 
     @SuppressWarnings("NotifyDataSetChanged")
     public void submit(@NonNull List<SendRow> next) {
@@ -88,14 +93,21 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
         });
 
+        // 項目點擊（開啟檔案）
+        h.itemView.setOnClickListener(v -> {
+            if (onItemClickListener != null && r.fileUri != null) {
+                onItemClickListener.onItemClick(r);
+            }
+        });
+
         // 縮圖
-        h.thumb.setImageResource(iconFor(r.itemType));
-        h.thumb.setPadding(dp(ctx, 9), dp(ctx, 9), dp(ctx, 9), dp(ctx, 9));
+        h.thumb.setImageResource(iconFor(r));
+        h.thumb.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16));
         h.thumbTag = r.thumbUri;
         if (r.isVisualMedia() && r.thumbUri != null) {
             final Uri want = r.thumbUri;
             thumbPool.execute(() -> {
-                Bitmap bm = decodeThumb(ctx, want, dp(ctx, 38));
+                Bitmap bm = decodeThumb(ctx, want, dp(ctx, 64));
                 if (bm == null) return;
                 main.post(() -> {
                     if (want.equals(h.thumbTag)) {
@@ -117,12 +129,11 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         }
     }
 
-    private static int iconFor(byte t) {
-        switch (t) {
-            case TransferProtocol.ITEM_PHOTO: return R.drawable.ic_image;
-            case TransferProtocol.ITEM_VCARD: return R.drawable.ic_person;
-            default: return R.drawable.ic_file;
-        }
+    private static int iconFor(SendRow r) {
+        if (r.itemType == TransferProtocol.ITEM_VCARD) return R.drawable.ic_person;
+        if (r.itemType == TransferProtocol.ITEM_PHOTO) return R.drawable.ic_image;
+        if (r.mime != null) return FileUtils.guessIconFromMime(r.mime);
+        return FileUtils.guessIcon(r.name);
     }
 
     private static int dp(Context c, int v) {
@@ -130,6 +141,35 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     }
 
     private static Bitmap decodeThumb(Context ctx, Uri uri, int targetPx) {
+        String mime = ctx.getContentResolver().getType(uri);
+        if (mime != null && mime.startsWith("video/")) {
+            return decodeVideoThumb(ctx, uri, targetPx);
+        }
+        return decodeImageThumb(ctx, uri, targetPx);
+    }
+
+    private static Bitmap decodeVideoThumb(Context ctx, Uri uri, int targetPx) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(ctx, uri);
+            Bitmap bm = retriever.getFrameAtTime(0);
+            if (bm == null) return null;
+            int w = bm.getWidth();
+            int h = bm.getHeight();
+            float scale = Math.max((float) targetPx / w, (float) targetPx / h);
+            int nw = Math.round(w * scale);
+            int nh = Math.round(h * scale);
+            Bitmap scaled = Bitmap.createScaledBitmap(bm, nw, nh, true);
+            if (scaled != bm) bm.recycle();
+            return scaled;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            try { retriever.release(); } catch (Exception ignored) {}
+        }
+    }
+
+    private static Bitmap decodeImageThumb(Context ctx, Uri uri, int targetPx) {
         try {
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;

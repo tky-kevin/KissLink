@@ -8,15 +8,32 @@
     android:paddingTop="20dp"
     android:paddingBottom="8dp">
 
-    <TextView
-        android:id="@+id/tvSheetTitle"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="10dp"
-        android:textColor="@color/beam_ink"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:text="@string/history_title" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:id="@+id/tvSheetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/beam_ink"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:text="@string/history_title" />
+
+        <ImageButton
+            android:id="@+id/btnClearAll"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_delete"
+            android:scaleType="centerInside"
+            android:padding="6dp" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvEmpty"

@@ -186,6 +186,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         itemsAdapter = new SendListAdapter();
         itemsAdapter.setOnRemove(this::removeSelection);
+        itemsAdapter.setOnItemClickListener(this::openFile);
         sendStackRow.setOnClickListener(v -> showSendSheet());
 
         // #9：點「已連線至 xxx」可手動斷線
@@ -674,7 +675,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         List<SendRow> rows = new ArrayList<>();
         for (SendItem it : selection) {
             SendRow r = new SendRow(it.name, sizeLabel(it.size), it.itemType,
-                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null);
+                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
+                    it.uri, it.mime);
             r.removable = true;
             rows.add(r);
         }
@@ -711,7 +713,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             iv.setLayoutParams(lp);
             iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
             iv.setPadding(pad, pad, pad, pad);
-            iv.setImageResource(iconFor(it.itemType));
+            iv.setImageResource(iconForItem(it));
             stackThumbs.addView(iv);
         }
     }
@@ -728,12 +730,37 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         int pad = Math.round(20 * d);
         content.setPadding(pad, pad, pad, Math.round(8 * d));
 
+        // 標題列（含垃圾桶）
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
         TextView title = new TextView(this);
         title.setText(R.string.send_sheet_title);
         title.setTextColor(getColor(R.color.beam_ink));
         title.setTextSize(18);
         title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        content.addView(title);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        title.setLayoutParams(titleLp);
+        titleRow.addView(title);
+
+        android.widget.ImageButton btnClear = new android.widget.ImageButton(this);
+        int btnSize = Math.round(36 * d);
+        btnClear.setLayoutParams(new LinearLayout.LayoutParams(btnSize, btnSize));
+        btnClear.setBackground(null);
+        btnClear.setImageResource(R.drawable.ic_delete);
+        btnClear.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        int btnPad = Math.round(6 * d);
+        btnClear.setPadding(btnPad, btnPad, btnPad, btnPad);
+        btnClear.setOnClickListener(v -> {
+            selection.clear();
+            rebuildSendStack();
+            if (sendSheet != null && sendSheet.isShowing()) sendSheet.dismiss();
+        });
+        titleRow.addView(btnClear);
+
+        content.addView(titleRow);
 
         RecyclerView rv = new RecyclerView(this);
         rv.setLayoutManager(new LinearLayoutManager(this));
@@ -848,12 +875,20 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         }
     }
 
+    private static int iconForItem(SendItem it) {
+        if (it.itemType == TransferProtocol.ITEM_VCARD) return R.drawable.ic_person;
+        if (it.itemType == TransferProtocol.ITEM_PHOTO) return R.drawable.ic_image;
+        if (it.mime != null) return com.kisslink.utils.FileUtils.guessIconFromMime(it.mime);
+        return com.kisslink.utils.FileUtils.guessIcon(it.name);
+    }
+
     /** 傳送中：以待傳清單為基底，更新對應列的進度/完成（接收端改用收到橫幅，不進清單）。 */
     private void updateOutgoingRows(@NonNull TransferProgress tp, boolean done) {
         List<SendRow> rows = new ArrayList<>();
         for (SendItem it : selection) {
             SendRow r = new SendRow(it.name, sizeLabel(it.size), it.itemType,
-                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null);
+                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
+                    it.uri, it.mime);
             if (it.name.equals(tp.fileName)) {
                 r.percent = done ? 100 : tp.percentInt();
                 r.done = done;
@@ -861,6 +896,18 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             rows.add(r);
         }
         itemsAdapter.submit(rows);
+    }
+
+    private void openFile(@androidx.annotation.NonNull SendRow row) {
+        if (row.fileUri == null) return;
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(row.fileUri, row.mime != null ? row.mime : "*/*");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "沒有可開啟此檔案的應用程式", android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     // ── headline / percent ──

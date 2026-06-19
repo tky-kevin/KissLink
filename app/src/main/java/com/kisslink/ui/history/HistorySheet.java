@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -26,6 +27,7 @@ import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
 import com.kisslink.data.repository.TransferRepository;
+import com.kisslink.utils.FileUtils;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -72,6 +74,13 @@ public class HistorySheet extends BottomSheetDialogFragment {
         long batchId = getArguments() != null ? getArguments().getLong(ARG_BATCH, 0) : 0;
         TextView title = v.findViewById(R.id.tvSheetTitle);
         if (batchId != 0 && title != null) title.setText(R.string.batch_title);
+
+        android.widget.ImageButton btnClearAll = v.findViewById(R.id.btnClearAll);
+        btnClearAll.setOnClickListener(x -> {
+            TransferRepository repo = TransferRepository.getInstance(requireContext());
+            repo.clearAll();
+            dismiss();
+        });
 
         TransferRepository repo = TransferRepository.getInstance(requireContext());
         (batchId != 0 ? repo.getByBatch(batchId) : repo.getAllRecords())
@@ -167,8 +176,10 @@ public class HistorySheet extends BottomSheetDialogFragment {
                 FileVH vh = (FileVH) h;
                 vh.name.setText(r.fileName);
                 vh.meta.setText(sizeLabel(r.fileSizeBytes) + (r.success ? "" : " · 未完成"));
-                vh.thumb.setImageResource(R.drawable.ic_file);
-                vh.thumb.setPadding(dp(ctx, 10), dp(ctx, 10), dp(ctx, 10), dp(ctx, 10));
+                int icon = r.mimeType != null ? FileUtils.guessIconFromMime(r.mimeType)
+                                             : FileUtils.guessIcon(r.fileName);
+                vh.thumb.setImageResource(icon);
+                vh.thumb.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16));
                 vh.thumbTag = r.filePath;
                 loadThumbIfImage(ctx, r, vh);
                 vh.itemView.setOnClickListener(x -> openFile(ctx, r));
@@ -182,11 +193,14 @@ public class HistorySheet extends BottomSheetDialogFragment {
         private void loadThumbIfImage(Context ctx, TransferRecordEntity r, FileVH vh) {
             if (r.filePath == null || !r.filePath.startsWith("content:")) return;
             String mime = r.mimeType != null ? r.mimeType : guessMime(r.fileName);
-            if (mime == null || !mime.startsWith("image")) return;
+            boolean isImage = mime != null && mime.startsWith("image");
+            boolean isVideo = mime != null && mime.startsWith("video");
+            if (!isImage && !isVideo) return;
             final String want = r.filePath;
             final Uri uri = Uri.parse(r.filePath);
             thumbPool.execute(() -> {
-                Bitmap bm = decodeThumb(ctx, uri, dp(ctx, 40));
+                Bitmap bm = isVideo ? decodeVideoThumb(ctx, uri, dp(ctx, 64))
+                                    : decodeThumb(ctx, uri, dp(ctx, 64));
                 if (bm == null) return;
                 main.post(() -> {
                     if (want.equals(vh.thumbTag)) {
@@ -283,6 +297,28 @@ public class HistorySheet extends BottomSheetDialogFragment {
             }
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    @Nullable
+    private static Bitmap decodeVideoThumb(Context ctx, Uri uri, int targetPx) {
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(ctx, uri);
+            Bitmap bm = retriever.getFrameAtTime(0);
+            if (bm == null) return null;
+            int w = bm.getWidth();
+            int h = bm.getHeight();
+            float scale = Math.max((float) targetPx / w, (float) targetPx / h);
+            int nw = Math.round(w * scale);
+            int nh = Math.round(h * scale);
+            Bitmap scaled = Bitmap.createScaledBitmap(bm, nw, nh, true);
+            if (scaled != bm) bm.recycle();
+            return scaled;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            try { retriever.release(); } catch (Exception ignored) {}
         }
     }
 }

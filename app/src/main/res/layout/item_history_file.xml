@@ -12,12 +12,12 @@
 
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/ivThumb"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:scaleType="centerCrop"
         android:background="@drawable/bg_thumb"
         android:src="@drawable/ic_file"
-        android:padding="10dp"
+        android:padding="16dp"
         app:shapeAppearanceOverlay="@style/Beam.Thumb.Rounded" />
 
     <LinearLayout

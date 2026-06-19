@@ -14,6 +14,8 @@ public final class SendRow {
     public final String sizeLabel;     // 例如 "4.2 MB"，未知為 ""
     public final byte   itemType;      // TransferProtocol.ITEM_*
     @Nullable public final Uri thumbUri;  // 相片/影片縮圖來源（檔案為 null）
+    @Nullable public final Uri fileUri;   // 檔案 Uri（用於點擊開啟）
+    @Nullable public final String mime;   // MIME 類型
 
     public boolean done = false;
     public int     percent = -1;       // 傳輸中 0..100；-1 表示尚未/不適用
@@ -21,10 +23,21 @@ public final class SendRow {
     public boolean removable = false;  // true=待傳清單，顯示移除鈕
 
     public SendRow(String name, String sizeLabel, byte itemType, @Nullable Uri thumbUri) {
+        this(name, sizeLabel, itemType, thumbUri, null, null);
+    }
+
+    public SendRow(String name, String sizeLabel, byte itemType, @Nullable Uri thumbUri, @Nullable String mime) {
+        this(name, sizeLabel, itemType, thumbUri, null, mime);
+    }
+
+    public SendRow(String name, String sizeLabel, byte itemType, @Nullable Uri thumbUri,
+                   @Nullable Uri fileUri, @Nullable String mime) {
         this.name = name;
         this.sizeLabel = sizeLabel == null ? "" : sizeLabel;
         this.itemType = itemType;
         this.thumbUri = thumbUri;
+        this.fileUri = fileUri;
+        this.mime = mime;
     }
 
     public boolean isVisualMedia() {

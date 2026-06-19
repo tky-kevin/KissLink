@@ -6,6 +6,8 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 
+import com.kisslink.R;
+
 /**
  * 檔案相關工具函式（SAF / ContentResolver 適配）。
  */
@@ -52,21 +54,57 @@ public final class FileUtils {
         return String.format("%.2f GB", bytes / (1024.0*1024*1024));
     }
 
-    /** 依副檔名推測圖示資源 ID（可擴充）。 */
+    /** 依 MIME 類型推測圖示資源 ID。 */
+    public static int guessIconFromMime(String mime) {
+        if (mime == null) return R.drawable.ic_file;
+        if (mime.startsWith("image/")) return R.drawable.ic_image;
+        if (mime.startsWith("video/")) return R.drawable.ic_file_video;
+        if (mime.startsWith("audio/")) return R.drawable.ic_file_audio;
+        if (mime.equals("application/pdf")) return R.drawable.ic_file_pdf;
+        if (mime.contains("word") || mime.equals("application/msword")
+                || mime.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            return R.drawable.ic_file_word;
+        if (mime.contains("excel") || mime.equals("application/vnd.ms-excel")
+                || mime.equals("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            return R.drawable.ic_file_excel;
+        if (mime.contains("powerpoint") || mime.equals("application/vnd.ms-powerpoint")
+                || mime.equals("application/vnd.openxmlformats-officedocument.presentationml.presentation"))
+            return R.drawable.ic_file_ppt;
+        if (mime.equals("application/zip") || mime.equals("application/x-rar-compressed")
+                || mime.equals("application/x-7z-compressed") || mime.equals("application/x-tar")
+                || mime.equals("application/gzip"))
+            return R.drawable.ic_file_zip;
+        if (mime.equals("application/vnd.android.package-archive")) return R.drawable.ic_file_apk;
+        return R.drawable.ic_file;
+    }
+
+    /** 依副檔名推測圖示資源 ID。 */
     public static int guessIcon(String fileName) {
-        if (fileName == null) return android.R.drawable.ic_menu_save;
+        if (fileName == null) return R.drawable.ic_file;
         String lower = fileName.toLowerCase();
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
-                || lower.endsWith(".gif") || lower.endsWith(".webp"))
-            return android.R.drawable.ic_menu_gallery;
-        if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi"))
-            return android.R.drawable.ic_media_play;
-        if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".aac"))
-            return android.R.drawable.ic_media_play;
+                || lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".heic")
+                || lower.endsWith(".heif") || lower.endsWith(".bmp"))
+            return R.drawable.ic_image;
+        if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".avi")
+                || lower.endsWith(".mov") || lower.endsWith(".webm") || lower.endsWith(".3gp"))
+            return R.drawable.ic_file_video;
+        if (lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".aac")
+                || lower.endsWith(".wav") || lower.endsWith(".ogg") || lower.endsWith(".m4a"))
+            return R.drawable.ic_file_audio;
         if (lower.endsWith(".pdf"))
-            return android.R.drawable.ic_menu_agenda;
-        if (lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z"))
-            return android.R.drawable.ic_menu_save;
-        return android.R.drawable.ic_menu_save;
+            return R.drawable.ic_file_pdf;
+        if (lower.endsWith(".doc") || lower.endsWith(".docx"))
+            return R.drawable.ic_file_word;
+        if (lower.endsWith(".xls") || lower.endsWith(".xlsx"))
+            return R.drawable.ic_file_excel;
+        if (lower.endsWith(".ppt") || lower.endsWith(".pptx"))
+            return R.drawable.ic_file_ppt;
+        if (lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z")
+                || lower.endsWith(".tar") || lower.endsWith(".gz"))
+            return R.drawable.ic_file_zip;
+        if (lower.endsWith(".apk"))
+            return R.drawable.ic_file_apk;
+        return R.drawable.ic_file;
     }
 }

@@ -10,11 +10,11 @@
         <item name="android:fontFamily">@font/zpix</item>
     </style>
 
-    <!-- 大標：極細字重 -->
+    <!-- 大標：中等字重 -->
     <style name="Beam.Headline" parent="">
         <item name="android:textColor">@color/beam_ink</item>
         <item name="android:textSize">34sp</item>
-        <item name="android:textFontWeight">250</item>
+        <item name="android:textFontWeight">750</item>
         <item name="android:letterSpacing">-0.02</item>
         <item name="android:fontFamily">@font/zpix</item>
     </style>
@@ -30,8 +30,8 @@
     <!-- App wordmark（左上） -->
     <style name="Beam.Wordmark" parent="">
         <item name="android:textColor">@color/beam_ink</item>
-        <item name="android:textSize">19sp</item>
-        <item name="android:textFontWeight">700</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">-0.01</item>
         <item name="android:fontFamily">@font/zpix</item>
     </style>
