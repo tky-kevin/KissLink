@@ -11,7 +11,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,6 +28,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -51,15 +51,16 @@ import com.kisslink.ui.profile.ReceivedCardSheet;
 import com.kisslink.util.PermissionHelper;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 單頁主畫面（C 方案 Beam）——配對、連線、傳輸全在這一頁，靠 {@link SessionState} 切換內容。
  *
  * <p>NFC 配對沿用 {@link NfcPairingController}（reader/HCE，與舊 PairingActivity 同機制），
  * latch 後經 binder 餵入 Service 的 PairingCoordinator；連線/傳輸狀態由單一 SessionState 驅動 UI。
+ *
+ * <p>MVVM：選取／傳輸／接收等狀態與其衍生判斷集中在 {@link HomeViewModel}；本 Activity 是薄殼，
+ * 只負責生命週期、權限、view binding、觀察 ViewModel 與轉發使用者意圖。
  */
 @RequiresApi(api = Build.VERSION_CODES.Q)
 public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.Host {
@@ -80,10 +81,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private SendListAdapter itemsAdapter;
     @Nullable private com.google.android.material.bottomsheet.BottomSheetDialog sendSheet;
 
-    // #1：未連線時按傳送名片 → 排隊，連上後自動送出
-    private boolean pendingCardSend = false;
-    // 本端是否正在送出待傳清單（送出鈕只在此期間隱藏；接收對方檔案時不影響送出鈕）
-    private boolean sending = false;
+    // 選取／傳輸／接收等狀態與其衍生判斷集中於此（MVVM）；本 Activity 僅渲染與轉發意圖。
+    private HomeViewModel viewModel;
 
     // ── Service ──
     @Nullable private FileTransferService.TransferBinder binder;
@@ -100,13 +99,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     @Nullable private NfcPairingController nfc;
     private boolean resumed = false;
 
-    // ── 選取 / 傳輸狀態 ──
-    private final List<SendItem> selection = new ArrayList<>();
-    private final Set<String> outgoingNames = new HashSet<>();
-    private int outgoingRemaining = 0;          // 本批還沒傳完的件數，歸零即清空待傳清單
-    private long recvBatchId = 0;               // 目前接收批次
-    private int  recvCount = 0;                 // 目前接收批次已完成件數
-    private SessionState.Phase lastPhase = SessionState.Phase.IDLE;
+    // ── 主執行緒 Handler（連線階段序列器 / 延遲回復用）──
     private final Handler main = new Handler(Looper.getMainLooper());
 
     // 連線階段序列器（NFC→BLE→Wi-Fi，每格最短停留）
@@ -117,27 +110,29 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private final ActivityResultLauncher<String[]> filePicker =
             registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
                 if (uris == null || uris.isEmpty()) return;
+                List<SendItem> picked = new ArrayList<>();
                 for (Uri uri : uris) {
                     try {
                         getContentResolver().takePersistableUriPermission(
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     } catch (SecurityException ignored) {}
-                    selection.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_FILE));
+                    picked.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_FILE));
                 }
-                onSelectionChanged();
+                viewModel.addAllToSelection(picked);
             });
 
     private final ActivityResultLauncher<PickVisualMediaRequest> mediaPicker =
             registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(30), uris -> {
                 if (uris == null || uris.isEmpty()) return;
+                List<SendItem> picked = new ArrayList<>();
                 for (Uri uri : uris) {
                     try {
                         getContentResolver().takePersistableUriPermission(
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     } catch (SecurityException ignored) {}
-                    selection.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_PHOTO));
+                    picked.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_PHOTO));
                 }
-                onSelectionChanged();
+                viewModel.addAllToSelection(picked);
             });
 
     // ══════════════════════════════════════════════════════════
@@ -148,8 +143,10 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
+        viewModel = new ViewModelProvider(this).get(HomeViewModel.class);
         bindViews();
         applyInsets();
+        observeViewModel();
 
         // 名片姓名 → 對外配對顯示名稱
         LocalPairing.setDisplayName(ProfileStore.get(this).name());
@@ -185,7 +182,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         btnViewReceived= findViewById(R.id.btnViewReceived);
 
         itemsAdapter = new SendListAdapter();
-        itemsAdapter.setOnRemove(this::removeSelection);
+        itemsAdapter.setOnRemove(viewModel::removeSelection);
         itemsAdapter.setOnItemClickListener(this::openFile);
         sendStackRow.setOnClickListener(v -> showSendSheet());
 
@@ -193,8 +190,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         tvHeadline.setOnClickListener(v -> onHeadlineTapped());
 
         btnViewReceived.setOnClickListener(v -> {
-            if (recvBatchId != 0)
-                HistorySheet.forBatch(recvBatchId).show(getSupportFragmentManager(), "batch");
+            long batchId = viewModel.receivedBatchId();
+            if (batchId != 0)
+                HistorySheet.forBatch(batchId).show(getSupportFragmentManager(), "batch");
         });
 
         btnPickFiles.setOnClickListener(v -> {
@@ -223,6 +221,18 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(0, bars.top, 0, bars.bottom);
             return insets;
+        });
+    }
+
+    /** 把 ViewModel 的狀態接到 UI 渲染：待傳清單 → 疊圖/送出鈕；接收件數 → 橫幅。 */
+    private void observeViewModel() {
+        viewModel.getSelection().observe(this, items -> {
+            rebuildSendStack();
+            updateSendButton();
+        });
+        viewModel.getReceivedCount().observe(this, count -> {
+            if (count != null && count > 0) showReceivedBanner(count);
+            else hideReceivedBanner();
         });
     }
 
@@ -292,14 +302,15 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         }
         if (uris.isEmpty()) { toast(getString(R.string.share_unsupported)); clearShareIntent(); return; }
 
+        List<SendItem> picked = new ArrayList<>();
         for (Uri uri : uris) {
             byte type = TransferProtocol.ITEM_FILE;
             String mt = getContentResolver().getType(uri);
             if (mt == null) mt = intent.getType();
             if (mt != null && mt.startsWith("image/")) type = TransferProtocol.ITEM_PHOTO;
-            selection.add(SendItem.fromUri(getContentResolver(), uri, type));
+            picked.add(SendItem.fromUri(getContentResolver(), uri, type));
         }
-        onSelectionChanged();
+        viewModel.addAllToSelection(picked);
         toast(getString(R.string.share_added, uris.size()));
         clearShareIntent(); // 避免旋轉/重綁時重複加入
     }
@@ -386,7 +397,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case CANCELLED:
                 stopStageTicker();
                 renderReady();
-                if (nfc != null && lastPhase != SessionState.Phase.IDLE) nfc.resetLatched();
+                if (nfc != null && viewModel.lastPhase() != SessionState.Phase.IDLE) nfc.resetLatched();
                 break;
 
             case RESETTING:
@@ -411,10 +422,13 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 showPeerIdentity();
                 showHeadlineText(connectedHeadline(), "");   // #8：已連線至 xxx
                 if (nfc != null) nfc.resetLatched(); // 連上後仍可再碰（同對象 resume / 新對象切換）
-                sending = false;
+                viewModel.setSending(false);
                 updateSendButton();
                 rebuildSendStack();
-                if (pendingCardSend) { pendingCardSend = false; main.post(this::sendMyProfileCard); } // #1
+                if (viewModel.isPendingCardSend()) { // #1
+                    viewModel.setPendingCardSend(false);
+                    main.post(this::sendMyProfileCard);
+                }
                 break;
 
             case TRANSFERRING:
@@ -436,7 +450,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
             default: break;
         }
-        lastPhase = p;
+        viewModel.onSession(st);
     }
 
     // ── READY ──
@@ -448,8 +462,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         beam.setPeerAvatar(null);
         showHeadlineText(getString(R.string.home_ready_title), "");   // #8：去掉小字
         hideReceivedBanner();
-        recvBatchId = 0; recvCount = 0;
-        sending = false;
+        viewModel.resetReceived();
+        viewModel.setSending(false);
         updateSendButton();
         rebuildSendStack();
     }
@@ -525,7 +539,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         boolean outgoing = tp.outgoing;
         beam.setDirection(outgoing ? BeamStageView.SEND : BeamStageView.RECEIVE);
         beam.setPhase(BeamStageView.TRANSFERRING);
-        beam.setProgress(batchProgress(tp));   // #3：整包進度
+        beam.setProgress(viewModel.batchProgress(tp));   // #3：整包進度
         // 傳輸速度顯示在 headline（取代「已連線」字樣），頭像上不放數字
         showTransferHeadline(speedLabelInt(tp.speedBps),
                 (outgoing ? getString(R.string.sending) : getString(R.string.receiving))
@@ -534,7 +548,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             if (tp.itemType != TransferProtocol.ITEM_VCARD) updateOutgoingRows(tp, false);
         } else {
             // 接收新批次 → 重置橫幅計數
-            if (tp.batchId != recvBatchId) { recvBatchId = tp.batchId; recvCount = 0; hideReceivedBanner(); }
+            viewModel.onIncomingBatch(tp.batchId);
         }
     }
 
@@ -545,9 +559,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         // #3：多檔的「中間檔」（FILE_DONE，尚未到最後一筆）→ 維持傳輸視覺，只推進整包進度（雙向皆同）
         if (!isVcard && !all && tp != null && tp.fileCount > 1) {
             beam.setPhase(BeamStageView.TRANSFERRING);
-            beam.setProgress(batchProgress(tp));
+            beam.setProgress(viewModel.batchProgress(tp));
             if (outgoing) updateOutgoingRows(tp, true);
-            else countReceived(tp);
+            else viewModel.countReceived(tp);
             return;
         }
 
@@ -564,56 +578,23 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             // 名片獨立傳送，不影響待傳清單
         } else if (outgoing) {
             updateOutgoingRows(tp, true);
-            // 整批傳完 → 清空待傳清單
-            selection.clear();
-            outgoingNames.clear();
-            outgoingRemaining = 0;
-            sending = false;
+            // 整批傳完 → 清空待傳清單與送出狀態（會透過 selection LiveData 重建 UI）
+            viewModel.onBatchSent();
             rebuildSendStack();
             if (sendSheet != null && sendSheet.isShowing()) sendSheet.dismiss();
         } else if (tp != null) {
-            countReceived(tp);
+            viewModel.countReceived(tp);
         }
 
         // 短暫顯示完成後回到「已連線」可再選
         main.postDelayed(() -> {
-            if ((lastPhase == SessionState.Phase.ALL_DONE || lastPhase == SessionState.Phase.FILE_DONE)
-                    && isConnected()) {
+            SessionState.Phase last = viewModel.lastPhase();
+            if ((last == SessionState.Phase.ALL_DONE || last == SessionState.Phase.FILE_DONE)
+                    && viewModel.isConnected()) {
                 beam.setPhase(BeamStageView.CONNECTED);
             }
         }, 1400);
         updateSendButton();
-    }
-
-    // 進度單調化（杜絕回退）：傳送多檔 → 整包單調；接收/單檔 → 每檔單調
-    private long   progBatchId = Long.MIN_VALUE;
-    private String progFile    = "";
-    private float  progShown   = 0f;
-
-    /**
-     * 進度 0..1，同段內單調不回退。
-     * 傳送多檔（fileCount>1）→ (已完成檔數 + 當前檔比例)/總檔數，整包進度；
-     * 接收或單檔（fileCount≤1）→ 當前檔比例（換檔時重置）。
-     */
-    private float batchProgress(@NonNull TransferProgress tp) {
-        boolean wholeBatch = tp.fileCount > 1;
-        boolean newBatch = tp.batchId != progBatchId;
-        boolean newFile = !tp.fileName.equals(progFile);
-        if (newBatch || (!wholeBatch && newFile)) { progBatchId = tp.batchId; progShown = 0f; }
-        progFile = tp.fileName;
-        int pct = tp.percentInt();
-        float frac = pct >= 0 ? pct / 100f : 0f;
-        int count = Math.max(1, tp.fileCount);
-        float raw = Math.min(1f, (tp.fileIndex + frac) / count);
-        if (raw > progShown) progShown = raw;
-        return progShown;
-    }
-
-    /** 接收方：累計本批收到的項目數並更新橫幅。 */
-    private void countReceived(@NonNull TransferProgress tp) {
-        if (tp.batchId != recvBatchId) { recvBatchId = tp.batchId; recvCount = 0; }
-        recvCount++;
-        showReceivedBanner(recvCount);
     }
 
     private void showReceivedBanner(int count) {
@@ -626,54 +607,32 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     // ── 內容選擇 / 傳送 ──
-    private void onSelectionChanged() {
-        rebuildSendStack();
-        updateSendButton();
-    }
-
-    private void removeSelection(int position) {
-        if (position < 0 || position >= selection.size()) return;
-        selection.remove(position);
-        onSelectionChanged();
-    }
-
     private void doSend() {
-        if (binder == null || !isConnected() || selection.isEmpty()) return;
-        outgoingNames.clear();
-        for (SendItem it : selection) outgoingNames.add(it.name);
-        outgoingRemaining = selection.size();
-        sending = true;                 // 本端正在送出 → 送出鈕暫時隱藏
-        binder.sendItems(new ArrayList<>(selection));
+        if (binder == null || !viewModel.isConnected() || viewModel.isSelectionEmpty()) return;
+        viewModel.markSendingStarted();   // 記錄本批 + 標記送出中（送出鈕暫時隱藏）
+        binder.sendItems(new ArrayList<>(viewModel.currentSelection()));
         updateSendButton();
         haptic();
     }
 
     /**
-     * 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出（{@link #sending}）時隱藏。
+     * 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。
      * 不再用 lastPhase 判斷——否則「接收對方一包檔」期間/結束時會誤把送出鈕藏掉。
      */
     private void updateSendButton() {
-        boolean show = isConnected() && !selection.isEmpty() && !sending;
-        if (show) {
-            btnSend.setText(getString(R.string.btn_send_n, selection.size()));
+        if (viewModel.shouldShowSendButton()) {
+            btnSend.setText(getString(R.string.btn_send_n, viewModel.selectionCount()));
             Anim.revealFadeUp(btnSend);
         } else {
             btnSend.setVisibility(View.GONE);
         }
     }
 
-    private boolean isConnected() {
-        return lastPhase == SessionState.Phase.CONNECTED
-                || lastPhase == SessionState.Phase.TRANSFERRING
-                || lastPhase == SessionState.Phase.FILE_DONE
-                || lastPhase == SessionState.Phase.ALL_DONE;
-    }
-
     // ── 待傳清單（疊起來 + 彈出）#2 ──
     private void rebuildSendStack() {
         // adapter 內容（供彈出清單）
         List<SendRow> rows = new ArrayList<>();
-        for (SendItem it : selection) {
+        for (SendItem it : viewModel.currentSelection()) {
             SendRow r = new SendRow(it.name, sizeLabel(it.size), it.itemType,
                     it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
                     it.uri, it.mime);
@@ -683,12 +642,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         itemsAdapter.submit(rows);
 
         // 底部疊起來的摘要
-        if (selection.isEmpty()) {
+        if (viewModel.isSelectionEmpty()) {
             sendStackRow.setVisibility(View.GONE);
             if (sendSheet != null && sendSheet.isShowing()) sendSheet.dismiss();
             return;
         }
-        tvStackLabel.setText(getString(R.string.send_stack_label, selection.size()));
+        tvStackLabel.setText(getString(R.string.send_stack_label, viewModel.selectionCount()));
         buildStackThumbs();
         if (sendStackRow.getVisibility() != View.VISIBLE) {
             sendStackRow.setVisibility(View.VISIBLE);
@@ -699,6 +658,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 疊起來的縮圖（最多 3 個，往右錯開重疊）。 */
     private void buildStackThumbs() {
         stackThumbs.removeAllViews();
+        List<SendItem> selection = viewModel.currentSelection();
         float d = getResources().getDisplayMetrics().density;
         int sizePx = Math.round(40 * d);
         int stepPx = Math.round(22 * d);
@@ -720,7 +680,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
     /** 點擊摘要 → 彈出完整可移除清單。 */
     private void showSendSheet() {
-        if (selection.isEmpty()) return;
+        if (viewModel.isSelectionEmpty()) return;
         float d = getResources().getDisplayMetrics().density;
         com.google.android.material.bottomsheet.BottomSheetDialog dlg =
                 new com.google.android.material.bottomsheet.BottomSheetDialog(this);
@@ -754,8 +714,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         int btnPad = Math.round(6 * d);
         btnClear.setPadding(btnPad, btnPad, btnPad, btnPad);
         btnClear.setOnClickListener(v -> {
-            selection.clear();
-            rebuildSendStack();
+            viewModel.clearSelection();
             if (sendSheet != null && sendSheet.isShowing()) sendSheet.dismiss();
         });
         titleRow.addView(btnClear);
@@ -786,7 +745,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
      */
     private void onHeadlineTapped() {
         if (binder == null) return;
-        if (isConnected()) {
+        if (viewModel.isConnected()) {
             new androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(R.string.disconnect_title)
                     .setMessage(R.string.disconnect_msg)
@@ -795,7 +754,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                         if (binder != null) binder.disconnect();
                     })
                     .show();
-        } else if (isInterruptiblePairing(lastPhase)) {
+        } else if (isInterruptiblePairing(viewModel.lastPhase())) {
             binder.interruptPairing();
         }
     }
@@ -874,7 +833,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 傳送中：以待傳清單為基底，更新對應列的進度/完成（接收端改用收到橫幅，不進清單）。 */
     private void updateOutgoingRows(@NonNull TransferProgress tp, boolean done) {
         List<SendRow> rows = new ArrayList<>();
-        for (SendItem it : selection) {
+        for (SendItem it : viewModel.currentSelection()) {
             SendRow r = new SendRow(it.name, sizeLabel(it.size), it.itemType,
                     it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
                     it.uri, it.mime);
@@ -992,9 +951,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
     @Override
     public void sendMyProfileCard() {
-        if (binder == null || !isConnected()) {
+        if (binder == null || !viewModel.isConnected()) {
             // #1：尚未連線 → 排隊，連上後自動送出
-            pendingCardSend = true;
+            viewModel.setPendingCardSend(true);
             toast(getString(R.string.card_queued));
             return;
         }
@@ -1006,7 +965,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         SendItem card = SendItem.vcard(fileName, p.toVCard());
         List<SendItem> one = new ArrayList<>();
         one.add(card);
-        // 名片獨立傳送，不動待傳清單（不計入 outgoingRemaining）
+        // 名片獨立傳送，不動待傳清單
         binder.sendItems(one);
         beam.playCardFly();   // #14：名片縮入對方頭像的 genie 動畫
         haptic();
