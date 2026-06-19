@@ -25,7 +25,7 @@
         <!-- Bottom sheet 樣式 -->
         <item name="bottomSheetStyle">@style/Beam.BottomSheet.Modal</item>
 
-        <!-- 全域按鈕樣式（補償 zpix 字體的非對稱 metrics） -->
+        <!-- 全域按鈕樣式 -->
         <item name="materialButtonStyle">@style/Beam.Button.Base</item>
 
         <!-- 全域 TextView 樣式（移除額外字體邊距，確保 zpix 置中） -->
@@ -34,13 +34,11 @@
 
     <!-- 全域按鈕基底樣式 -->
     <style name="Beam.Button.Base" parent="Widget.Material3.Button">
-        <item name="android:insetTop">12dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
     </style>
 
     <style name="Beam.Button.Text.Base" parent="Widget.Material3.Button.TextButton">
-        <item name="android:insetTop">12dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
     </style>
 
     <!-- 全域 TextView 基底樣式 -->

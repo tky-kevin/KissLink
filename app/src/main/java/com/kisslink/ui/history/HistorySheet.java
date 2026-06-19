@@ -188,7 +188,7 @@ public class HistorySheet extends BottomSheetDialogFragment {
                 int icon = r.mimeType != null ? FileUtils.guessIconFromMime(r.mimeType)
                                              : FileUtils.guessIcon(r.fileName);
                 vh.thumb.setImageResource(icon);
-                vh.thumb.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16));
+                vh.thumb.setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 8));
                 vh.thumbTag = r.filePath;
                 loadThumbIfImage(ctx, r, vh);
                 vh.itemView.setOnClickListener(x -> openFile(ctx, r));
@@ -208,8 +208,8 @@ public class HistorySheet extends BottomSheetDialogFragment {
             final String want = r.filePath;
             final Uri uri = Uri.parse(r.filePath);
             thumbPool.execute(() -> {
-                Bitmap bm = isVideo ? ThumbUtils.decodeVideo(ctx, uri, dp(ctx, 64))
-                                    : ThumbUtils.decodeImage(ctx, uri, dp(ctx, 64));
+                Bitmap bm = isVideo ? ThumbUtils.decodeVideo(ctx, uri, dp(ctx, 48))
+                                    : ThumbUtils.decodeImage(ctx, uri, dp(ctx, 48));
                 if (bm == null) return;
                 main.post(() -> {
                     if (want.equals(vh.thumbTag)) {

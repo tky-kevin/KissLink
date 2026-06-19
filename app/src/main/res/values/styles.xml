@@ -4,6 +4,7 @@
     <style name="Beam.Label" parent="">
         <item name="android:textColor">@color/beam_muted</item>
         <item name="android:textSize">12sp</item>
+        <item name="android:lineHeight">16sp</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">0.18</item>
         <item name="android:textAllCaps">true</item>
@@ -14,6 +15,7 @@
     <style name="Beam.Headline" parent="">
         <item name="android:textColor">@color/beam_ink</item>
         <item name="android:textSize">28sp</item>
+        <item name="android:lineHeight">44sp</item>
         <item name="android:textFontWeight">500</item>
         <item name="android:letterSpacing">-0.02</item>
         <item name="android:fontFamily">@font/zpix</item>
@@ -23,6 +25,7 @@
     <style name="Beam.Sub" parent="">
         <item name="android:textColor">@color/beam_muted</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:lineHeight">24sp</item>
         <item name="android:textFontWeight">500</item>
         <item name="android:fontFamily">@font/zpix</item>
     </style>
@@ -30,7 +33,8 @@
     <!-- App wordmark（左上） -->
     <style name="Beam.Wordmark" parent="">
         <item name="android:textColor">@color/beam_ink</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">20dp</item>
+        <item name="android:lineHeight">28dp</item>
         <item name="android:textFontWeight">600</item>
         <item name="android:letterSpacing">-0.01</item>
         <item name="android:fontFamily">@font/zpix</item>
@@ -43,8 +47,7 @@
         <item name="android:textColor">@color/beam_ink</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:fontFamily">@font/zpix</item>
-        <item name="android:insetTop">12dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="backgroundTint">@android:color/transparent</item>
         <item name="strokeColor">@color/beam_track</item>
         <item name="strokeWidth">1.5dp</item>
@@ -73,8 +76,7 @@
         <item name="android:textSize">16sp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:fontFamily">@font/zpix</item>
-        <item name="android:insetTop">14dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="backgroundTint">@color/beam_accent</item>
         <item name="android:textColor">@color/beam_on_accent</item>
         <item name="cornerRadius">28dp</item>
@@ -89,8 +91,7 @@
         <item name="android:textColor">@color/beam_ink</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:fontFamily">@font/zpix</item>
-        <item name="android:insetTop">12dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="backgroundTint">@android:color/transparent</item>
         <item name="strokeColor">@color/beam_track</item>
         <item name="strokeWidth">1.5dp</item>
@@ -107,8 +108,7 @@
         <item name="android:textColor">@color/beam_on_accent</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:fontFamily">@font/zpix</item>
-        <item name="android:insetTop">12dp</item>
-        <item name="android:insetBottom">4dp</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="backgroundTint">@color/beam_accent</item>
         <item name="cornerRadius">26dp</item>
         <item name="iconTint">@color/beam_on_accent</item>

@@ -6,14 +6,14 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp">
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp">
 
     <!-- 縮圖（相片/影片）或圖示 -->
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/ivThumb"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:scaleType="centerCrop"
         android:src="@drawable/ic_file"
         android:padding="16dp"
@@ -35,7 +35,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/beam_ink"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textFontWeight="500"
             android:maxLines="1"
             android:ellipsize="middle"
@@ -47,7 +47,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="1dp"
             android:textColor="@color/beam_muted"
-            android:textSize="12.5sp"
+            android:textSize="12sp"
             tools:text="4.2 MB" />
     </LinearLayout>
 
@@ -57,7 +57,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/beam_muted"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:textFontWeight="600"
         tools:text="✓" />
 

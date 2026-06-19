@@ -7,13 +7,13 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="?attr/selectableItemBackground"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp">
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp">
 
     <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/ivThumb"
-        android:layout_width="64dp"
-        android:layout_height="64dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:scaleType="centerCrop"
         android:background="@drawable/bg_thumb"
         android:src="@drawable/ic_file"
@@ -25,14 +25,16 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:layout_marginStart="14dp"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/tvName"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textFontWeight="500"
             android:maxLines="1"
             android:ellipsize="middle"
@@ -40,11 +42,12 @@
 
         <TextView
             android:id="@+id/tvMeta"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
+            android:layout_marginStart="8dp"
             android:textColor="@color/beam_muted"
-            android:textSize="12.5sp"
+            android:textSize="12sp"
+            android:maxLines="1"
             tools:text="38.7 MB" />
     </LinearLayout>
 

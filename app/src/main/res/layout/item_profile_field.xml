@@ -36,7 +36,7 @@
             android:layout_height="wrap_content"
             android:background="@null"
             android:textColor="@color/beam_ink"
-            android:textSize="16sp"
+            android:textSize="12sp"
             android:hint="@string/profile_field_value"
             android:textColorHint="@color/beam_track"
             android:inputType="text"

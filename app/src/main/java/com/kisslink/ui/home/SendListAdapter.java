@@ -73,6 +73,7 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
         h.name.setText(r.name);
 
+        h.meta.setVisibility(View.VISIBLE);
         // 中間 meta：傳輸中顯示方向，否則大小
         if (r.percent >= 0 && !r.done) {
             h.meta.setText(r.incoming ? ctx.getString(R.string.receiving)
@@ -91,7 +92,7 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         } else {
             h.status.setText(r.sizeLabel.isEmpty() ? "" : r.sizeLabel);
             h.status.setTextColor(ctx.getColor(R.color.beam_muted));
-            h.meta.setText(itemTypeLabel(ctx, r.itemType));
+            h.meta.setVisibility(View.GONE);
         }
 
         // 移除鈕（待傳清單）
@@ -110,13 +111,13 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
         // 縮圖
         h.thumb.setImageResource(FileUtils.iconFor(r.itemType, r.mime, r.name));
-        h.thumb.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 16));
+        h.thumb.setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 8));
         h.thumbTag = r.thumbUri;
         if (r.isVisualMedia() && r.thumbUri != null) {
             final Uri want = r.thumbUri;
             try {
                 thumbPool.execute(() -> {
-                    Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 64));
+                    Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 48));
                     if (bm == null) return;
                     main.post(() -> {
                         if (want.equals(h.thumbTag)) {

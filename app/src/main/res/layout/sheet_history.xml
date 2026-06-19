@@ -21,7 +21,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:text="@string/history_title" />
 
@@ -43,7 +43,7 @@
         android:paddingTop="48dp"
         android:paddingBottom="48dp"
         android:textColor="@color/beam_muted"
-        android:textSize="15sp"
+        android:textSize="12sp"
         android:text="@string/history_empty"
         android:visibility="gone" />
 

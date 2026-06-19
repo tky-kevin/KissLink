@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/beam_accent"
-        android:textSize="13sp"
+        android:textSize="16sp"
         android:textFontWeight="700"
         tools:text="傳送" />
 
@@ -24,7 +24,7 @@
         android:layout_weight="1"
         android:layout_marginStart="8dp"
         android:textColor="@color/beam_muted"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:maxLines="1"
         android:ellipsize="end"
         tools:text="· 今天 14:32" />
@@ -34,6 +34,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/beam_muted"
-        android:textSize="13sp"
+        android:textSize="12sp"
         tools:text="3 個" />
 </LinearLayout>

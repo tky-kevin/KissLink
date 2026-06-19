@@ -22,26 +22,32 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:text="@string/settings_title" />
 
+        <!-- 佔位用：精準對齊歷史紀錄 sheet 右側的清除按鈕高度 -->
+        <View
+            android:layout_width="36dp"
+            android:layout_height="36dp" />
     </LinearLayout>
 
     <!-- 外觀分組標籤 -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="2dp"
-        style="@style/Beam.Label"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="6dp"
+        android:textColor="@color/beam_accent"
+        android:textSize="16sp"
+        android:textFontWeight="700"
         android:text="@string/settings_appearance" />
 
     <!-- 跟隨系統 -->
     <LinearLayout
         android:id="@+id/rowSystem"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="44dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="?attr/selectableItemBackground"
@@ -53,7 +59,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textFontWeight="500"
             android:text="@string/settings_follow_system" />
 
@@ -76,7 +82,7 @@
     <LinearLayout
         android:id="@+id/rowLight"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="44dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="?attr/selectableItemBackground"
@@ -88,7 +94,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textFontWeight="500"
             android:text="@string/settings_light" />
 
@@ -111,7 +117,7 @@
     <LinearLayout
         android:id="@+id/rowDark"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="44dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="?attr/selectableItemBackground"
@@ -123,7 +129,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/beam_ink"
-            android:textSize="15sp"
+            android:textSize="12sp"
             android:textFontWeight="500"
             android:text="@string/settings_dark" />
 

@@ -247,13 +247,23 @@ private fun BeamStage(
                 }
             }
 
-            // ── 中央節點（像素方格）──
+            // ── 中央節點（真正的像素風圓形）──
             if (!connected) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .background(ACCENT)
-                )
+                Canvas(modifier = Modifier.size(20.dp)) {
+                    val cell = 4.dp.toPx()
+                    val c = Offset(size.width / 2f, size.height / 2f)
+                    // 5x5 像素圓形（拿掉四個角）
+                    for (gx in -2..2) {
+                        for (gy in -2..2) {
+                            if (Math.abs(gx) == 2 && Math.abs(gy) == 2) continue
+                            drawRect(
+                                ACCENT,
+                                topLeft = Offset(c.x + gx * cell - cell / 2f, c.y + gy * cell - cell / 2f),
+                                size = Size(cell, cell)
+                            )
+                        }
+                    }
+                }
             } else {
                 Box(modifier = Modifier.size(avatarR * 2), contentAlignment = Alignment.Center) {
                     // 頭像（依 avatarAlpha 淡入/縮放）
@@ -332,7 +342,7 @@ private fun BeamStage(
                 ) {
                     BasicText(
                         text = "名片",
-                        style = TextStyle(color = INK, fontSize = 15.sp,
+                        style = TextStyle(color = INK, fontSize = 15.sp, lineHeight = 22.sp,
                             fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
                     )
                 }
@@ -348,19 +358,17 @@ private fun BeamStage(
 private fun DrawScope.drawCheckMark(
     c: Offset, s: Float, f: Float, color: Color, w: Float, alpha: Float
 ) {
-    // 像素勾：以中心為原點的相對格座標（col, row），從左下往右上
+    // 像素勾：以中心為原點的相對格座標（gx, gy），gy 為正表示畫布上方
     val pixels = listOf(
         Pair(-4,  0),
         Pair(-3, -1),
         Pair(-2, -2),
-        Pair(-1, -1),
-        Pair( 0,  0),
-        Pair( 1,  1),
-        Pair( 2,  2),
+        Pair(-1, -3), // 最低點（打勾的頂點）
+        Pair( 0, -2),
+        Pair( 1, -1),
+        Pair( 2,  0),
         Pair( 3,  1),
-        Pair( 4,  0),
-        Pair( 5, -1),
-        Pair( 6, -2)
+        Pair( 4,  2)
     )
     val col = color.copy(alpha = alpha)
     val cell = s * 0.28f          // 單格大小（s ≒ size.minDimension * 0.30）
