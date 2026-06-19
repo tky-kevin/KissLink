@@ -7,8 +7,8 @@
     <!-- 外環 -->
     <item>
         <shape android:shape="oval">
-            <solid android:color="#1A1565C0"/>
-            <stroke android:width="2dp" android:color="#1565C0"/>
+            <solid android:color="@color/beam_accent_soft"/>
+            <stroke android:width="2dp" android:color="@color/beam_accent"/>
         </shape>
     </item>
     <!-- 內圓 -->
@@ -16,7 +16,8 @@
         android:left="20dp" android:top="20dp"
         android:right="20dp" android:bottom="20dp">
         <shape android:shape="oval">
-            <solid android:color="#E8F0FE"/>
+            <solid android:color="@color/beam_surface"/>
         </shape>
     </item>
 </layer-list>
+

@@ -5,7 +5,16 @@
     <!-- 頂列 -->
     <string name="cd_history">傳輸紀錄</string>
     <string name="cd_avatar">個人名片</string>
+    <string name="cd_settings">設定</string>
     <string name="btn_cancel">關閉</string>
+
+    <!-- 設定 sheet -->
+    <string name="settings_title">設定</string>
+    <string name="settings_appearance">外觀</string>
+    <string name="settings_follow_system">跟隨系統</string>
+    <string name="settings_light">亮色模式</string>
+    <string name="settings_dark">深色模式</string>
+
 
     <!-- 中央狀態文案 -->
     <string name="home_ready_title">背背輕貼　即刻連接</string>

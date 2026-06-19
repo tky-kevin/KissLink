@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    像素風齒輪圖示（16×16 pixel grid，viewport 16×16）
+    每個方塊 = 1×1 像素格，M x,y h 1 v 1 h -1 z
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="@color/beam_ink"
+        android:pathData="
+        M6,0 h1 v1 h-1 z
+        M9,0 h1 v1 h-1 z
+        M5,1 h1 v1 h-1 z
+        M6,1 h1 v1 h-1 z
+        M9,1 h1 v1 h-1 z
+        M10,1 h1 v1 h-1 z
+        M5,2 h6 v1 h-6 z
+        M0,5 h1 v6 h-1 z
+        M1,5 h1 v1 h-1 z
+        M1,9 h1 v1 h-1 z
+        M14,5 h1 v1 h-1 z
+        M15,5 h1 v6 h-1 z
+        M14,9 h1 v1 h-1 z
+        M2,4 h1 v1 h-1 z
+        M13,4 h1 v1 h-1 z
+        M2,10 h1 v1 h-1 z
+        M13,10 h1 v1 h-1 z
+        M3,3 h10 v1 h-10 z
+        M3,11 h10 v1 h-10 z
+        M3,4 h2 v7 h-2 z
+        M11,4 h2 v7 h-2 z
+        M5,13 h6 v1 h-6 z
+        M5,12 h1 v1 h-1 z
+        M10,12 h1 v1 h-1 z
+        M6,14 h1 v1 h-1 z
+        M9,14 h1 v1 h-1 z
+        M6,15 h1 v1 h-1 z
+        M9,15 h1 v1 h-1 z
+        M6,4 h4 v1 h-4 z
+        M5,5 h1 v5 h-1 z
+        M10,5 h1 v5 h-1 z
+        M6,10 h4 v1 h-4 z
+        M7,5 h2 v5 h-2 z
+        " />
+</vector>

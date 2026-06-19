@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="8dp">
+
+    <!-- 標題列：與 sheet_history 結構對齊 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/beam_ink"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:text="@string/settings_title" />
+
+    </LinearLayout>
+
+    <!-- 外觀分組標籤 -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp"
+        style="@style/Beam.Label"
+        android:text="@string/settings_appearance" />
+
+    <!-- 跟隨系統 -->
+    <LinearLayout
+        android:id="@+id/rowSystem"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/beam_ink"
+            android:textSize="15sp"
+            android:textFontWeight="500"
+            android:text="@string/settings_follow_system" />
+
+        <ImageView
+            android:id="@+id/checkSystem"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="@color/beam_accent" />
+    </LinearLayout>
+
+    <!-- 分隔線 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/beam_track" />
+
+    <!-- 亮色模式 -->
+    <LinearLayout
+        android:id="@+id/rowLight"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/beam_ink"
+            android:textSize="15sp"
+            android:textFontWeight="500"
+            android:text="@string/settings_light" />
+
+        <ImageView
+            android:id="@+id/checkLight"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="@color/beam_accent" />
+    </LinearLayout>
+
+    <!-- 分隔線 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/beam_track" />
+
+    <!-- 深色模式 -->
+    <LinearLayout
+        android:id="@+id/rowDark"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/beam_ink"
+            android:textSize="15sp"
+            android:textFontWeight="500"
+            android:text="@string/settings_dark" />
+
+        <ImageView
+            android:id="@+id/checkDark"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="@color/beam_accent" />
+    </LinearLayout>
+
+    <!-- 底部留白（對齊 sheet_history 的 paddingBottom 感）-->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="20dp" />
+
+</LinearLayout>

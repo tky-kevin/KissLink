@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.KissLink" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- 全域 zpix 字體 -->
+        <item name="android:fontFamily">@font/zpix</item>
+        <item name="fontFamily">@font/zpix</item>
+
+        <item name="colorPrimary">@color/beam_accent</item>
+        <item name="colorOnPrimary">@color/beam_on_accent</item>
+        <item name="colorSecondary">@color/beam_accent</item>
+        <item name="colorOnSecondary">@color/beam_on_accent</item>
+        <item name="android:colorBackground">@color/beam_bg</item>
+        <item name="colorSurface">@color/beam_surface</item>
+        <item name="colorOnSurface">@color/beam_ink</item>
+        <item name="colorOnSurfaceVariant">@color/beam_muted</item>
+        <item name="colorOutline">@color/beam_track</item>
+        <item name="colorError">@color/beam_error</item>
+
+        <!-- 狀態列：深色模式用淺色圖示 -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/beam_bg</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+
+        <!-- Bottom sheet 樣式 -->
+        <item name="bottomSheetStyle">@style/Beam.BottomSheet.Modal</item>
+
+        <!-- 全域按鈕樣式 -->
+        <item name="materialButtonStyle">@style/Beam.Button.Base</item>
+
+        <!-- 全域 TextView 樣式 -->
+        <item name="android:textViewStyle">@style/Beam.TextView.Base</item>
+    </style>
+
+    <style name="Theme.KissLink.BottomSheet" parent="Theme.Material3.Dark.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Beam.BottomSheet.Modal</item>
+    </style>
+
+    <style name="Theme.KissLink.CardDialog" parent="Theme.Material3.Dark.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="colorPrimary">@color/beam_accent</item>
+        <item name="colorOnPrimary">@color/beam_on_accent</item>
+        <item name="colorSurface">@color/beam_surface</item>
+        <item name="colorOnSurface">@color/beam_ink</item>
+    </style>
+</resources>

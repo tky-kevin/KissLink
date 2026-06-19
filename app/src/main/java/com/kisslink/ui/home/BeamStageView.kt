@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import androidx.compose.foundation.isSystemInDarkTheme
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -118,10 +119,7 @@ class BeamStageView @JvmOverloads constructor(
     }
 }
 
-private val INK = Color(0xFF23201B)
-private val TRACK = Color(0xFFDCD8CF)
-private val ACCENT = Color(0xFFB07A32)
-private val PANEL = Color(0xFFF4F2EC)
+private val ACCENT = Color(0xFF1A73E8)
 
 @Composable
 private fun BeamStage(
@@ -131,6 +129,12 @@ private fun BeamStage(
     peerMono: String?,
     cardFlyTrigger: Int
 ) {
+    // 動態顏色：跟隨深/淺模式（不依賴 Material3，直接讀系統主題）
+    val dark  = isSystemInDarkTheme()
+    val INK   = if (dark) Color(0xFFEDE9E3) else Color(0xFF23201B)
+    val TRACK = if (dark) Color(0xFF38342F) else Color(0xFFDCD8CF)
+    val PANEL = if (dark) Color(0xFF242220) else Color(0xFFF4F2EC)
+
     val connected = phase == BeamStageView.CONNECTED ||
         phase == BeamStageView.TRANSFERRING || phase == BeamStageView.DONE
     val transferring = phase == BeamStageView.TRANSFERRING

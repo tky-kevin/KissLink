@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ── C 方案 Beam 視覺語言（暖米底 + 古銅金）────────────────── -->
+    <!-- ── C 方案 Beam 視覺語言（暖米底 + 深藍）────────────────── -->
     <color name="beam_bg">#F4F2EC</color>          <!-- 暖米白背景 -->
     <color name="beam_surface">#FBFAF6</color>      <!-- 卡片/sheet 表面 -->
     <color name="beam_ink">#23201B</color>          <!-- 主墨：大標、你的點 -->
     <color name="beam_muted">#9A948A</color>        <!-- 次要文字、微標籤 -->
     <color name="beam_track">#DCD8CF</color>        <!-- hairline、未填光束 -->
-    <color name="beam_accent">#B07A32</color>       <!-- 古銅金：進度、勾、傳送 -->
-    <color name="beam_accent_soft">#1AB07A32</color><!-- accent 10% 底 -->
+    <color name="beam_accent">#1A73E8</color>       <!-- 深藍：進度、勾、傳送 -->
+    <color name="beam_accent_soft">#1A1A73E8</color><!-- accent 10% 底 -->
     <color name="beam_on_accent">#FBFAF6</color>
     <color name="beam_error">#B0463A</color>
     <color name="beam_scrim">#9923201B</color>

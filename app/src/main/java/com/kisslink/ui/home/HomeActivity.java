@@ -49,6 +49,7 @@ import com.kisslink.ui.history.HistorySheet;
 import com.kisslink.ui.profile.ProfileCardSheet;
 import com.kisslink.ui.profile.ReceivedCardSheet;
 import com.kisslink.util.PermissionHelper;
+import com.kisslink.util.ThemePrefs;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +76,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private View sendStackRow;
     private android.widget.FrameLayout stackThumbs;
     private MaterialButton btnPickFiles, btnPickMedia, btnSend, btnViewReceived;
-    private ImageButton ibHistory;
+    private ImageButton ibHistory, ibSettings;
     private ShapeableImageView ivAvatar;
 
     private SendListAdapter itemsAdapter;
@@ -141,6 +142,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemePrefs.apply(this);   // ← 套用儲存的深/淺/系統偏好
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
         viewModel = new ViewModelProvider(this).get(HomeViewModel.class);
@@ -176,6 +178,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         btnPickMedia= findViewById(R.id.btnPickMedia);
         btnSend     = findViewById(R.id.btnSend);
         ibHistory   = findViewById(R.id.ibHistory);
+        ibSettings  = findViewById(R.id.ibSettings);
         ivAvatar    = findViewById(R.id.ivAvatar);
         tvReceived     = findViewById(R.id.tvReceived);
         receivedBanner = findViewById(R.id.receivedBanner);
@@ -209,6 +212,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         ibHistory.setOnClickListener(v ->
                 new HistorySheet().show(getSupportFragmentManager(), "history"));
+        ibSettings.setOnClickListener(v ->
+                SettingsSheet.newInstance().show(getSupportFragmentManager(), "settings"));
         ivAvatar.setOnClickListener(v ->
                 ProfileCardSheet.newInstance().show(getSupportFragmentManager(), "profile"));
 

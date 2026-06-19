@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ── Beam 視覺語言 Night（深炭 + 深藍）────────────────── -->
+    <color name="beam_bg">#1A1917</color>          <!-- 深炭底 -->
+    <color name="beam_surface">#242220</color>      <!-- 卡片/sheet 表面 -->
+    <color name="beam_ink">#EDE9E3</color>          <!-- 主文字（淺米） -->
+    <color name="beam_muted">#7A746C</color>        <!-- 次要文字 -->
+    <color name="beam_track">#38342F</color>        <!-- hairline、未填光束 -->
+    <color name="beam_accent">#4A9EF5</color>       <!-- 亮藍（夜間不刺眼） -->
+    <color name="beam_accent_soft">#1A4A9EF5</color><!-- accent 10% 底 -->
+    <color name="beam_on_accent">#0D1821</color>    <!-- accent 上的文字（深色） -->
+    <color name="beam_error">#CF6679</color>
+    <color name="beam_scrim">#CC1A1917</color>
+
+    <!-- 保留舊 Material 3 palette night 覆寫 -->
+    <color name="primary">#4A9EF5</color>
+    <color name="on_primary">#0D1821</color>
+    <color name="primary_container">#0D2D4A</color>
+    <color name="secondary">#4CAF72</color>
+    <color name="on_secondary">#0D1F15</color>
+    <color name="background">#1A1917</color>
+    <color name="surface">#242220</color>
+    <color name="on_surface">#EDE9E3</color>
+    <color name="on_surface_variant">#7A746C</color>
+    <color name="outline">#38342F</color>
+    <color name="error">#CF6679</color>
+    <color name="success">#4CAF72</color>
+</resources>
