@@ -295,6 +295,16 @@ public class FileTransferService extends Service {
         }
     }
 
+    private void logTransfer(boolean sent, String name, long size, long avgSpeedBps,
+                             boolean success, byte itemType, @Nullable String contentUri,
+                             @Nullable String mime, long batchId) {
+        String dir = sent ? "SEND" : "RECEIVE";
+        String peerName = sessionMgr.currentPeerName();
+        TransferRepository repo = TransferRepository.getInstance(this);
+        repo.insert(repo.buildRecord(dir, name, size, success, avgSpeedBps,
+                contentUri, peerName, mime, batchId));
+    }
+
     private void startPeer(@NonNull Socket socket) {
         com.kisslink.profile.ProfileStore ps = com.kisslink.profile.ProfileStore.get(this);
         String selfName = ps.name();
@@ -305,11 +315,8 @@ public class FileTransferService extends Service {
                                                   long avgSpeedBps, boolean success, byte itemType,
                                                   @Nullable String contentUri, @Nullable String mime,
                                                   long batchId) {
-                String dir = sent ? "SEND" : "RECEIVE";
-                String peerName = sessionMgr.currentPeerName();
-                TransferRepository repo = TransferRepository.getInstance(FileTransferService.this);
-                repo.insert(repo.buildRecord(dir, name, size, success, avgSpeedBps,
-                        contentUri, peerName, mime, batchId));
+                logTransfer(sent, name, size, avgSpeedBps, success, itemType,
+                        contentUri, mime, batchId);
             }
             @Override public void onDisconnected() {
                 Log.i(TAG, "Peer disconnected");
@@ -335,6 +342,7 @@ public class FileTransferService extends Service {
 
         peer.start();
         wakeLockManager.acquire();
+        idleManager.setTransferring(true);
         notificationHelper.update("已連線", 0);
         sessionMgr.transitionTo(SessionState.of(SessionState.Phase.CONNECTED));
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
@@ -351,5 +359,6 @@ public class FileTransferService extends Service {
         sessionMgr.teardownProgressObserver(mainHandler);
         if (peer != null) { peer.close(); peer = null; }
         wakeLockManager.release();
+        idleManager.setTransferring(false);
     }
 }

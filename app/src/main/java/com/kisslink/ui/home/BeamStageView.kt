@@ -23,8 +23,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.rememberLottieComposition
+import nl.dionsegijn.konfetti.compose.KonfettiView
+import nl.dionsegijn.konfetti.core.Party
+import nl.dionsegijn.konfetti.core.Position
+import nl.dionsegijn.konfetti.core.emitter.Emitter
+import java.util.concurrent.TimeUnit
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -208,61 +219,62 @@ private fun BeamStage(
                 val ringR = avatarPx + ringGap.toPx()
                 val strokeW = 5.dp.toPx()
 
-                // 常駐 NFC 漣漪（像素網格）。傳輸時從進度環往外擴散；其餘狀態從中心點往外（避免突現）。
+                // 常駐 NFC 漣漪 (現代流體感)
                 val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else 0f
-                val rippleMax = (if (transferring || done) ringR else avatarPx) + 46.dp.toPx()
-                val px = 4.dp.toPx()
+                val rippleMax = (if (transferring || done) ringR else avatarPx) + 80.dp.toPx()
                 for (i in 0..2) {
                     val t = (ripple + i / 3f) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
-                    // 淡入（t < 0.15）+ 淡出（t > 0.5），避免波紋在起點突然出現
                     val fadeIn  = (t / 0.15f).coerceIn(0f, 1f)
                     val fadeOut = (1f - t).coerceIn(0f, 1f)
-                    val a = fadeIn * fadeOut * 0.55f
-                    if (a <= 0f) continue
-                    val ringW = px * 2.5f
-                    val rIn = (r - ringW / 2f).coerceAtLeast(0f)
-                    val rOut = r + ringW / 2f
-                    val col = ACCENT.copy(alpha = a)
-                    val x0 = ((c.x - rOut) / px).roundToInt().coerceAtLeast(0)
-                    val x1 = ((c.x + rOut) / px).roundToInt().coerceAtMost((size.width / px).roundToInt())
-                    val y0 = ((c.y - rOut) / px).roundToInt().coerceAtLeast(0)
-                    val y1 = ((c.y + rOut) / px).roundToInt().coerceAtMost((size.height / px).roundToInt())
-                    for (gx in x0..x1) {
-                        for (gy in y0..y1) {
-                            val cx = gx * px + px / 2f
-                            val cy = gy * px + px / 2f
-                            val d = hypot((cx - c.x).toDouble(), (cy - c.y).toDouble()).toFloat()
-                            if (d in rIn..rOut) {
-                                drawRect(col, topLeft = Offset(gx * px, gy * px), size = Size(px, px))
-                            }
-                        }
+                    val a = fadeIn * fadeOut * 0.35f
+                    if (a > 0f) {
+                        drawCircle(
+                            color = ACCENT.copy(alpha = a),
+                            radius = r,
+                            center = c
+                        )
+                        drawCircle(
+                            color = ACCENT.copy(alpha = a * 1.5f),
+                            radius = r,
+                            center = c,
+                            style = Stroke(width = 1.5.dp.toPx())
+                        )
                     }
                 }
 
-                // 傳輸/完成：頭像外圈進度環（像素格）
+                // 傳輸/完成：頭像外圈進度環 (現代平滑風格)
                 if (transferring || done) {
-                    drawPixelRing(c, ringR, px, TRACK, 1f)           // 底環
-                    drawPixelRing(c, ringR, px, ACCENT, animProgress) // 進度環
+                    drawArc(
+                        color = TRACK,
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                        topLeft = Offset(c.x - ringR, c.y - ringR),
+                        size = Size(ringR * 2, ringR * 2)
+                    )
+                    drawArc(
+                        color = ACCENT,
+                        startAngle = -90f,
+                        sweepAngle = 360f * animProgress,
+                        useCenter = false,
+                        style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                        topLeft = Offset(c.x - ringR, c.y - ringR),
+                        size = Size(ringR * 2, ringR * 2)
+                    )
                 }
             }
 
-            // ── 中央節點（真正的像素風圓形）──
+            // ── 中央節點（Lottie 動畫）──
             if (!connected) {
-                Canvas(modifier = Modifier.size(20.dp)) {
-                    val cell = 4.dp.toPx()
-                    val c = Offset(size.width / 2f, size.height / 2f)
-                    // 5x5 像素圓形（拿掉四個角）
-                    for (gx in -2..2) {
-                        for (gy in -2..2) {
-                            if (Math.abs(gx) == 2 && Math.abs(gy) == 2) continue
-                            drawRect(
-                                ACCENT,
-                                topLeft = Offset(c.x + gx * cell - cell / 2f, c.y + gy * cell - cell / 2f),
-                                size = Size(cell, cell)
-                            )
-                        }
-                    }
+                val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(com.kisslink.R.raw.lottie_radar))
+                Box(modifier = Modifier.size(avatarR * 2.5f), contentAlignment = Alignment.Center) {
+                    LottieAnimation(
+                        composition = composition,
+                        iterations = LottieConstants.IterateForever,
+                        modifier = Modifier.matchParentSize()
+                    )
                 }
             } else {
                 Box(modifier = Modifier.size(avatarR * 2), contentAlignment = Alignment.Center) {
@@ -309,12 +321,12 @@ private fun BeamStage(
                         }
                     }
 
-                    // 完成打勾（頭像隱藏時顯示）
+                    // 完成打勾（頭像隱藏時顯示，改為平滑線條）
                     if (checkAlpha.value > 0f) {
                         Canvas(modifier = Modifier.matchParentSize()) {
                             val c = Offset(size.width / 2f, size.height / 2f)
-                            val s = size.minDimension * 0.30f
-                            drawCheckMark(c, s, checkDraw.value, ACCENT, 4.dp.toPx(), checkAlpha.value)
+                            val s = size.minDimension * 0.40f
+                            drawModernCheckMark(c, s, checkDraw.value, ACCENT, 6.dp.toPx(), checkAlpha.value)
                         }
                     }
                 }
@@ -336,8 +348,8 @@ private fun BeamStage(
                             alpha = (1f - ((t - 0.55f) / 0.45f)).coerceIn(0f, 1f)
                         }
                         .clip(RoundedCornerShape(18.dp))
-                        .background(PANEL)
-                        .border(1.dp, TRACK, RoundedCornerShape(18.dp)),
+                        .background(PANEL.copy(alpha = 0.7f)) // 毛玻璃半透明
+                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     BasicText(
@@ -347,39 +359,70 @@ private fun BeamStage(
                     )
                 }
             }
+
+            // ── Konfetti 慶祝特效 ──
+            // konfetti-compose 2.0.4 的 KonfettiView 內部用 LaunchedEffect(Unit)，
+            // 只在「首次組合」時依當下的 parties 建一次 PartySystem 並永久跑逐幀迴圈；
+            // 之後即使傳入新的 parties 也不會重新發射（這就是第二次以後彩帶不出現的原因）。
+            // 因此每次完成都用遞增的 key 讓整個 KonfettiView 重建，強迫它重跑發射。
+            var celebrateKey by remember { mutableStateOf(0) }
+            LaunchedEffect(phase) {
+                if (phase == BeamStageView.DONE) celebrateKey++
+            }
+            if (celebrateKey > 0) {
+                key(celebrateKey) {
+                    KonfettiView(
+                        modifier = Modifier.fillMaxSize(),
+                        parties = listOf(
+                            Party(
+                                speed = 0f,
+                                maxSpeed = 30f,
+                                damping = 0.9f,
+                                spread = 360,
+                                colors = listOf(0xFFFCE18A.toInt(), 0xFFFF726D.toInt(), 0xFFF4306D.toInt(), 0xFFB48DEF.toInt()),
+                                emitter = Emitter(duration = 100, TimeUnit.MILLISECONDS).max(100),
+                                position = Position.Relative(0.5, 0.5)
+                            )
+                        )
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * 像素風打勾：11 個固定像素格，依 fraction f（0..1）逐格點亮。
- * 格子座標以 (-5..5, -5..5) 的 11×11 網格定義，單格 = px 大小。
+ * 現代平滑打勾線條：依 fraction f（0..1）繪出長度
  */
-private fun DrawScope.drawCheckMark(
+private fun DrawScope.drawModernCheckMark(
     c: Offset, s: Float, f: Float, color: Color, w: Float, alpha: Float
 ) {
-    // 像素勾：以中心為原點的相對格座標（gx, gy），gy 為正表示畫布上方
-    val pixels = listOf(
-        Pair(-4,  0),
-        Pair(-3, -1),
-        Pair(-2, -2),
-        Pair(-1, -3), // 最低點（打勾的頂點）
-        Pair( 0, -2),
-        Pair( 1, -1),
-        Pair( 2,  0),
-        Pair( 3,  1),
-        Pair( 4,  2)
-    )
+    if (f <= 0f) return
+    val p1 = Offset(c.x - s * 0.4f, c.y)
+    val p2 = Offset(c.x - s * 0.1f, c.y + s * 0.3f)
+    val p3 = Offset(c.x + s * 0.5f, c.y - s * 0.4f)
+    
+    val l1 = hypot(p2.x - p1.x, p2.y - p1.y)
+    val l2 = hypot(p3.x - p2.x, p3.y - p2.y)
+    val totalL = l1 + l2
+    
+    val drawL = totalL * f
     val col = color.copy(alpha = alpha)
-    val cell = s * 0.28f          // 單格大小（s ≒ size.minDimension * 0.30）
-    val count = (f * pixels.size).toInt().coerceAtMost(pixels.size)
-    for (i in 0 until count) {
-        val (gx, gy) = pixels[i]
-        drawRect(
-            col,
-            topLeft = Offset(c.x + gx * cell - cell / 2f, c.y - gy * cell - cell / 2f),
-            size    = Size(cell, cell)
+    
+    if (drawL <= l1) {
+        val curP = Offset(
+            p1.x + (p2.x - p1.x) * (drawL / l1),
+            p1.y + (p2.y - p1.y) * (drawL / l1)
         )
+        drawLine(col, p1, curP, strokeWidth = w, cap = StrokeCap.Round)
+    } else {
+        drawLine(col, p1, p2, strokeWidth = w, cap = StrokeCap.Round)
+        val rem = drawL - l1
+        val curP = Offset(
+            p2.x + (p3.x - p2.x) * (rem / l2),
+            p2.y + (p3.y - p2.y) * (rem / l2)
+        )
+        drawLine(col, p2, curP, strokeWidth = w, cap = StrokeCap.Round)
     }
 }
 

@@ -28,19 +28,18 @@ import java.util.zip.CRC32;
  *
  * <h3>交握流程</h3>
  * <pre>
- *  RECEIVER (TCP Client)           SENDER (TCP Server / GO)
+ *  CLIENT (接收方 / 非 GO)         SERVER (傳送方 / GO)
  *  ─────────────────────           ────────────────────────
- *  ← connect TCP                   accept() →
- *  HANDSHAKE         ──────────►
- *                    ◄──────────   HANDSHAKE_ACK
+ *  → connect TCP                   accept() →
+ *
+ *  雙方各自送出 HELLO（帶名片 profile）：
+ *  HELLO (+profile)  ──────────►
+ *                    ◄──────────   HELLO (+profile)
  *
  *  （對每個檔案重複）
  *                    ◄──────────   FILE_META + JSON
- *  READY_ACK         ──────────►
  *                    ◄──────────   DATA_CHUNK × N
- *  PROGRESS_ACK      ──────────►   （可選，每 N chunk 回一次）
  *                    ◄──────────   COMPLETE
- *  COMPLETE_ACK      ──────────►
  * </pre>
  */
 public final class TransferProtocol {

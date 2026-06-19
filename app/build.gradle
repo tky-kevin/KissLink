@@ -8,37 +8,37 @@ plugins {
 }
 
 android {
-    namespace 'com.kisslink'
-    compileSdk 34
+    namespace = 'com.kisslink'
+    compileSdk = 34
 
     defaultConfig {
-        applicationId "com.kisslink"
-        minSdk 29          // Android 10：HCE 穩定、WifiP2pConfig.Builder、Scoped Storage
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        applicationId = "com.kisslink"
+        minSdk = 29          // Android 10：HCE 穩定、WifiP2pConfig.Builder、Scoped Storage
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
-            debuggable true
-            applicationIdSuffix ".debug"
+            debuggable = true
+            applicationIdSuffix = ".debug"
         }
         release {
-            minifyEnabled true
+            minifyEnabled = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                           'proguard-rules.pro'
             // 以內建 debug key 簽署 release，讓 CI 產出的 APK 可直接安裝（不需設定 keystore secrets）。
             // 若日後要上架 Play 商店，再改用正式上架金鑰。
-            signingConfig signingConfigs.debug
+            signingConfig = signingConfigs.debug
         }
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     kotlinOptions {
@@ -46,14 +46,14 @@ android {
     }
 
     buildFeatures {
-        compose true
+        compose = true
     }
 
     // Lint 配置：CI 中必須通過
     lint {
-        checkReleaseBuilds true
-        abortOnError true
-        warningsAsErrors true
+        checkReleaseBuilds = true
+        abortOnError = true
+        warningsAsErrors = true
         baseline = file("lint-baseline.xml")
     }
 
@@ -85,6 +85,10 @@ dependencies {
     implementation "androidx.compose.foundation:foundation:$composeVer"
     implementation "androidx.compose.animation:animation:$composeVer"
     debugImplementation "androidx.compose.ui:ui-tooling:$composeVer"
+
+    // ── 動畫擴充 (Lottie & Konfetti) ──────────────────────────
+    implementation "com.airbnb.android:lottie-compose:6.4.0"
+    implementation "nl.dionsegijn:konfetti-compose:2.0.4"
 
     // ── Architecture: ViewModel + LiveData ────────────────────
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.8.0'

@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
  */
 @Database(
         entities = {TransferRecordEntity.class},
-        version  = 2,
+        version  = 3,
         exportSchema = true
 )
 public abstract class AppDatabase extends RoomDatabase {
@@ -41,6 +41,15 @@ public abstract class AppDatabase extends RoomDatabase {
         }
     };
 
+    /** v2 → v3：新增 batchId 與 timestampMs 索引，加速批次查詢與時間排序。 */
+    static final Migration MIGRATION_2_3 = new Migration(2, 3) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase db) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_records_batchId ON transfer_records (batchId)");
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_records_timestampMs ON transfer_records (timestampMs)");
+        }
+    };
+
     public static AppDatabase getInstance(Context context) {
         if (instance == null) {
             synchronized (AppDatabase.class) {
@@ -49,7 +58,7 @@ public abstract class AppDatabase extends RoomDatabase {
                                     context.getApplicationContext(),
                                     AppDatabase.class,
                                     "kisslink.db")
-                            .addMigrations(MIGRATION_1_2)
+                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                             // 升版一律走顯式 migration 保資料；只有降版（開發期換 branch）才破壞性重建。
                             .fallbackToDestructiveMigrationOnDowngrade()
                             .build();

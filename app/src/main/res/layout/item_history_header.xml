@@ -29,11 +29,4 @@
         android:ellipsize="end"
         tools:text="· 今天 14:32" />
 
-    <TextView
-        android:id="@+id/tvCount"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/beam_muted"
-        android:textSize="12sp"
-        tools:text="3 個" />
 </LinearLayout>

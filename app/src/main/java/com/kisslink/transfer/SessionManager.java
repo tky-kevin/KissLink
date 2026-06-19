@@ -36,7 +36,6 @@ public final class SessionManager {
     @Nullable private volatile String peerNameFromHello;
     @Nullable private volatile byte[] peerAvatarBytes;
     @Nullable private PairingToken pendingSwitchPeer;
-    private boolean transferring = false;
 
     // ── Progress bridging ─────────────────────────────────────
     @Nullable private LiveData<TransferProgress> peerProgressSrc;
@@ -48,7 +47,11 @@ public final class SessionManager {
 
     public boolean isPendingReset() { return pendingReset; }
 
-    public boolean isTransferring() { return transferring; }
+    /** 從 sessionLd 派生，消除獨立布林值的同步窗口。 */
+    public boolean isTransferring() {
+        SessionState current = sessionLd.getValue();
+        return current != null && current.phase == SessionState.Phase.TRANSFERRING;
+    }
 
     @Nullable
     public PairingToken getConnectedPeerToken() { return connectedPeerToken; }
@@ -137,7 +140,7 @@ public final class SessionManager {
                 Log.i(TAG, "Same-peer tap while connected → resume");
                 return LatchResult.RESUME;
             }
-            if (transferring) {
+            if (isTransferring()) {
                 pendingSwitchPeer = tappedPeer;
                 Log.i(TAG, "New peer while transferring → queued switch");
                 return LatchResult.QUEUED_SWITCH;
@@ -158,17 +161,16 @@ public final class SessionManager {
     // ══════════════════════════════════════════════════════════
 
     public void setupProgressObserver(@NonNull LiveData<TransferProgress> progressSrc,
-                                      @NonNull Handler mainHandler,
-                                      @NonNull Runnable onTransferEnded) {
+                                       @NonNull Handler mainHandler,
+                                       @NonNull Runnable onTransferEnded) {
         teardownProgressObserver(mainHandler);
         peerProgressSrc = progressSrc;
         peerProgressObs = tp -> {
             if (tp == null) return;
+            boolean wasTransferring = isTransferring();
             sessionLd.setValue(SessionState.fromTransfer(tp));
-            boolean now = (tp.phase == TransferProgress.Phase.TRANSFERRING);
-            boolean ended = transferring && !now;
-            transferring = now;
-            if (ended) onTransferEnded.run();
+            boolean nowTransferring = (tp.phase == TransferProgress.Phase.TRANSFERRING);
+            if (wasTransferring && !nowTransferring) onTransferEnded.run();
         };
         mainHandler.post(() -> {
             if (peerProgressSrc != null && peerProgressObs != null)
@@ -204,7 +206,6 @@ public final class SessionManager {
     public void resetSession() {
         clearPeerIdentity();
         pendingSwitchPeer = null;
-        transferring = false;
     }
 
     public int nextSessionGen() {

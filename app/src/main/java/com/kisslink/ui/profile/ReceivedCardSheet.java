@@ -57,14 +57,14 @@ public class ReceivedCardSheet extends DialogFragment {
         Profile p = vcf != null ? Profile.fromVCard(vcf) : Profile.empty();
 
         TextView tvName = v.findViewById(R.id.tvName);
-        tvName.setText(p.name.isEmpty() ? "—" : p.name);
+        tvName.setText(p.getName().isEmpty() ? "—" : p.getName());
 
         // 名片頭像（隨 vCard PHOTO 攜帶）；無則維持預設圖示。
         com.google.android.material.imageview.ShapeableImageView ivAvatar =
                 v.findViewById(R.id.ivCardAvatar);
-        if (p.photo != null && p.photo.length > 0) {
+        if (p.getPhoto() != null && p.getPhoto().length > 0) {
             android.graphics.Bitmap bm = android.graphics.BitmapFactory
-                    .decodeByteArray(p.photo, 0, p.photo.length);
+                    .decodeByteArray(p.getPhoto(), 0, p.getPhoto().length);
             if (bm != null) {
                 ivAvatar.setPadding(0, 0, 0, 0);
                 ivAvatar.setImageBitmap(bm);
@@ -72,14 +72,14 @@ public class ReceivedCardSheet extends DialogFragment {
         }
 
         ViewGroup container = v.findViewById(R.id.fieldsContainer);
-        for (Profile.Field f : p.fields) {
-            if (f.value == null || f.value.trim().isEmpty()) continue;
+        for (Profile.Field f : p.getFields()) {
+            if (f.getValue() == null || f.getValue().trim().isEmpty()) continue;
             View row = LayoutInflater.from(requireContext())
                     .inflate(R.layout.item_profile_field, container, false);
             EditText l = row.findViewById(R.id.etFieldLabel);
             EditText val = row.findViewById(R.id.etFieldValue);
-            l.setText(f.label); l.setEnabled(false);
-            val.setText(f.value); val.setEnabled(false);
+            l.setText(f.getLabel()); l.setEnabled(false);
+            val.setText(f.getValue()); val.setEnabled(false);
             row.findViewById(R.id.ibRemoveField).setVisibility(View.GONE);
             container.addView(row);
         }
@@ -94,10 +94,10 @@ public class ReceivedCardSheet extends DialogFragment {
         try {
             Intent i = new Intent(ContactsContract.Intents.Insert.ACTION);
             i.setType(ContactsContract.RawContacts.CONTENT_TYPE);
-            if (!p.name.isEmpty()) i.putExtra(ContactsContract.Intents.Insert.NAME, p.name);
-            for (Profile.Field f : p.fields) {
-                String label = f.label == null ? "" : f.label.toLowerCase();
-                String val = f.value;
+            if (!p.getName().isEmpty()) i.putExtra(ContactsContract.Intents.Insert.NAME, p.getName());
+            for (Profile.Field f : p.getFields()) {
+                String label = f.getLabel() == null ? "" : f.getLabel().toLowerCase();
+                String val = f.getValue();
                 if (val == null || val.trim().isEmpty()) continue;
                 if (label.contains("電話") || label.contains("phone") || label.contains("手機") || label.contains("tel")) {
                     i.putExtra(ContactsContract.Intents.Insert.PHONE, val);

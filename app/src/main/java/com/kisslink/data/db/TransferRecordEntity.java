@@ -1,12 +1,17 @@
 package com.kisslink.data.db;
 
+import androidx.room.ColumnInfo;
 import androidx.room.Entity;
+import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
 /**
  * Room 資料庫的傳輸紀錄實體，對應 {@code transfer_records} 表。
  */
-@Entity(tableName = "transfer_records")
+@Entity(tableName = "transfer_records", indices = {
+        @Index("batchId"),
+        @Index("timestampMs")
+})
 public class TransferRecordEntity {
 
     @PrimaryKey(autoGenerate = true)

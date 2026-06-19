@@ -14,7 +14,7 @@ import java.util.List;
 @Dao
 public interface TransferDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insert(TransferRecordEntity record);
 
     /** 取得所有紀錄，按時間降序。 */

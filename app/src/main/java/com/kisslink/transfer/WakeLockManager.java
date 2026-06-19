@@ -22,7 +22,7 @@ final class WakeLockManager {
         this.service = service;
     }
 
-    void acquire() {
+    synchronized void acquire() {
         if (wakeLock == null) {
             PowerManager pm = service.getSystemService(PowerManager.class);
             if (pm == null) return;
@@ -32,7 +32,7 @@ final class WakeLockManager {
         if (!wakeLock.isHeld()) wakeLock.acquire(MAX_DURATION_MS);
     }
 
-    void release() {
+    synchronized void release() {
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     }
 }

@@ -96,9 +96,9 @@ public class ProfileCardSheet extends DialogFragment {
         v.findViewById(R.id.btnClose).setOnClickListener(x -> dismiss());
 
         Profile p = ProfileStore.get(requireContext()).load();
-        etName.setText(p.name);
-        if (p.name.isEmpty()) etName.setHint(ProfileStore.get(requireContext()).name());
-        for (Profile.Field f : p.fields) addFieldRow(f.label, f.value);
+        etName.setText(p.getName());
+        if (p.getName().isEmpty()) etName.setHint(ProfileStore.get(requireContext()).name());
+        for (Profile.Field f : p.getFields()) addFieldRow(f.getLabel(), f.getValue());
         renderAvatar();
 
         btnEditToggle.setOnClickListener(x -> toggleEdit());
@@ -157,12 +157,12 @@ public class ProfileCardSheet extends DialogFragment {
 
     private void saveAndExit() {
         Profile p = Profile.empty();
-        p.name = etName.getText().toString().trim();
+        p.setName(etName.getText().toString().trim());
         for (View row : new ArrayList<>(fieldRows)) {
             String l = ((EditText) row.findViewById(R.id.etFieldLabel)).getText().toString().trim();
             String val = ((EditText) row.findViewById(R.id.etFieldValue)).getText().toString().trim();
             if (l.isEmpty() && val.isEmpty()) { fieldsContainer.removeView(row); fieldRows.remove(row); continue; }
-            p.fields.add(new Profile.Field(l, val));
+            p.addField(new Profile.Field(l, val));
         }
         ProfileStore.get(requireContext()).save(p);
         editing = false;

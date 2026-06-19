@@ -2,7 +2,6 @@ package com.kisslink.profile;
 
 import androidx.annotation.NonNull;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,15 +14,19 @@ public final class Profile {
 
     /** 單一聯絡欄位（label 自訂，例如「電話」「Email」「公司」）。 */
     public static final class Field {
-        public String label;
-        public String value;
+        private String label;
+        private String value;
         public Field(String label, String value) { this.label = label; this.value = value; }
+        public String getLabel() { return label; }
+        public String getValue() { return value; }
+        public void setLabel(String label) { this.label = label; }
+        public void setValue(String value) { this.value = value; }
     }
 
-    @NonNull public String name;
-    @NonNull public final List<Field> fields;
+    private String name;
+    private final List<Field> fields;
     /** 名片頭像（JPEG/PNG bytes，可為 null）——隨 vCard 以 PHOTO 欄位攜帶，供接收端顯示。 */
-    @androidx.annotation.Nullable public byte[] photo;
+    @androidx.annotation.Nullable private byte[] photo;
 
     public Profile(@NonNull String name, @NonNull List<Field> fields) {
         this.name = name;
@@ -33,6 +36,15 @@ public final class Profile {
     public static Profile empty() {
         return new Profile("", new ArrayList<>());
     }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    @NonNull public List<Field> getFields() { return fields; }
+    public void addField(@NonNull Field field) { fields.add(field); }
+
+    @androidx.annotation.Nullable public byte[] getPhoto() { return photo; }
+    public void setPhoto(@androidx.annotation.Nullable byte[] photo) { this.photo = photo; }
 
     public boolean isBlank() {
         return name.trim().isEmpty() && fields.isEmpty();
@@ -133,14 +145,5 @@ public final class Profile {
             }
         }
         return p;
-    }
-
-    // ── byte[] 不可變回傳輔助 ──
-    public static byte[] readAll(java.io.InputStream in) throws java.io.IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
-        return bos.toByteArray();
     }
 }

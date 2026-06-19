@@ -77,12 +77,12 @@ public final class ProfileStore {
     @NonNull
     public Profile load() {
         Profile p = Profile.empty();
-        p.name = prefs.getString(K_NAME, "");
+        p.setName(prefs.getString(K_NAME, ""));
         try {
             JSONArray arr = new JSONArray(prefs.getString(K_FIELDS, "[]"));
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.getJSONObject(i);
-                p.fields.add(new Profile.Field(o.optString("l", ""), o.optString("v", "")));
+                p.addField(new Profile.Field(o.optString("l", ""), o.optString("v", "")));
             }
         } catch (Exception ignored) {}
         return p;
@@ -90,18 +90,18 @@ public final class ProfileStore {
 
     public void save(@NonNull Profile p) {
         JSONArray arr = new JSONArray();
-        for (Profile.Field f : p.fields) {
-            if ((f.label == null || f.label.trim().isEmpty())
-                    && (f.value == null || f.value.trim().isEmpty())) continue;
+        for (Profile.Field f : p.getFields()) {
+            if ((f.getLabel() == null || f.getLabel().trim().isEmpty())
+                    && (f.getValue() == null || f.getValue().trim().isEmpty())) continue;
             try {
                 JSONObject o = new JSONObject();
-                o.put("l", f.label == null ? "" : f.label.trim());
-                o.put("v", f.value == null ? "" : f.value.trim());
+                o.put("l", f.getLabel() == null ? "" : f.getLabel().trim());
+                o.put("v", f.getValue() == null ? "" : f.getValue().trim());
                 arr.put(o);
             } catch (Exception ignored) {}
         }
         prefs.edit()
-                .putString(K_NAME, p.name == null ? "" : p.name.trim())
+                .putString(K_NAME, p.getName() == null ? "" : p.getName().trim())
                 .putString(K_FIELDS, arr.toString())
                 .apply();
     }
