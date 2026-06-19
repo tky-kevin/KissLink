@@ -213,6 +213,13 @@ public class FileTransferService extends Service {
 
     @MainThread
     private void handleLatch(@Nullable PairingToken tappedPeer, @NonNull Runnable deliver) {
+        // Wi-Fi 已連、PeerConnection 仍在背景建 socket 的視窗期（coordinator 已 finished、peer 尚未 alive）：
+        // 此時兩機正貼著，極易再觸發 NFC latch。若放行會被判 dirty 而拆掉這條健康的連線、
+        // 退回 LATCHED/LINKING（即「跳到 Wi-Fi Direct 又跳回 NFC/BLE」）。建立中一律忽略。
+        if (peerStarting) {
+            Log.d(TAG, "Latch ignored: peer connection establishing");
+            return;
+        }
         boolean alive = (peer != null && peer.isAlive());
         SessionManager.LatchResult result = sessionMgr.handleLatch(tappedPeer, coordinator, alive);
 
