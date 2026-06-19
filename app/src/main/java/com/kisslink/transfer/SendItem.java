@@ -6,7 +6,7 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.kisslink.utils.FileUtils;
+import com.kisslink.util.FileUtils;
 
 /**
  * 一個待送出的項目(雙向 peer 模型下,任一端都能送)。

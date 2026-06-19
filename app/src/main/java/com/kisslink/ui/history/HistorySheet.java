@@ -25,8 +25,8 @@ import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
 import com.kisslink.data.repository.TransferRepository;
-import com.kisslink.utils.FileUtils;
-import com.kisslink.utils.ThumbUtils;
+import com.kisslink.util.FileUtils;
+import com.kisslink.util.ThumbUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -179,7 +179,7 @@ public class HistorySheet extends BottomSheetDialogFragment {
                         DateUtils.MINUTE_IN_MILLIS, DateUtils.WEEK_IN_MILLIS, 0).toString();
                 String peer = hd.peer != null && !hd.peer.isEmpty() ? " · " + hd.peer : "";
                 vh.peerTime.setText("· " + when + peer);
-                vh.count.setText(hd.count + " 個");
+
             } else {
                 TransferRecordEntity r = (TransferRecordEntity) o;
                 FileVH vh = (FileVH) h;
@@ -245,12 +245,11 @@ public class HistorySheet extends BottomSheetDialogFragment {
 
     // ── ViewHolders ──
     static class HeaderVH extends RecyclerView.ViewHolder {
-        final TextView dir, peerTime, count;
+        final TextView dir, peerTime;
         HeaderVH(@NonNull View v) {
             super(v);
             dir = v.findViewById(R.id.tvDir);
             peerTime = v.findViewById(R.id.tvPeerTime);
-            count = v.findViewById(R.id.tvCount);
         }
     }
     static class FileVH extends RecyclerView.ViewHolder {

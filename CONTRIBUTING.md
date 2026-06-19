@@ -1,6 +1,7 @@
 # KissLink 貢獻指南
 
-> 本文件說明如何參與 KissLink 開發，包含環境設定、分支策略、程式碼規範和提交流程。
+> 本文件說明如何參與 KissLink 開發，包含環境設定、開發流程和提交規範。
+> 完整的架構標準、CI/CD 流程和 Linter 規範請參考 `docs/ARCHITECTURE_GUIDE.md`。
 
 ---
 
@@ -30,35 +31,6 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 # 自動修正 linter 問題
 ./gradlew ktlintFormat spotlessApply
 ```
-
----
-
-## 分支策略
-
-```
-main ─────────────────────────────────────────────
-  │
-  ├── develop ────────────────────────────────────
-  │     │
-  │     ├── feature/nfc-refactor ────────────────
-  │     │
-  │     ├── feature/wifi-direct-fix ─────────────
-  │     │
-  │     └── bugfix/timeout-issue ────────────────
-  │
-  ├── release/v1.1.0 ────────────────────────────
-  │
-  └── hotfix/critical-fix ────────────────────────
-```
-
-### 分支命名
-
-| 類型 | 格式 | 範例 |
-|------|------|------|
-| Feature | `feature/short-description` | `feature/nfc-custom-aid` |
-| Bug Fix | `bugfix/short-description` | `bugfix/wifi-timeout` |
-| Hotfix | `hotfix/short-description` | `hotfix/crash-on-start` |
-| Release | `release/v1.1.0` | `release/v1.1.0` |
 
 ---
 
@@ -115,101 +87,9 @@ git push origin feature/my-new-feature
 | `ui` | 使用者介面 |
 | `profile` | 聯絡卡 |
 
-### 3. 程式碼規範
+---
 
-#### Linter
-
-| 工具 | 用途 | 執行指令 |
-|------|------|---------|
-| ktlint | Kotlin 程式碼風格 | `./gradlew ktlintCheck` |
-| spotless | Java 程式碼風格 | `./gradlew spotlessCheck` |
-| detekt | Kotlin 靜態分析 | `./gradlew detekt` |
-| Android Lint | Android 最佳實踐 | `./gradlew :app:lintDebug` |
-
-**規則**：
-- 所有 linter 必須通過才能合併
-- 使用 `./gradlew ktlintFormat spotlessApply` 自動修正
-- 禁止 `@Suppress` 除非有明確理由
-
-#### 程式碼風格
-
-| 規範 | 說明 |
-|------|------|
-| 檔案長度 | 單一檔案不超過 400 行 |
-| 方法長度 | 單一方法不超過 50 行 |
-| 類別職責 | 單一職責原則（SRP） |
-| 命名 | 類別 PascalCase、方法 camelCase、常數 SCREAMING_SNAKE_CASE |
-| 縮排 | 4 空格 |
-| 行長 | 120 字元上限 |
-| Import | 不使用 wildcard import，按字母排序 |
-
-### 4. 架構原則
-
-#### Clean Architecture 分層
-
-```
-Presentation → Domain → Data
-```
-
-- **Presentation**：Activity / Fragment / Compose UI / ViewModel
-- **Domain**：UseCase / Domain Model / Repository Interface
-- **Data**：Repository Implementation / Data Source / External Service
-
-#### 單向資料流
-
-```
-使用者互動 → ViewModel → UseCase → Repository → DataSource
-                ↑                                        │
-                └──── StateFlow ←────────────────────────┘
-```
-
-#### 依賴注入
-
-使用 Hilt，構造函式注入，不用 Service Locator。
-
-#### 狀態管理
-
-- 使用 `StateFlow`（取代 `LiveData`）
-- 單一 State 對象，不可變
-- 狀態轉換透過 `copy()` + reducer
-
-### 5. 測試
-
-#### 測試金字塔
-
-```
-        ┌─────────┐
-        │ E2E Test│  ← 少量，實機測試
-       ┌┴─────────┴┐
-       │ Integration│  ← 中量，API 測試
-      ┌┴────────────┴┐
-      │  Unit Test    │  ← 大量，快速
-      └───────────────┘
-```
-
-#### 執行測試
-
-```bash
-# 單元測試
-./gradlew :app:testDebugUnitTest
-
-# 整合測試（需要模擬器/實機）
-./gradlew :app:connectedDebugAndroidTest
-
-# 覆蓋率報告
-./gradlew :app:jacocoTestReport
-```
-
-#### 測試覆蓋率目標
-
-| 模組 | 目標覆蓋率 |
-|------|-----------|
-| Domain Layer | 80% |
-| Data Layer | 60% |
-| Presentation Layer | 40% |
-| 整體 | 60% |
-
-### 6. Pull Request 流程
+## Pull Request 流程
 
 1. **建立 PR**：從 feature 分支合併到 develop
 2. **填寫 PR 描述**：
@@ -220,7 +100,7 @@ Presentation → Domain → Data
 4. **Code Review**：至少一位審查者批准
 5. **合併**：使用 squash merge 保持 develop 分支乾淨
 
-#### PR 檢查清單
+### PR 檢查清單
 
 - [ ] 程式碼符合 linter 規範
 - [ ] 新增/修改的公開 API 有文件
@@ -233,11 +113,9 @@ Presentation → Domain → Data
 
 ---
 
-## 已知問題
+## 關鍵教訓
 
 參考 `docs/LESSONS_LEARNED.md` 取得完整的踩坑紀錄。
-
-### 關鍵教訓
 
 1. **單一決策點**：所有 session reset 邏輯必須集中在一個方法中
 2. **State Owner**：每份跨層狀態必須有明確的唯一 owner
@@ -257,7 +135,7 @@ Presentation → Domain → Data
 | 文件 | 說明 |
 |------|------|
 | `README.md` | 專案概述、建置方式 |
-| `docs/ARCHITECTURE_GUIDE.md` | 架構標準、CI/CD 流程 |
+| `docs/ARCHITECTURE_GUIDE.md` | 架構標準、CI/CD 流程、Linter 規範 |
 | `docs/LESSONS_LEARNED.md` | 踩坑紀錄 |
 | `CONTRIBUTING.md` | 本文件 |
 | `CHANGELOG.md` | 版本變更紀錄 |

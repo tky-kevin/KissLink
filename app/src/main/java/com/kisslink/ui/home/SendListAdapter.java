@@ -16,8 +16,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.transfer.TransferProtocol;
-import com.kisslink.utils.FileUtils;
-import com.kisslink.utils.ThumbUtils;
+import com.kisslink.util.FileUtils;
+import com.kisslink.util.ThumbUtils;
 
 import java.util.ArrayList;
 import java.util.List;

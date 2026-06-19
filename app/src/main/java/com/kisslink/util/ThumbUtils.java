@@ -1,4 +1,4 @@
-package com.kisslink.utils;
+package com.kisslink.util;
 
 import android.content.Context;
 import android.graphics.Bitmap;

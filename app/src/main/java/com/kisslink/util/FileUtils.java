@@ -1,4 +1,4 @@
-package com.kisslink.utils;
+package com.kisslink.util;
 
 import android.content.ContentResolver;
 import android.content.Context;

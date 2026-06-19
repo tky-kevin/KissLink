@@ -751,7 +751,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private void onHeadlineTapped() {
         if (binder == null) return;
         if (viewModel.isConnected()) {
-            new androidx.appcompat.app.AlertDialog.Builder(this)
+            androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.disconnect_title)
                     .setMessage(R.string.disconnect_msg)
                     .setNegativeButton(R.string.btn_cancel, null)
@@ -759,6 +759,11 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                         if (binder != null) binder.disconnect();
                     })
                     .show();
+            // 提升訊息文字行距
+            android.widget.TextView msgView = dialog.findViewById(android.R.id.message);
+            if (msgView != null) {
+                msgView.setLineSpacing(0f, 1.5f);
+            }
         } else if (isInterruptiblePairing(viewModel.lastPhase())) {
             binder.interruptPairing();
         }
@@ -832,7 +837,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     private static int iconForItem(SendItem it) {
-        return com.kisslink.utils.FileUtils.iconFor(it.itemType, it.mime, it.name);
+        return com.kisslink.util.FileUtils.iconFor(it.itemType, it.mime, it.name);
     }
 
     /** 傳送中：以待傳清單為基底，更新對應列的進度/完成（接收端改用收到橫幅，不進清單）。 */
@@ -933,7 +938,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     private static String sizeLabel(long bytes) {
-        return com.kisslink.utils.FileUtils.sizeLabel(bytes);
+        return com.kisslink.util.FileUtils.sizeLabel(bytes);
     }
 
     public static Intent intent(Context ctx) {

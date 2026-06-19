@@ -2,43 +2,18 @@
 
 最後更新：2026-06-10
 
-## 架構債（結構層級，非 bug；若要重構應先規劃這些）
+## 架構債務
 
-> 這些不影響目前可用性，但若要為「清晰度 / 可維護性」投資，ROI 最高的就是這幾項。
-> **不建議大改寫**——多數複雜度是 Wi-Fi Direct / BLE / NFC 的本質複雜度，重寫只會把已修的
-> edge case 重踩一遍。應以增量、實機測試當回歸網的方式處理。
+> 架構債務的詳細分析和重構規劃請參考 `docs/ARCHITECTURE_GUIDE.md` 第五節。
 
-1. **三套重疊的狀態機（單一真相源不明）**
-   `transfer/SessionState.Phase`、`pairing/PairingCoordinator.Phase`、`wifidirect/ConnectionState`
-   三個 enum 各自演進，靠 `FileTransferService.mapPhase()` + `SessionState.fromConnection()/fromTransfer()`
-   黏合。加一個新狀態要同步改多處，映射層容易漂移。
-   *方向：收斂成單一 phase 推進，後兩者退為邊界 adapter。*
+簡要清單：
+1. **三套重疊的狀態機** — `SessionState.Phase`、`PairingCoordinator.Phase`、`ConnectionState` 需收斂
+2. **狀態/生命週期歸屬模糊** — 每份跨層狀態需指定唯一 owner
+3. **FileTransferService God Object** — 需抽出 `SessionManager`
+4. **WifiDirectManager 狀態轉換分散** — 16+ 個 `setState()` 調用需收斂
+5. **時序耦合（magic delays）** — 固定延遲常數需評估事件驅動化
 
-2. **狀態 / 生命週期歸屬不清（已修一例，恐有同類）**
-   HCE token 曾由 `FileTransferService` 清、`HomeActivity` 補，沒有單一 owner →「中斷後本機無法被
-   碰讀」的死區。已修：改由 Service 在 `createCoordinator()` 統一（重新）發佈 token、`teardownSession()`
-   不再清。**同類「這份狀態到底誰擁有」的模糊可能還在**，例如 Wi-Fi 群組生命週期橫跨
-   Coordinator / Service / WifiDirectManager。
-   *方向：每份跨層狀態指定唯一 owner。*
-
-3. **`FileTransferService` 高耦合（god object）**
-   它同時管：NFC latch 序列化（`handleLatch`/`proceedWithLatch`）、coordinator 生命週期與
-   `sessionGen` 世代防護、peer socket 建立、Wi-Fi 群組拆建決策、前景服務 / 通知 / wake lock /
-   閒置拆除、HCE token。職責過多，是目前最該拆的單一檔案。
-   *方向：抽出 `SessionManager` 持有「一次貼合 → 連線 → 傳輸」的生命週期與重建決策，Service 退回成
-   薄薄的 Android 生命週期殼。*
-
-4. **`WifiDirectManager` 非同步狀態轉換分散**
-   狀態轉換散在 p2p `ActionListener`、`BroadcastReceiver`、`startGoPoll`/`startClientPoll`、
-   `startTimeout`、`NetworkCallback` 等多處，靠 `starting` 布林 + `state == X` 守衛防重入。
-   **注意：`NetworkCallback.onAvailable` 在背景執行緒觸發，故 `stateLd` 必須用 `postValue`
-   （不可改 `setValue`，會 crash）；`starting` 守衛因此是必要的、不是冗餘。**
-   *方向：收斂成單一有守衛的 `transition()`，但保留 `postValue`。retrofit 風險最高，最後再動。*
-
-5. **時序耦合（magic delays）**
-   `RESET_SETTLE_MS = 1800ms` 固定沉澱、`STAGE_MIN_DWELL_MS`、`IDLE_TEARDOWN_MS = 45s` 等為經驗值。
-   部分是 P2P 框架逼出的本質複雜度（搬不走），但固定 1800ms 在「剛拆掉一個真實成形的群組」後偶爾不足。
-   *方向：能用「狀態真正到達 IDLE」事件驅動的就別用固定延遲；但 P2P 框架不一定給乾淨事件，需評估。*
+---
 
 ## 待實作 / 待強化
 
@@ -46,8 +21,6 @@
   邏輯已實作，但只有當被觸碰的舊裝置在這次貼合中擔任 **NFC reader**（讀到對方 token）才會切換；
   若它擔任 **tag**（HCE 被讀），目前無法辨識新對象、會被當成「同對象 resume」而不切換。
   解法：tag 側在隨後的 BLE 換 token 取得對方 nonce 後再判定是否切換。需動到配對核心，且需三台手機驗證。
-  （某 AI review 建議的「平行 pending session / PairingManager」可解此問題，但平行雙 BLE 會話 + 單一
-  HCE token/radio 風險高、ROI 低；**僅其「分離 session 生命週期管理」的內核值得，平行會話不建議做**。）
 
 - **「傳完再切換新對象」的時間窗**：要求新對象在整段傳輸期間維持配對狀態（BLE 廣播未逾時）。
   傳大檔時新對象可能已逾時，導致切換失敗。可考慮延長新對象 BLE 廣播時間或加重試。
@@ -71,6 +44,8 @@
   會清掉**（已實測：kill 後群組 `groupFormed:true` 殘留，重開即 `mGroup null`）。需使用者端關閉電池
   最佳化 / 開啟自啟動才能完全穩定（非程式可完全解決）。
 
+---
+
 ## 已知小問題（可接受 / 待打磨）
 
 - Launcher 圖示為全幅 adaptive icon，圓形遮罩會裁掉四角（僅漸層背景，主體角色與 Wi-Fi 保留）。
@@ -78,6 +53,8 @@
 - 開系統選檔器會讓 Activity `onStop` → 進入背景閒置計時；若在選檔器停留超過 `IDLE_TEARDOWN_MS`（45s）
   且已連線，連線會被自動拆除（返回後待傳清單保留，需再碰一下重連）。若實際造成困擾，可在自家選檔器
   開啟期間抑制計時。
+
+---
 
 ## 環境 / 建置備忘
 
