@@ -52,13 +52,14 @@ import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
  * 中央視覺模組（Compose）。
  *
  * 設計：
- *  - **NFC 波紋常駐**：同心圓往外擴散，所有狀態都顯示（待機呼吸感 = 與未連線相同的波紋，只是中央換成頭像）。
+ *  - **NFC 波紋常駐**：像素方格組成的環往外擴散，所有狀態都顯示（待機呼吸感 = 與未連線相同的波紋，只是中央換成頭像）。
  *  - **中央**：未連線=NFC 節點；已連線=對方頭像（較大）。
  *  - **傳輸中**：頭像外圈環形進度條（12 點鐘起跑、半徑大於頭像 → 不被遮擋）；速度由外層 headline 顯示，頭像上不放數字。
  *  - **完成**：頭像處先播打勾動畫（此時隱藏頭像），再淡回頭像。
@@ -203,16 +204,32 @@ private fun BeamStage(
                 val ringR = avatarPx + ringGap.toPx()
                 val strokeW = 5.dp.toPx()
 
-                // 常駐 NFC 漣漪。傳輸時從進度環往外擴散（不從頭像內擴散）；其餘狀態從中央往外。
+                // 常駐 NFC 漣漪（像素網格）。傳輸時從進度環往外擴散；其餘狀態從中央往外。
                 val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else avatarPx * 0.5f
                 val rippleMax = (if (transferring || done) ringR else avatarPx) + 46.dp.toPx()
+                val px = 4.dp.toPx()
                 for (i in 0..2) {
                     val t = (ripple + i / 3f) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
                     val a = (1f - t).coerceIn(0f, 1f) * 0.55f
-                    if (a > 0f) {
-                        drawCircle(ACCENT.copy(alpha = a), radius = r, center = c,
-                            style = Stroke(width = 2.5.dp.toPx()))
+                    if (a <= 0f) continue
+                    val ringW = px * 2.5f
+                    val rIn = (r - ringW / 2f).coerceAtLeast(0f)
+                    val rOut = r + ringW / 2f
+                    val col = ACCENT.copy(alpha = a)
+                    val x0 = ((c.x - rOut) / px).roundToInt().coerceAtLeast(0)
+                    val x1 = ((c.x + rOut) / px).roundToInt().coerceAtMost((size.width / px).roundToInt())
+                    val y0 = ((c.y - rOut) / px).roundToInt().coerceAtLeast(0)
+                    val y1 = ((c.y + rOut) / px).roundToInt().coerceAtMost((size.height / px).roundToInt())
+                    for (gx in x0..x1) {
+                        for (gy in y0..y1) {
+                            val cx = gx * px + px / 2f
+                            val cy = gy * px + px / 2f
+                            val d = hypot((cx - c.x).toDouble(), (cy - c.y).toDouble()).toFloat()
+                            if (d in rIn..rOut) {
+                                drawRect(col, topLeft = Offset(gx * px, gy * px), size = Size(px, px))
+                            }
+                        }
                     }
                 }
 

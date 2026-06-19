@@ -22,22 +22,36 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <com.google.android.material.imageview.ShapeableImageView
-        android:id="@+id/ivAvatar"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+    <FrameLayout
+        android:id="@+id/avatarFrame"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:layout_marginEnd="16dp"
-        android:scaleType="centerCrop"
-        android:background="@drawable/bg_avatar"
-        android:src="@drawable/ic_avatar_default"
-        android:padding="7dp"
-        android:contentDescription="@string/cd_avatar"
-        app:strokeColor="@color/beam_track"
-        app:strokeWidth="1.5dp"
-        app:shapeAppearanceOverlay="@style/Beam.Avatar.Circle"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         app:layout_constraintTop_toTopOf="@id/tvWordmark"
         app:layout_constraintBottom_toBottomOf="@id/tvWordmark"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- 邊框環：ring drawable，不受 ShapeableImageView clip 影響 -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_avatar_ring" />
+
+        <!-- 頭像：縮進 2dp 讓邊框環可見 -->
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/ivAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_margin="2dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/bg_avatar"
+            android:src="@drawable/ic_avatar_default"
+            android:padding="6dp"
+            android:contentDescription="@string/cd_avatar"
+            app:shapeAppearanceOverlay="@style/Beam.Avatar.Circle" />
+    </FrameLayout>
 
     <ImageButton
         android:id="@+id/ibHistory"
@@ -48,9 +62,9 @@
         android:src="@drawable/ic_history"
         android:scaleType="centerInside"
         android:contentDescription="@string/cd_history"
-        app:layout_constraintTop_toTopOf="@id/ivAvatar"
-        app:layout_constraintBottom_toBottomOf="@id/ivAvatar"
-        app:layout_constraintEnd_toStartOf="@id/ivAvatar" />
+        app:layout_constraintTop_toTopOf="@id/avatarFrame"
+        app:layout_constraintBottom_toBottomOf="@id/avatarFrame"
+        app:layout_constraintEnd_toStartOf="@id/avatarFrame" />
 
     <!-- ══ 下方面板（headline + 內容 + 按鈕）固定在底，Beam 撐滿其上空間 ══ -->
     <LinearLayout
@@ -159,6 +173,12 @@
                     android:textColor="@color/beam_ink"
                     android:textSize="15sp"
                     android:textFontWeight="600"
+                    android:maxLines="1"
+                    android:ellipsize="none"
+                    app:autoSizeTextType="uniform"
+                    app:autoSizeMinTextSize="10sp"
+                    app:autoSizeMaxTextSize="15sp"
+                    app:autoSizeStepGranularity="0.5sp"
                     tools:text="3 個待傳項目" />
 
                 <TextView

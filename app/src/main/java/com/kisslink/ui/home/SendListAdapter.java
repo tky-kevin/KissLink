@@ -34,13 +34,18 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     public interface OnItemClickListener { void onItemClick(SendRow row); }
 
     private final List<SendRow> rows = new ArrayList<>();
-    // daemon 執行緒，且在 onDetachedFromRecyclerView 關閉：避免每次 Activity 重建殘留 2 條縮圖執行緒。
-    private final ExecutorService thumbPool = Executors.newFixedThreadPool(2, r -> {
-        Thread t = new Thread(r, "send-thumb");
-        t.setDaemon(true);
-        return t;
-    });
+    // 縮圖執行緒池，在 onDetachedFromRecyclerView 關閉（避免累積），
+    // 並在 onAttachedToRecyclerView 重建（BottomSheet 展開/收合會 detach/attach）。
+    private ExecutorService thumbPool = newThumbPool();
     private final Handler main = new Handler(Looper.getMainLooper());
+
+    private static ExecutorService newThumbPool() {
+        return Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "send-thumb");
+            t.setDaemon(true);
+            return t;
+        });
+    }
     @androidx.annotation.Nullable private OnRemove onRemove;
     @androidx.annotation.Nullable private OnItemClickListener onItemClickListener;
 
@@ -109,20 +114,33 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         h.thumbTag = r.thumbUri;
         if (r.isVisualMedia() && r.thumbUri != null) {
             final Uri want = r.thumbUri;
-            thumbPool.execute(() -> {
-                Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 64));
-                if (bm == null) return;
-                main.post(() -> {
-                    if (want.equals(h.thumbTag)) {
-                        h.thumb.setPadding(0, 0, 0, 0);
-                        h.thumb.setImageBitmap(bm);
-                    }
+            try {
+                thumbPool.execute(() -> {
+                    Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 64));
+                    if (bm == null) return;
+                    main.post(() -> {
+                        if (want.equals(h.thumbTag)) {
+                            h.thumb.setPadding(0, 0, 0, 0);
+                            h.thumb.setImageBitmap(bm);
+                        }
+                    });
                 });
-            });
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                // pool 已 shutdown（不應發生，但作為最後防線）
+            }
         }
     }
 
     @Override public int getItemCount() { return rows.size(); }
+
+    @Override
+    public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
+        super.onAttachedToRecyclerView(recyclerView);
+        // BottomSheet 展開/收合會觸發 detach → attach；若池子已關閉則重建
+        if (thumbPool.isShutdown()) {
+            thumbPool = newThumbPool();
+        }
+    }
 
     @Override
     public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {

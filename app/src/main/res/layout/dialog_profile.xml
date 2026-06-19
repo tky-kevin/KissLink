@@ -124,18 +124,17 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnEditToggle"
-                    style="@style/Beam.PickButton"
+                    style="@style/Beam.CardActionButton.Outline"
                     android:layout_width="0dp"
                     android:layout_height="52dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="6dp"
                     app:icon="@drawable/ic_edit"
-                    app:iconTint="@color/beam_ink"
                     android:text="@string/profile_edit" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSendCard"
-                    style="@style/Beam.SendButton"
+                    style="@style/Beam.CardActionButton.Filled"
                     android:layout_width="0dp"
                     android:layout_height="52dp"
                     android:layout_weight="1"

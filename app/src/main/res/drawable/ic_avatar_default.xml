@@ -1,7 +1,9 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <!-- 漫遊者：四芒星（指引/羅盤）徽記 -->
-    <path android:fillColor="#B07A32"
-        android:pathData="M12,1.5 C12.6,7.8 16.2,11.4 22.5,12 C16.2,12.6 12.6,16.2 12,22.5 C11.4,16.2 7.8,12.6 1.5,12 C7.8,11.4 11.4,7.8 12,1.5 Z"/>
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="#23201B"
+        android:pathData="M9 2h6v2H9zm0 8h6v2H9zm6-6h2v6h-2zM7 4h2v6H7zM4 18h2v4H4zm14 0h2v4h-2zM8 14h8v2H8zm-2 2h2v2H6zm10 0h2v2h-2z" />
 </vector>
+

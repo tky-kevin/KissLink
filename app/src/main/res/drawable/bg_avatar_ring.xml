@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 頭像外框環：用 ring shape 畫邊框，不受 image clip 影響 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="ring"
+    android:innerRadiusRatio="9"
+    android:thicknessRatio="9"
+    android:useLevel="false">
+    <solid android:color="@color/beam_track" />
+</shape>
