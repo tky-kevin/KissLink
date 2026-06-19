@@ -15,8 +15,8 @@ final class IdleTeardownManager {
 
     private final Handler mainHandler;
     private Runnable onTeardown;
-    private boolean uiBound = false;
-    private boolean transferring = false;
+    private volatile boolean uiBound = false;
+    private volatile boolean transferring = false;
 
     private final Runnable idleTeardown = () -> {
         if (!uiBound && !transferring) {

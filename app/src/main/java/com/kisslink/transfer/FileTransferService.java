@@ -23,6 +23,7 @@ import com.kisslink.pairing.PairingCoordinator;
 import com.kisslink.pairing.PairingToken;
 import com.kisslink.wifidirect.WifiDirectManager;
 
+import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
 
@@ -89,7 +90,8 @@ public class FileTransferService extends Service {
         }
 
         public void sendItems(@NonNull List<SendItem> items) {
-            if (peer != null) peer.sendItems(items);
+            final PeerConnection p = peer;
+            if (p != null) p.sendItems(items);
             else Log.w(TAG, "sendItems before connected");
         }
 
@@ -152,6 +154,8 @@ public class FileTransferService extends Service {
         idleManager = new IdleTeardownManager(mainHandler, this::stopSelf);
         notificationHelper = new ServiceNotificationHelper(this);
         wakeLockManager = new WakeLockManager(this);
+        startForeground(ServiceNotificationHelper.NOTIF_ID,
+                notificationHelper.build("準備配對…", 0));
         wifi = new WifiDirectManager(this);
         wifi.registerReceiver(this);
         wifi.removeGroup();
@@ -160,8 +164,6 @@ public class FileTransferService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(ServiceNotificationHelper.NOTIF_ID,
-                notificationHelper.build("準備配對…", 0));
         return START_NOT_STICKY;
     }
 
@@ -280,6 +282,11 @@ public class FileTransferService extends Service {
         peerStarting = true;
         PeerConnector.Callback cb = new PeerConnector.Callback() {
             @Override public void onSocketReady(Socket socket) {
+                if (peer != null) {
+                    try { socket.close(); } catch (IOException ignored) {}
+                    peerStarting = false;
+                    return;
+                }
                 startPeer(socket);
                 peerStarting = false;
             }

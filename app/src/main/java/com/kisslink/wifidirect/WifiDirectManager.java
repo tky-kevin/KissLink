@@ -12,6 +12,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 
 import com.kisslink.model.GroupCredential;
@@ -89,7 +90,9 @@ public class WifiDirectManager implements WifiDirectEventCallback {
     public void registerReceiver(@NonNull Context ctx) {
         if (broadcastReceiver != null) return; // 防止重複註冊
         broadcastReceiver = new WifiDirectReceiver(this);
-        ctx.registerReceiver(broadcastReceiver, buildIntentFilter());
+        // ContextCompat 在所有 API 上一致套用 NOT_EXPORTED(API 33+ 強制旗標,舊版向下相容)。
+        ContextCompat.registerReceiver(ctx, broadcastReceiver, buildIntentFilter(),
+                ContextCompat.RECEIVER_NOT_EXPORTED);
         Log.d(TAG, "BroadcastReceiver registered");
     }
 
@@ -273,6 +276,9 @@ public class WifiDirectManager implements WifiDirectEventCallback {
      * （實測 ~13Mbps）；未連 STA 或 STA 在 5GHz → GO 可在 5GHz 開群組（數百 Mbps）。
      * 任何不確定一律樂觀回 {@code true}（退回原 goIntent 選舉，絕不比舊版差）。
      */
+    // getConnectionInfo() 已棄用,但其替代品 NetworkCapabilities.getTransportInfo() 需 API 31+
+    // 且只能透過 network callback 非同步取得;minSdk 29 下仍需此同步查詢。
+    @SuppressWarnings("deprecation")
     public static boolean canHostFastGroup(@NonNull Context ctx) {
         try {
             android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)

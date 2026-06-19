@@ -166,8 +166,10 @@ public final class TransferProtocol {
     public static Header makeFileMeta(int fileId, int fileCount, long totalSize, int metaLen) {
         Header h = new Header();
         h.type = TYPE_FILE_META;
-        h.fileId = fileId; h.fileCount = (short) fileCount;
-        h.totalSize = totalSize; h.metaLen = (short) metaLen;
+        h.fileId = fileId;
+        h.fileCount = fileCount > Short.MAX_VALUE ? Short.MAX_VALUE : (short) fileCount;
+        h.totalSize = totalSize;
+        h.metaLen = metaLen > Short.MAX_VALUE ? Short.MAX_VALUE : (short) metaLen;
         return h;
     }
     public static Header makeHello() {
@@ -185,7 +187,8 @@ public final class TransferProtocol {
         Header h = new Header();
         h.type = TYPE_FILE_META;
         h.fileId = itemId; h.itemType = itemType;
-        h.totalSize = totalSize; h.metaLen = (short) metaLen;
+        h.totalSize = totalSize;
+        h.metaLen = metaLen > Short.MAX_VALUE ? Short.MAX_VALUE : (short) metaLen;
         return h;
     }
     public static Header makeReadyAck(int fileId) {

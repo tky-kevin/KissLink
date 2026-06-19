@@ -181,6 +181,8 @@ public class PeerConnection {
         }
     }
 
+    // getConnectionInfo() 已棄用;替代品需 API 31+ 非同步 callback,minSdk 29 下保留同步查詢。
+    @SuppressWarnings("deprecation")
     private void logLinkInfo() {
         try {
             android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)

@@ -1,5 +1,6 @@
 package com.kisslink.ui.profile;
 
+import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -18,15 +19,31 @@ final class CardDialogs {
     static void applyWindow(@Nullable Dialog d) {
         if (d == null || d.getWindow() == null) return;
         Window w = d.getWindow();
-        w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // 全螢幕視窗：卡片在版面置中，翻飛動畫往上/往下都不會被視窗邊緣裁切；
+        // 透明區域維持暗化/模糊，點透明區由各 sheet 處理關閉。
+        w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        w.setDimAmount(0.55f);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        // 暗化/模糊由 0 開始，名片顯示時平滑淡入（dim 0→0.55、blur 0→48）
+        w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        w.setDimAmount(0f);
+        final boolean blur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
+        if (blur) {
             w.setFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
                     WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
-            w.getAttributes().setBlurBehindRadius(48);
+            WindowManager.LayoutParams lp0 = w.getAttributes();
+            lp0.setBlurBehindRadius(0);
+            w.setAttributes(lp0);
         }
+        ValueAnimator bgIn = ValueAnimator.ofFloat(0f, 1f);
+        bgIn.setDuration(360);
+        bgIn.addUpdateListener(a -> {
+            float p = (float) a.getAnimatedValue();
+            WindowManager.LayoutParams lp = w.getAttributes();
+            lp.dimAmount = 0.55f * p;
+            if (blur) lp.setBlurBehindRadius((int) (48 * p));
+            w.setAttributes(lp);
+        });
+        bgIn.start();
         // 進場：卡片淡入 + 輕微上滑 + 放大（有機感）
         View content = w.getDecorView();
         content.setAlpha(0f);

@@ -8,6 +8,8 @@ import android.net.wifi.p2p.WifiP2pInfo;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.util.Log;
 
+import androidx.core.content.IntentCompat;
+
 /**
  * 監聽 Wi-Fi Direct 系統廣播，將事件轉發給 {@link WifiDirectEventCallback}。
  *
@@ -54,8 +56,8 @@ public class WifiDirectReceiver extends BroadcastReceiver {
             }
 
             case WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION: {
-                WifiP2pDevice device =
-                        intent.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE);
+                WifiP2pDevice device = IntentCompat.getParcelableExtra(
+                        intent, WifiP2pManager.EXTRA_WIFI_P2P_DEVICE, WifiP2pDevice.class);
                 if (device != null) callback.onThisDeviceChanged(device);
                 break;
             }

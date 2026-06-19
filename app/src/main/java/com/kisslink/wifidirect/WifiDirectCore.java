@@ -54,7 +54,7 @@ class WifiDirectCore {
 
     /** 同步重入守衛:createGroupAsGO/connectAsClient 進行中為 true,擋住重疊呼叫的競態
      *  (state 用 postValue 非同步更新,光靠 state 檢查擋不住同一輪的第二次呼叫)。 */
-    boolean starting = false;
+    volatile boolean starting = false;
 
     // ── 超時計時器 ─────────────────────────────────────────────
     final Handler mainHandler = new Handler(Looper.getMainLooper());

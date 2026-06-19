@@ -9,6 +9,7 @@ import android.util.Log;
 import com.kisslink.model.GroupCredential;
 
 import java.security.SecureRandom;
+import java.util.Locale;
 
 /**
  * GO 端（傳送方）流程：建立 Wi-Fi Direct 群組、產生/取回連線憑證、進入
@@ -177,7 +178,9 @@ class GroupOwnerController {
 
             GroupCredential cred = new GroupCredential(
                     ssid, pass, WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT);
-            Log.i(TAG, "GroupCredential ready: " + cred);
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "GroupCredential ready (ssid=" + ssid + ")");
+            }
             core.credentialLd.postValue(cred);
             core.setState(ConnectionState.HOSTING);
             goPoller.start(); // 啟動 Client 偵測輪詢（廣播可能不可靠）
@@ -188,7 +191,7 @@ class GroupOwnerController {
     private static String generateShortId() {
         byte[] b = new byte[2];
         new SecureRandom().nextBytes(b);
-        return String.format("%02X%02X", b[0] & 0xFF, b[1] & 0xFF);
+        return String.format(Locale.ROOT, "%02X%02X", b[0] & 0xFF, b[1] & 0xFF);
     }
 
     /** 產生 16 字元英數字 Passphrase（符合 WPA2 最短 8 字元要求）。 */

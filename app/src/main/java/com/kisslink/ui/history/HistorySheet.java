@@ -30,6 +30,7 @@ import com.kisslink.util.ThumbUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -135,13 +136,16 @@ public class HistorySheet extends BottomSheetDialogFragment {
     private final class Adapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         private static final int T_HEADER = 0, T_FILE = 1;
         private final List<Object> items = new ArrayList<>();
-        // daemon 執行緒並在 onDetachedFromRecyclerView 關閉：避免每次開啟歷史 sheet 殘留 2 條縮圖執行緒。
-        private final ExecutorService thumbPool = Executors.newFixedThreadPool(2, r -> {
-            Thread t = new Thread(r, "history-thumb");
-            t.setDaemon(true);
-            return t;
-        });
+        private ExecutorService thumbPool = createThumbPool();
         private final Handler main = new Handler(Looper.getMainLooper());
+
+        private ExecutorService createThumbPool() {
+            return Executors.newFixedThreadPool(2, r -> {
+                Thread t = new Thread(r, "history-thumb");
+                t.setDaemon(true);
+                return t;
+            });
+        }
 
         @SuppressWarnings("NotifyDataSetChanged")
         void submit(List<Object> next) {
@@ -152,6 +156,14 @@ public class HistorySheet extends BottomSheetDialogFragment {
         public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
             super.onDetachedFromRecyclerView(recyclerView);
             thumbPool.shutdownNow();
+        }
+
+        @Override
+        public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
+            super.onAttachedToRecyclerView(recyclerView);
+            if (thumbPool.isShutdown()) {
+                thumbPool = createThumbPool();
+            }
         }
 
         @Override public int getItemViewType(int position) {
@@ -271,7 +283,7 @@ public class HistorySheet extends BottomSheetDialogFragment {
         if (name == null) return null;
         int dot = name.lastIndexOf('.');
         if (dot < 0) return null;
-        String ext = name.substring(dot + 1).toLowerCase();
+        String ext = name.substring(dot + 1).toLowerCase(Locale.ROOT);
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
     }
 

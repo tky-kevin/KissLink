@@ -121,6 +121,7 @@ public class BleCredentialServer {
 
     /** 本機當選 GO:把憑證透過 notify 推給已連線的 central。 */
     @SuppressLint("MissingPermission")
+    @SuppressWarnings("deprecation") // setValue/notifyCharacteristicChanged 的新多載需 API 33;minSdk 29 保留舊 API
     public void publishCredential(@NonNull GroupCredential cred) {
         if (gattServer == null || credentialChar == null || connectedDevice == null) {
             Log.w(TAG, "publishCredential: not ready (server/char/device null)");
@@ -201,6 +202,7 @@ public class BleCredentialServer {
         }
 
         @SuppressLint("MissingPermission")
+        @SuppressWarnings("deprecation") // getValue() 的替代品需 API 33;minSdk 29 保留舊 API
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device, int requestId,
                                                 int offset, BluetoothGattCharacteristic characteristic) {

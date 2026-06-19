@@ -1,5 +1,7 @@
 package com.kisslink.transfer;
 
+import java.util.Locale;
+
 /**
  * 傳輸進度快照，由 PeerConnection 透過 LiveData 發射。
  * 不可變（所有欄位 final），可安全跨執行緒傳遞。
@@ -51,15 +53,15 @@ public final class TransferProgress {
     /** 格式化速度字串，例如「12.3 MB/s」。 */
     public String speedLabel() {
         if (speedBps < 1024)           return speedBps + " B/s";
-        if (speedBps < 1024 * 1024)   return String.format("%.1f KB/s", speedBps / 1024.0);
-        return String.format("%.1f MB/s", speedBps / (1024.0 * 1024));
+        if (speedBps < 1024 * 1024)   return String.format(Locale.getDefault(), "%.1f KB/s", speedBps / 1024.0);
+        return String.format(Locale.getDefault(), "%.1f MB/s", speedBps / (1024.0 * 1024));
     }
 
     /** 格式化剩餘時間，例如「剩餘 00:42」。 */
     public String etaLabel() {
         if (speedBps <= 0 || totalBytes <= 0) return "";
         long remaining = (totalBytes - doneBytes) / speedBps;
-        return String.format("剩餘 %02d:%02d", remaining / 60, remaining % 60);
+        return String.format(Locale.getDefault(), "剩餘 %02d:%02d", remaining / 60, remaining % 60);
     }
 
     // ── 靜態工廠 ──────────────────────────────────────────────

@@ -221,12 +221,27 @@ final class PeerReceiver implements Runnable {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                corrupt = true;
+            } catch (Exception e) {
+                Log.w(TAG, "writeLoop unexpected error", e);
+                corrupt = true;
+            } finally {
+                try { if (out != null) out.close(); } catch (IOException ignored) {}
+                out = null;
             }
         }
 
         private void drainWriter() {
-            try { wqueue.put(PeerConnection.CHUNK_EOF); writer.join(); }
-            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                wqueue.put(PeerConnection.CHUNK_EOF);
+                writer.join(5000);
+                if (writer.isAlive()) {
+                    Log.w(TAG, "Writer thread stuck, forcing close");
+                    corrupt = true;
+                    try { if (out != null) out.close(); } catch (IOException ignored) {}
+                    out = null;
+                }
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
 
         boolean finish() {

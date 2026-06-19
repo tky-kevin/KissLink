@@ -15,6 +15,7 @@ import android.util.Log;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.IntentCompat;
 
 import com.kisslink.nfc.KissLinkHCEService;
 import com.kisslink.nfc.NfcForegroundHelper;
@@ -144,7 +145,7 @@ public class NfcPairingController {
         }
 
         // 連上標籤,用 IsoDep 送 SELECT AID 讀對方 token(背景執行緒)
-        Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        Tag tag = IntentCompat.getParcelableExtra(intent, NfcAdapter.EXTRA_TAG, Tag.class);
         if (tag != null) readTagAsync(tag);
     }
 

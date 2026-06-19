@@ -11,6 +11,8 @@ import androidx.annotation.Nullable;
 import com.kisslink.R;
 import com.kisslink.transfer.TransferProtocol;
 
+import java.util.Locale;
+
 /**
  * 檔案相關工具函式（SAF / ContentResolver 適配）。
  */
@@ -98,7 +100,7 @@ public final class FileUtils {
     /** 依副檔名推測圖示資源 ID。 */
     public static int guessIcon(String fileName) {
         if (fileName == null) return R.drawable.ic_file;
-        String lower = fileName.toLowerCase();
+        String lower = fileName.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
                 || lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".heic")
                 || lower.endsWith(".heif") || lower.endsWith(".bmp"))

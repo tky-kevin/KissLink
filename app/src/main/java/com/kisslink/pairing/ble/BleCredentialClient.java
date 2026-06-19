@@ -109,6 +109,7 @@ public class BleCredentialClient {
 
     /** 本機當選 GO:把憑證 write 給 peripheral。 */
     @SuppressLint({"MissingPermission", "deprecation"})
+    @SuppressWarnings("deprecation") // setValue/writeCharacteristic 的新多載需 API 33;minSdk 29 保留舊 API
     public void publishCredential(@NonNull GroupCredential cred) {
         if (gatt == null || credentialChar == null) {
             Log.w(TAG, "publishCredential: not ready");
@@ -231,6 +232,7 @@ public class BleCredentialClient {
         }
 
         @SuppressLint({"MissingPermission", "deprecation"})
+        @SuppressWarnings("deprecation")
         @Override public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
             Log.d(TAG, "MTU = " + mtu + " → writing own token");
             // 1) 寫自己的 token 給 peripheral
@@ -240,6 +242,7 @@ public class BleCredentialClient {
         }
 
         @SuppressLint({"MissingPermission", "deprecation"})
+        @SuppressWarnings("deprecation")
         @Override public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic ch, int status) {
             if (ch == null) return;
             if (BleConstants.CHAR_PEER_TOKEN.equals(ch.getUuid())) {
@@ -265,6 +268,7 @@ public class BleCredentialClient {
         }
 
         @SuppressLint("deprecation")
+        @SuppressWarnings("deprecation")
         @Override public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic ch) {
             if (ch != null && BleConstants.CHAR_CREDENTIAL.equals(ch.getUuid())) {
                 deliverCredential(parseCredential(ch.getValue())); // notify 路徑
@@ -272,6 +276,7 @@ public class BleCredentialClient {
         }
 
         @SuppressLint("deprecation")
+        @SuppressWarnings("deprecation")
         @Override public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic ch, int status) {
             if (ch != null && BleConstants.CHAR_CREDENTIAL.equals(ch.getUuid())
                     && status == BluetoothGatt.GATT_SUCCESS) {

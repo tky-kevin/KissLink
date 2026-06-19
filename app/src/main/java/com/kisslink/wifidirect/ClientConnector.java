@@ -66,7 +66,9 @@ class ClientConnector {
         }
         core.starting = true;
         core.setState(ConnectionState.CONNECTING);
-        Log.i(TAG, "Connecting as client (silent P2P) to: " + credential);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Connecting as client (silent P2P) to ssid=" + credential.getSsid());
+        }
 
         // WifiP2pConfig.Builder 指定目標 Group 的 SSID 與 Passphrase（API 29+）
         final WifiP2pConfig config = new WifiP2pConfig.Builder()

@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 個人名片資料模型——姓名 + 可自訂的聯絡欄位（電話／Email／公司…皆為自訂欄位）。
@@ -14,13 +15,11 @@ public final class Profile {
 
     /** 單一聯絡欄位（label 自訂，例如「電話」「Email」「公司」）。 */
     public static final class Field {
-        private String label;
-        private String value;
+        private final String label;
+        private final String value;
         public Field(String label, String value) { this.label = label; this.value = value; }
         public String getLabel() { return label; }
         public String getValue() { return value; }
-        public void setLabel(String label) { this.label = label; }
-        public void setValue(String value) { this.value = value; }
     }
 
     private String name;
@@ -65,7 +64,7 @@ public final class Profile {
         List<String> notes = new ArrayList<>();
         for (Field f : fields) {
             if (f.value == null || f.value.trim().isEmpty()) continue;
-            String key = f.label == null ? "" : f.label.trim().toLowerCase();
+            String key = f.label == null ? "" : f.label.trim().toLowerCase(Locale.ROOT);
             String v = escape(f.value.trim());
             if (key.contains("phone") || key.contains("電話") || key.contains("手機") || key.contains("tel")) {
                 sb.append("TEL;TYPE=CELL:").append(v).append("\r\n");
@@ -96,7 +95,8 @@ public final class Profile {
     }
 
     private static String escape(String s) {
-        return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n");
+        return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+                .replace("\r\n", "\\n").replace("\r", "\\n").replace("\n", "\\n");
     }
 
     private static String unescape(String s) {
@@ -113,7 +113,7 @@ public final class Profile {
             if (line.isEmpty()) continue;
             int colon = line.indexOf(':');
             if (colon < 0) continue;
-            String key = line.substring(0, colon).toUpperCase();
+            String key = line.substring(0, colon).toUpperCase(Locale.ROOT);
             String val = unescape(line.substring(colon + 1).trim());
             if (val.isEmpty()) continue;
             if (key.equals("FN")) {

@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -51,21 +49,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.AbstractComposeView
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.lerp
 import androidx.compose.foundation.isSystemInDarkTheme
 import kotlinx.coroutines.delay
-import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * 中央視覺模組（Compose）。
@@ -100,7 +89,6 @@ class BeamStageView @JvmOverloads constructor(
     private val selfAvatarState = mutableStateOf<Bitmap?>(null)
     private val peerNameState = mutableStateOf<String?>(null)
     private val selfNameState = mutableStateOf<String?>(null)
-    private val cardFlyTrigger = mutableStateOf(0)
 
     fun setPhase(p: Int) { phaseState.value = p }
     fun setDirection(d: Int) { directionState.value = d }
@@ -110,8 +98,8 @@ class BeamStageView @JvmOverloads constructor(
     fun setPeerIdentity(name: String?) { peerNameState.value = monogram(name) }
     fun setSelfIdentity(name: String?) { selfNameState.value = monogram(name) }
 
-    /** 觸發名片飛向頭像的 genie 動畫。 */
-    fun playCardFly() { cardFlyTrigger.value++ }
+    /** 名片飛出動畫已移除；保留無作用的呼叫點以相容傳送流程。 */
+    fun playCardFly() { /* no-op */ }
 
     private fun monogram(name: String?): String? {
         val s = name?.trim().orEmpty()
@@ -124,8 +112,7 @@ class BeamStageView @JvmOverloads constructor(
             phase = phaseState.value,
             rawProgress = progressState.value,
             peerAvatar = peerAvatarState.value,
-            peerMono = peerNameState.value,
-            cardFlyTrigger = cardFlyTrigger.value
+            peerMono = peerNameState.value
         )
     }
 }
@@ -137,12 +124,10 @@ private fun BeamStage(
     phase: Int,
     rawProgress: Float,
     peerAvatar: Bitmap?,
-    peerMono: String?,
-    cardFlyTrigger: Int
+    peerMono: String?
 ) {
     // 動態顏色：跟隨深/淺模式（不依賴 Material3，直接讀系統主題）
     val dark  = isSystemInDarkTheme()
-    val INK   = if (dark) Color(0xFFEDE9E3) else Color(0xFF23201B)
     val TRACK = if (dark) Color(0xFF38342F) else Color(0xFFDCD8CF)
     val PANEL = if (dark) Color(0xFF242220) else Color(0xFFF4F2EC)
 
@@ -195,16 +180,6 @@ private fun BeamStage(
         }
     }
 
-    // #14 名片飛出
-    val fly = remember { Animatable(0f) }
-    LaunchedEffect(cardFlyTrigger) {
-        if (cardFlyTrigger > 0) {
-            fly.snapTo(0f)
-            fly.animateTo(1f, animationSpec = tween(640, easing = FastOutSlowInEasing))
-        }
-    }
-
-    val density = LocalDensity.current
     val avatarR = 56.dp        // 比之前(48dp)更大
     val ringGap = 16.dp
 
@@ -332,34 +307,6 @@ private fun BeamStage(
                 }
             }
 
-            // ── #14 名片飛出：置中、小尺寸縮入對方頭像（完全在可見範圍內，不會被裁切）──
-            val t = fly.value
-            if (t > 0f && t < 1f) {
-                val e = FastOutSlowInEasing.transform(t)
-                val driftPx = with(density) { 22.dp.toPx() }
-                Box(
-                    modifier = Modifier
-                        .size(width = 92.dp, height = 116.dp)
-                        .graphicsLayer {
-                            val s = lerp(0.82f, 0.06f, e)
-                            scaleX = s
-                            scaleY = s
-                            translationY = lerp(-driftPx, 0f, e)  // 由頭像上方些微下沉，縮入頭像中心
-                            alpha = (1f - ((t - 0.55f) / 0.45f)).coerceIn(0f, 1f)
-                        }
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(PANEL.copy(alpha = 0.7f)) // 毛玻璃半透明
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(18.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    BasicText(
-                        text = "名片",
-                        style = TextStyle(color = INK, fontSize = 15.sp, lineHeight = 22.sp,
-                            fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
-                    )
-                }
-            }
-
             // ── Konfetti 慶祝特效 ──
             // konfetti-compose 2.0.4 的 KonfettiView 內部用 LaunchedEffect(Unit)，
             // 只在「首次組合」時依當下的 parties 建一次 PartySystem 並永久跑逐幀迴圈；
@@ -423,37 +370,5 @@ private fun DrawScope.drawModernCheckMark(
             p2.y + (p3.y - p2.y) * (rem / l2)
         )
         drawLine(col, p2, curP, strokeWidth = w, cap = StrokeCap.Round)
-    }
-}
-
-/**
- * 像素格圓環：把半徑 r 附近的像素格著色，fraction 控制繞圓的比例（0..1）。
- * 從 12 點鐘方向順時針繪出。
- */
-private fun DrawScope.drawPixelRing(
-    c: Offset, r: Float, px: Float, color: Color, fraction: Float
-) {
-    // 遍歷包圍環的方格，取落在環寬範圍內的格子
-    val halfW = px * 1.5f
-    val rIn   = r - halfW
-    val rOut  = r + halfW
-    val x0 = ((c.x - rOut) / px).toInt().coerceAtLeast(0)
-    val x1 = ((c.x + rOut) / px).toInt().coerceAtMost((size.width / px).toInt())
-    val y0 = ((c.y - rOut) / px).toInt().coerceAtLeast(0)
-    val y1 = ((c.y + rOut) / px).toInt().coerceAtMost((size.height / px).toInt())
-    for (gx in x0..x1) {
-        for (gy in y0..y1) {
-            val cx = gx * px + px / 2f
-            val cy = gy * px + px / 2f
-            val d  = hypot((cx - c.x).toDouble(), (cy - c.y).toDouble()).toFloat()
-            if (d !in rIn..rOut) continue
-            // 計算此格的角度（0 = 12 點鐘，順時針）
-            val angle = (Math.toDegrees(
-                Math.atan2((cy - c.y).toDouble(), (cx - c.x).toDouble())
-            ).toFloat() + 90f + 360f) % 360f
-            if (angle <= fraction * 360f) {
-                drawRect(color, topLeft = Offset(gx * px, gy * px), size = Size(px, px))
-            }
-        }
     }
 }

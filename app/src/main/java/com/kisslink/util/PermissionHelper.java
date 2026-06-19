@@ -61,6 +61,7 @@ public class PermissionHelper {
         // API 34+ 前景服務類型權限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             permissions.add(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC);
+            permissions.add(Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE);
         }
 
         return permissions.toArray(new String[0]);

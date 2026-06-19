@@ -15,6 +15,7 @@ import android.util.Log;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.IntentCompat;
 
 import com.kisslink.pairing.LocalPairing;
 import com.kisslink.pairing.PairingToken;
@@ -134,7 +135,7 @@ public class NfcForegroundHelper {
                 && !NfcAdapter.ACTION_NDEF_DISCOVERED.equals(action)) {
             return false;
         }
-        Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        Tag tag = IntentCompat.getParcelableExtra(intent, NfcAdapter.EXTRA_TAG, Tag.class);
         if (tag == null) return false;
         readTagAsync(tag);
         return true;

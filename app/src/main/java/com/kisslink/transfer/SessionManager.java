@@ -35,7 +35,7 @@ public final class SessionManager {
     @Nullable private volatile PairingToken connectedPeerToken;
     @Nullable private volatile String peerNameFromHello;
     @Nullable private volatile byte[] peerAvatarBytes;
-    @Nullable private PairingToken pendingSwitchPeer;
+    @Nullable private volatile PairingToken pendingSwitchPeer;
 
     // ── Progress bridging ─────────────────────────────────────
     @Nullable private LiveData<TransferProgress> peerProgressSrc;
