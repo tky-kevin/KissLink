@@ -561,6 +561,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                         viewModel.setPendingCardSend(false);
                         main.post(this::sendMyProfileCard);
                     }
+                    if (!viewModel.isSelectionEmpty()) {
+                        main.post(this::doSend);
+                    }
                 });
                 break;
 
