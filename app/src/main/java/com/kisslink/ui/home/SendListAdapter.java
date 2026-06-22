@@ -46,6 +46,10 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             return t;
         });
     }
+    // 局部更新標記：只更新進度/狀態/高亮，不重設縮圖（避免傳輸中每幀 rebind 造成縮圖閃爍）。
+    private static final Object PAYLOAD_PROGRESS = new Object();
+    private int highlightPos = -1;   // 目前高亮（傳輸中）那一列
+
     @androidx.annotation.Nullable private OnRemove onRemove;
     @androidx.annotation.Nullable private OnItemClickListener onItemClickListener;
 
@@ -56,7 +60,35 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     public void submit(@NonNull List<SendRow> next) {
         rows.clear();
         rows.addAll(next);
+        highlightPos = -1;
         notifyDataSetChanged();
+    }
+
+    /**
+     * 傳輸中：只更新某列的進度/完成/高亮，並用 payload 做局部 rebind——不重設縮圖、
+     * 不觸發換場動畫，徹底消除每幀整列重綁造成的縮圖閃爍。換檔時順手清掉舊高亮列。
+     */
+    public void setProgress(@NonNull String fileName, int percent, boolean done) {
+        int target = indexOfName(fileName);
+        if (target < 0) return;
+        SendRow r = rows.get(target);
+        r.percent = percent;
+        r.done = done;
+        r.highlight = !done;
+        notifyItemChanged(target, PAYLOAD_PROGRESS);
+        int newHighlight = done ? -1 : target;
+        if (highlightPos != -1 && highlightPos != newHighlight && highlightPos < rows.size()) {
+            rows.get(highlightPos).highlight = false;
+            notifyItemChanged(highlightPos, PAYLOAD_PROGRESS);
+        }
+        highlightPos = newHighlight;
+    }
+
+    private int indexOfName(@NonNull String name) {
+        for (int i = 0; i < rows.size(); i++) {
+            if (name.equals(rows.get(i).name)) return i;
+        }
+        return -1;
     }
 
     @NonNull @Override
@@ -67,33 +99,24 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     }
 
     @Override
+    public void onBindViewHolder(@NonNull VH h, int position, @NonNull java.util.List<Object> payloads) {
+        if (!payloads.isEmpty()) {
+            // 局部更新：只動進度/狀態/高亮，縮圖維持不變（消除閃爍）。
+            bindProgress(h, rows.get(position), h.itemView.getContext());
+            return;
+        }
+        super.onBindViewHolder(h, position, payloads);   // → 完整 onBindViewHolder(h, position)
+    }
+
+    @Override
     public void onBindViewHolder(@NonNull VH h, int position) {
         SendRow r = rows.get(position);
         Context ctx = h.itemView.getContext();
 
         h.name.setText(r.name);
 
-        h.meta.setVisibility(View.VISIBLE);
-        // 中間 meta：傳輸中顯示方向，否則大小
-        if (r.percent >= 0 && !r.done) {
-            h.meta.setText(r.incoming ? ctx.getString(R.string.receiving)
-                                      : ctx.getString(R.string.sending));
-        } else {
-            h.meta.setText(r.sizeLabel);
-        }
-
-        // 右側狀態
-        if (r.done) {
-            h.status.setText("✓");
-            h.status.setTextColor(ctx.getColor(R.color.beam_accent));
-        } else if (r.percent >= 0) {
-            h.status.setText(r.percent + "%");
-            h.status.setTextColor(ctx.getColor(R.color.beam_accent));
-        } else {
-            h.status.setText(r.sizeLabel.isEmpty() ? "" : r.sizeLabel);
-            h.status.setTextColor(ctx.getColor(R.color.beam_muted));
-            h.meta.setVisibility(View.GONE);
-        }
+        // meta / 右側狀態 / 高亮（傳輸中只更新這部分，見帶 payload 的多載）
+        bindProgress(h, r, ctx);
 
         // 移除鈕（待傳清單）
         h.remove.setVisibility(r.removable && !r.done && r.percent < 0 ? View.VISIBLE : View.GONE);
@@ -101,9 +124,6 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             int pos = h.getBindingAdapterPosition();
             if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
         });
-
-        // 傳輸中當前列高亮（accent_soft，透過 activated 狀態）
-        h.itemView.setActivated(r.highlight);
 
         // 項目點擊（開啟檔案）
         h.itemView.setOnClickListener(v -> {
@@ -133,6 +153,26 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
                 // pool 已 shutdown（不應發生，但作為最後防線）
             }
         }
+    }
+
+    /** 檔名旁的大小（恆顯示、同一行）＋ 右側狀態（✓／%／待傳時空）＋ 當前列高亮。供完整與局部 rebind 共用。 */
+    private void bindProgress(@NonNull VH h, @NonNull SendRow r, @NonNull Context ctx) {
+        // 大小一律顯示在檔名同列（比照其他清單）；不再顯示「傳送中」字樣。
+        h.meta.setVisibility(r.sizeLabel.isEmpty() ? View.GONE : View.VISIBLE);
+        h.meta.setText(r.sizeLabel);
+
+        if (r.done) {
+            h.status.setText("✓");
+            h.status.setTextColor(ctx.getColor(R.color.beam_accent));
+        } else if (r.percent >= 0) {
+            h.status.setText(r.percent + "%");
+            h.status.setTextColor(ctx.getColor(R.color.beam_accent));
+        } else {
+            h.status.setText("");   // 待傳：大小已在上一行，右側留空
+        }
+
+        // 傳輸中當前列高亮（accent_soft，透過 activated 狀態）
+        h.itemView.setActivated(r.highlight);
     }
 
     @Override public int getItemCount() { return rows.size(); }

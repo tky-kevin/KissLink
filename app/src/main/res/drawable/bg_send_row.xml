@@ -10,7 +10,8 @@
         </shape>
     </item>
     <item>
-        <selector>
+        <!-- enter/exit fade：切換 activated 高亮底色時做淡入淡出，而非瞬間變色。 -->
+        <selector android:enterFadeDuration="220" android:exitFadeDuration="220">
             <item android:state_activated="true">
                 <shape android:shape="rectangle">
                     <corners android:radius="@dimen/row_corner_radius" />

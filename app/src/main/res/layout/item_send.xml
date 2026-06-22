@@ -7,6 +7,8 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_send_row"
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
     android:paddingTop="0dp"
     android:paddingBottom="0dp">
 
@@ -21,20 +23,21 @@
         android:background="@drawable/bg_thumb"
         app:shapeAppearanceOverlay="@style/Beam.Thumb.Rounded" />
 
-
-
+    <!-- 檔名 + 大小同一行（比照其他清單） -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:layout_marginStart="14dp"
-        android:layout_marginEnd="12dp"
-        android:orientation="vertical">
+        android:layout_marginEnd="10dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/tvName"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:textColor="@color/beam_ink"
             android:textSize="12sp"
             android:textFontWeight="500"
@@ -44,15 +47,16 @@
 
         <TextView
             android:id="@+id/tvMeta"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
+            android:layout_marginStart="8dp"
             android:textColor="@color/beam_muted"
             android:textSize="12sp"
+            android:maxLines="1"
             tools:text="4.2 MB" />
     </LinearLayout>
 
-    <!-- 狀態：大小 / 勾 / 進度 -->
+    <!-- 狀態：勾 / 進度（待傳時為空，大小已於上一行顯示） -->
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"

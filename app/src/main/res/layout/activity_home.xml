@@ -213,15 +213,18 @@
 
         <!-- 傳輸中：待傳清單展開成的「列表方塊」（無標題、當前列高亮、上下淡出邊緣可滑）。
              高度由程式依項目數設定（上限約 3 列）。 -->
-        <androidx.recyclerview.widget.RecyclerView
+        <!-- 上下 padding 必須為 0：Android 內建淡出邊是從 paddingTop/Bottom 起算，
+             有上下 padding 就會把淡出帶推離圓角邊緣（不貼齊）。上下留白改由 ItemDecoration 提供；
+             左右用 padding 給寬一點的內距。overScrollMode 開啟 → 捲到底有邊緣回饋。 -->
+        <com.kisslink.ui.home.MaxHeightRecyclerView
             android:id="@+id/rvTransfer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:background="@drawable/bg_chip"
-            android:padding="6dp"
-            android:clipToPadding="false"
-            android:overScrollMode="never"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:overScrollMode="ifContentScrolls"
             android:requiresFadingEdge="vertical"
             android:fadingEdgeLength="28dp"
             android:visibility="gone"

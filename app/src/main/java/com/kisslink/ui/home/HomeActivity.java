@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -77,7 +78,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private MaterialButton btnPickFiles, btnPickMedia, btnSend;
     private ImageButton ibHistory, ibSettings;
     private ShapeableImageView ivAvatar;
-    private RecyclerView rvTransfer;
+    private MaxHeightRecyclerView rvTransfer;
 
     private SendListAdapter itemsAdapter;
     // 傳輸中列表方塊用獨立 adapter（與待傳 sheet 的 itemsAdapter 分離，避免縮圖執行緒池共用衝突）。
@@ -86,6 +87,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private boolean transferAutoScroll = true;
     private boolean inTransferUi = false;        // 是否已進入傳輸版面（用於每段傳輸只重置一次自動捲動）
     private int lastAutoScrollIndex = -1;        // 上次自動捲到的列，避免每幀重複 smoothScroll
+    private boolean receiveListActive = false;   // rvTransfer 目前顯示的是「接收列表」(持久)而非送出列表
     private final SendSheetManager sendSheetManager = new SendSheetManager();
 
     // 選取／傳輸／接收等狀態與其衍生判斷集中於此（MVVM）；本 Activity 僅渲染與轉發意圖。
@@ -102,6 +104,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         if (vcard == null || vcard.length == 0 || binder == null) return;
         ReceivedCardSheet.newInstance(vcard).show(getSupportFragmentManager(), "received_card");
         binder.clearIncomingCard();
+    };
+    // 收完一個檔 → 把接收列表中該列補上存檔 Uri（可點開）。
+    private final androidx.lifecycle.Observer<FileTransferService.ReceivedItem> receivedItemObserver = item -> {
+        if (item == null) return;
+        viewModel.setReceivedUri(item.name, item.contentUri, item.mime);
+        if (receiveListActive) rebuildReceiveList();
     };
 
     // ── NFC ──
@@ -205,6 +213,20 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         rvTransfer.setLayoutManager(new LinearLayoutManager(this));
         rvTransfer.setAdapter(transferAdapter);
         rvTransfer.setClipToOutline(true);   // 內容裁切到 bg_chip 的圓角，列高亮/淡出貼齊邊緣
+        // 高度上限：約 4.5 列；≤上限依內容自適應(上下對稱)，超過才固定並可捲動。
+        rvTransfer.setMaxHeight(Math.round(252 * getResources().getDisplayMetrics().density));
+        // 上下留白用 ItemDecoration（不可用 padding，否則內建淡出邊會被推離圓角邊緣）。
+        final int rvVPad = Math.round(12 * getResources().getDisplayMetrics().density);
+        rvTransfer.addItemDecoration(new RecyclerView.ItemDecoration() {
+            @Override public void getItemOffsets(@NonNull Rect outRect, @NonNull View view,
+                                                 @NonNull RecyclerView parent,
+                                                 @NonNull RecyclerView.State state) {
+                int pos = parent.getChildAdapterPosition(view);
+                if (pos == 0) outRect.top = rvVPad;
+                int count = parent.getAdapter() != null ? parent.getAdapter().getItemCount() : 0;
+                if (count > 0 && pos == count - 1) outRect.bottom = rvVPad;
+            }
+        });
         rvTransfer.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int newState) {
                 // 使用者手動拖動 → 交還捲動控制權，本次傳輸內不再自動捲。
@@ -384,6 +406,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             // 服務被閒置拆除後重建(新 LiveData)則自動重新觀察。
             binder.getSessionState().observe(HomeActivity.this, sessionObserver);
             binder.getIncomingCard().observe(HomeActivity.this, incomingCardObserver);
+            binder.getReceivedItem().observe(HomeActivity.this, receivedItemObserver);
         }
         @Override public void onServiceDisconnected(ComponentName name) {
             // 服務進程意外中止(非主動解綁);binding 仍註冊,AUTO_CREATE 會重連。
@@ -467,6 +490,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                             connectedSub());
                     if (nfc != null) nfc.resetLatched();
                     exitTransferUi();
+                    restoreReceiveListIfAny();
                     viewModel.setSending(false);
                     updateSendButton();
                     rebuildSendStack();
@@ -507,8 +531,10 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
         ui.showHeadlineText(getString(R.string.home_ready_title),
                 getString(R.string.home_ready_sub));
-        // 還原傳輸中版面：收合列表方塊、顯示挑檔列。
+        // 還原傳輸中版面：收合列表方塊（含持久的接收列表）、顯示挑檔列。
         inTransferUi = false;
+        receiveListActive = false;
+        viewModel.clearReceivedList();
         rvTransfer.setVisibility(View.GONE);
         pickRow.setVisibility(View.VISIBLE);
         hideReceivedBanner();
@@ -556,11 +582,14 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         }
         enterTransferUi(outgoing);
         if (outgoing) {
-            // 送出方：把待傳清單展開成傳輸中的列表方塊，高亮當前正在傳的那一列。
-            if (tp.itemType != TransferProtocol.ITEM_VCARD) showTransferList(tp, false);
+            // 送出方：把待傳清單展開成傳輸中的列表方塊（只建一次），逐幀只更新當前列進度/高亮。
+            if (tp.itemType != TransferProtocol.ITEM_VCARD) {
+                if (rvTransfer.getVisibility() != View.VISIBLE) buildTransferList();
+                updateTransferProgress(tp, false);
+            }
         } else {
-            // 接收新批次 → 重置橫幅計數（接收方無待傳清單，列表方塊留空僅顯示速度＋光環）
-            viewModel.onIncomingBatch(tp.batchId);
+            // 接收方：逐檔累積成接收列表（取代「收到 N 個」橫幅），樣式比照送出列表。
+            showReceiveList(tp, false);
         }
     }
 
@@ -572,8 +601,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         if (!isVcard && !all && tp != null && tp.fileCount > 1) {
             beam.setPhase(BeamStageView.TRANSFERRING);
             beam.setProgress(viewModel.batchProgress(tp));
-            if (outgoing) showTransferList(tp, true);
-            else viewModel.countReceived(tp);
+            if (outgoing) updateTransferProgress(tp, true);
+            else showReceiveList(tp, true);
             return;
         }
 
@@ -591,6 +620,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 ui.showHeadlineText(getString(R.string.home_connected_title), connectedSub());
             }
             exitTransferUi();
+            restoreReceiveListIfAny();   // 重建後（如切換深淺色）把 VM 中的接收列表重新顯示
             updateSendButton();
             rebuildSendStack();
             return;
@@ -614,7 +644,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             rebuildSendStack();
             if (sendSheetManager.isShowing()) sendSheetManager.dismiss();
         } else if (tp != null) {
-            viewModel.countReceived(tp);
+            showReceiveList(tp, true);
         }
 
         // 短暫顯示完成後回到「已連線」可再選
@@ -814,66 +844,104 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     /**
-     * 傳送中：把待傳清單展開成「列表方塊」（沿用待傳列設計、無標題），
-     * 更新正在傳的那一列的進度/完成並高亮（當前列底色 accent_soft）。接收端不進此清單。
+     * 傳送中：把待傳清單展開成「列表方塊」（沿用待傳列設計、無標題）。只在進入傳輸時建一次——
+     * 結構（檔名/大小/縮圖）在整段傳輸內不變，逐幀的進度/高亮由 {@link #updateTransferProgress} 局部更新，
+     * 避免每幀整列重綁導致縮圖閃爍。
      */
-    private void showTransferList(@NonNull TransferProgress tp, boolean curFileDone) {
+    private void buildTransferList() {
+        receiveListActive = false;   // 切回送出列表
         List<SendRow> rows = new ArrayList<>();
-        int currentIndex = -1;
-        List<SendItem> selection = viewModel.currentSelection();
-        for (int i = 0; i < selection.size(); i++) {
-            SendItem it = selection.get(i);
-            SendRow r = new SendRow(it.name, TransferUiController.sizeLabel(it.size), it.itemType,
+        for (SendItem it : viewModel.currentSelection()) {
+            rows.add(new SendRow(it.name, TransferUiController.sizeLabel(it.size), it.itemType,
                     it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
-                    it.uri, it.mime);
-            boolean isCurrent = it.name.equals(tp.fileName);
-            if (isCurrent) {
-                r.percent = curFileDone ? 100 : tp.percentInt();
-                r.done = curFileDone;
-                r.highlight = !curFileDone;   // 正在傳的列高亮；剛傳完不再高亮
-                currentIndex = i;
-            }
-            rows.add(r);
+                    it.uri, it.mime));
         }
         transferAdapter.submit(rows);
-        // 固定高度上限約 3 列（多於此可滑動，靠上下淡出邊緣暗示）。
-        float d = getResources().getDisplayMetrics().density;
-        int rowPx = Math.round(60 * d);
-        int maxRows = 3;
-        int n = rows.size();
-        int h = Math.min(n, maxRows) * rowPx + (n > maxRows ? rowPx / 2 : 0);
-        ViewGroup.LayoutParams lp = rvTransfer.getLayoutParams();
-        if (lp.height != h) { lp.height = h; rvTransfer.setLayoutParams(lp); }
+        rvTransfer.setVisibility(View.VISIBLE);
+        Anim.fadeUp(rvTransfer);
+    }
+
+    /**
+     * 接收方列表（取代「收到 N 個」橫幅）：逐檔累積於 VM，重建顯示。接收列無縮圖→full rebind 不會閃。
+     * 樣式比照送出列表（無標題、當前列高亮、可滑）；收完整批後仍保留（持久），可點開個別檔案。
+     */
+    private void showReceiveList(@NonNull TransferProgress tp, boolean curFileDone) {
+        viewModel.upsertReceived(tp.batchId, tp.fileName, tp.totalBytes, tp.itemType,
+                tp.percentInt(), curFileDone);
+        receiveListActive = true;
+        rebuildReceiveList();
+    }
+
+    /** Activity 重建後（VM 仍保有接收清單）→ 重新顯示持久的接收列表。 */
+    private void restoreReceiveListIfAny() {
+        if (!receiveListActive && viewModel.hasReceivedList()) {
+            receiveListActive = true;
+            rebuildReceiveList();
+        }
+    }
+
+    private void rebuildReceiveList() {
+        List<SendRow> rows = new ArrayList<>();
+        int currentIndex = -1, i = 0;
+        for (HomeViewModel.RecvFile f : viewModel.receivedFiles()) {
+            SendRow r = new SendRow(f.name, TransferUiController.sizeLabel(f.size), f.type,
+                    null, f.uri != null ? Uri.parse(f.uri) : null, f.mime);
+            r.incoming = true;
+            r.percent = f.percent;
+            r.done = f.done;
+            r.highlight = f.highlight;
+            rows.add(r);
+            if (f.highlight) currentIndex = i;
+            i++;
+        }
+        transferAdapter.submit(rows);
         if (rvTransfer.getVisibility() != View.VISIBLE) {
             rvTransfer.setVisibility(View.VISIBLE);
             Anim.fadeUp(rvTransfer);
         }
-        // 自動捲動到當前列（除非使用者已手動接管）；只在當前列改變時捲，避免每幀抖動。
         if (transferAutoScroll && currentIndex >= 0 && currentIndex != lastAutoScrollIndex) {
             lastAutoScrollIndex = currentIndex;
             rvTransfer.smoothScrollToPosition(currentIndex);
         }
     }
 
-    /**
-     * 進入「傳輸中」版面：只留速度＋列表方塊，收起挑檔/送出/待傳控制項。
-     * 送出時也收起舊的接收橫幅；接收時保留橫幅（由其計數 observer 持續顯示「收到 N 個」）。
-     */
+    /** 逐幀更新傳輸中當前列的進度/完成/高亮（payload 局部 rebind，不碰縮圖），並自動捲動到當前列。 */
+    private void updateTransferProgress(@NonNull TransferProgress tp, boolean curFileDone) {
+        transferAdapter.setProgress(tp.fileName, curFileDone ? 100 : tp.percentInt(), curFileDone);
+        // 自動捲到當前列（除非使用者已手動接管）；只在當前列改變時捲，避免每幀抖動。
+        int idx = indexOfSelection(tp.fileName);
+        if (transferAutoScroll && idx >= 0 && idx != lastAutoScrollIndex) {
+            lastAutoScrollIndex = idx;
+            rvTransfer.smoothScrollToPosition(idx);
+        }
+    }
+
+    private int indexOfSelection(@NonNull String name) {
+        List<SendItem> selection = viewModel.currentSelection();
+        for (int i = 0; i < selection.size(); i++) {
+            if (name.equals(selection.get(i).name)) return i;
+        }
+        return -1;
+    }
+
+    /** 進入「傳輸中」版面：只留速度＋列表方塊，收起挑檔/送出/待傳與（已停用的）接收橫幅。 */
     private void enterTransferUi(boolean outgoing) {
         pickRow.setVisibility(View.GONE);
         btnSend.setVisibility(View.GONE);
         sendStackRow.setVisibility(View.GONE);
-        if (outgoing) receivedBanner.setVisibility(View.GONE);
+        receivedBanner.setVisibility(View.GONE);
     }
 
-    /** 離開「傳輸中」版面（回到已連線/完成/就緒）：收合列表方塊，還原挑檔列與各方塊。 */
+    /**
+     * 離開「傳輸中」版面（回到已連線/完成/就緒）：還原挑檔列與待傳/送出。
+     * 送出列表收合；接收列表為持久顯示（收完仍保留，供檢視/點開）→ 不收合。
+     */
     private void exitTransferUi() {
         inTransferUi = false;
-        rvTransfer.setVisibility(View.GONE);
+        if (!receiveListActive) rvTransfer.setVisibility(View.GONE);
         pickRow.setVisibility(View.VISIBLE);
-        Integer recv = viewModel.getReceivedCount().getValue();
-        if (recv != null && recv > 0) showReceivedBanner(recv);
-        // 待傳方塊與送出鈕由 rebuildSendStack()/updateSendButton() 依當前狀態還原。
+        rebuildSendStack();
+        updateSendButton();
     }
 
     private void openFile(@androidx.annotation.NonNull SendRow row) {

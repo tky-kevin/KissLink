@@ -37,6 +37,46 @@ public class HomeViewModel extends ViewModel {
     private int recvCount = 0; // 目前接收批次已完成件數
     private final MutableLiveData<Integer> receivedCountLd = new MutableLiveData<>(0);
 
+    // ── 接收清單（接收方列表，取代「收到 N 個」橫幅）──────────────
+    // 存於 VM → 跨 Activity 重建（如切換深淺色）存活。逐檔累積：名稱→該檔狀態。
+    public static final class RecvFile {
+        public final String name;
+        public final long size;
+        public final byte type;
+        public int percent = -1;
+        public boolean done;
+        public boolean highlight;   // 當前正在接收的那一檔
+        @androidx.annotation.Nullable public String uri;   // 存檔位置（收完才有，供點開）
+        @androidx.annotation.Nullable public String mime;
+        RecvFile(String name, long size, byte type) { this.name = name; this.size = size; this.type = type; }
+    }
+    private final java.util.LinkedHashMap<String, RecvFile> received = new java.util.LinkedHashMap<>();
+    private long receiveListBatchId = 0;
+
+    public java.util.Collection<RecvFile> receivedFiles() { return received.values(); }
+    public boolean hasReceivedList() { return !received.isEmpty(); }
+
+    /** 接收到某檔的進度/完成；遇到新批次先清空。高亮設於當前傳輸中的那一檔。 */
+    public void upsertReceived(long batchId, @NonNull String name, long size, byte type,
+                               int percent, boolean done) {
+        if (batchId != receiveListBatchId) { received.clear(); receiveListBatchId = batchId; }
+        RecvFile f = received.get(name);
+        if (f == null) { f = new RecvFile(name, size, type); received.put(name, f); }
+        f.percent = done ? 100 : percent;
+        f.done = done;
+        for (RecvFile o : received.values()) o.highlight = false;
+        if (!done) f.highlight = true;
+    }
+
+    /** 收完某檔 → 補上存檔 Uri/MIME，使該列可點開。 */
+    public void setReceivedUri(@NonNull String name, @androidx.annotation.Nullable String uri,
+                               @androidx.annotation.Nullable String mime) {
+        RecvFile f = received.get(name);
+        if (f != null) { f.uri = uri; f.mime = mime; }
+    }
+
+    public void clearReceivedList() { received.clear(); receiveListBatchId = 0; }
+
     // ── 旗標 ────────────────────────────────────────────────────
     // #1：未連線時按傳送名片 → 排隊，連上後自動送出
     private boolean pendingCardSend = false;
