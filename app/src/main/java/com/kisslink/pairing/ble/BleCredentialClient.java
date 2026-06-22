@@ -83,6 +83,11 @@ public class BleCredentialClient {
     @Nullable private Runnable credentialReadPoll;
     private volatile boolean stopped = false;
 
+    // 交握逾時：GATT 連上後到 onReady 之間（discover→MTU→寫 token→CCCD）任一步驟卡住
+    // （BLE stack 偶發不回呼）→ 在預算內主動 close+重連，避免靜待外層 coordinator 看門狗或無限等待。
+    private static final long HANDSHAKE_TIMEOUT_MS = 7000L;
+    private final Runnable handshakeTimeout = this::onHandshakeStall;
+
     public BleCredentialClient(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
@@ -166,6 +171,7 @@ public class BleCredentialClient {
     public void stop() {
         stopped = true;
         main.removeCallbacks(timeoutRunnable);
+        main.removeCallbacks(handshakeTimeout);
         if (credentialReadPoll != null) { main.removeCallbacks(credentialReadPoll); credentialReadPoll = null; }
         try { if (scanning && scanner != null) scanner.stopScan(scanCallback); } catch (Exception ignored) {}
         try { if (gatt != null) { gatt.disconnect(); gatt.close(); } } catch (Exception ignored) {}
@@ -206,6 +212,29 @@ public class BleCredentialClient {
         gatt = peerDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
     }
 
+    /**
+     * 交握逾時（GATT 已連上但 discover/MTU/token/CCCD 卡住未達 onReady）：
+     * 主動斷掉目前 gatt（其 DISCONNECTED 因 g!=gatt 會被忽略），在重試額度內換一條新連線重來；
+     * 用盡才回報錯誤。把「靜默卡住」轉成「快速重連」，多數暫時性 BLE 卡頓可自癒。
+     */
+    @SuppressLint("MissingPermission")
+    private void onHandshakeStall() {
+        if (stopped || ready || credentialDelivered) return;
+        Log.w(TAG, "PAIRSEQ handshake stalled (servicesDiscovered=" + servicesDiscovered
+                + ", attempt=" + gattAttempts + ") → reconnect/abort");
+        BluetoothGatt old = gatt;
+        gatt = null;                       // 先脫鉤 → 舊 gatt 的 DISCONNECTED 會被 g!=gatt 忽略
+        try { if (old != null) { old.disconnect(); old.close(); } } catch (Exception ignored) {}
+        servicesDiscovered = false;
+        credentialChar = null;
+        peerTokenChar = null;
+        if (gattAttempts < MAX_GATT_ATTEMPTS) {
+            main.postDelayed(this::connectGatt, GATT_RETRY_BACKOFF_MS);
+        } else {
+            main.post(() -> callback.onError("BLE 交握逾時，請再碰一下重試"));
+        }
+    }
+
     // ══════════════════════════════════════════════════════════
     //  GATT
     // ══════════════════════════════════════════════════════════
@@ -217,15 +246,21 @@ public class BleCredentialClient {
                 // BLE 已連上 → 取消逾時。後續 token/憑證走 live link(快),
                 // Wi-Fi 建群有 WifiDirectManager 自己的逾時保護,不該再算進 BLE 額度。
                 main.removeCallbacks(timeoutRunnable);
+                // 連上後改由「交握逾時」看門狗保護後續步驟（見 onHandshakeStall）。
+                main.removeCallbacks(handshakeTimeout);
+                main.postDelayed(handshakeTimeout, HANDSHAKE_TIMEOUT_MS);
                 seq("GATT connected → discovering services");
                 g.discoverServices();
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 // 連線失敗(常見 status 133)或交握完成前掉線。務必 close 釋放 client 介面,
                 // 否則密集重碰會讓失敗的 GATT 物件堆疊洩漏、BLE 越來越不穩。
+                try { g.close(); } catch (Exception ignored) {}
+                // 來自「已被手動換掉的舊 gatt」的回呼 → 忽略，避免與交握逾時重連互相打架（重複重試/誤判失敗）。
+                if (g != gatt) return;
                 Log.w(TAG, "PAIRSEQ GATT disconnected (status=" + status + ", servicesDiscovered="
                         + servicesDiscovered + ", attempts=" + gattAttempts + ")");
-                try { g.close(); } catch (Exception ignored) {}
-                if (gatt == g) gatt = null;
+                main.removeCallbacks(handshakeTimeout);
+                gatt = null;
                 if (ready || credentialDelivered) return;          // 交握已過,正常收尾,不介入
                 if (!servicesDiscovered && gattAttempts < MAX_GATT_ATTEMPTS) {
                     main.postDelayed(BleCredentialClient.this::connectGatt, GATT_RETRY_BACKOFF_MS); // 早期 133 → 自動重試
@@ -278,6 +313,7 @@ public class BleCredentialClient {
                 } else {
                     seq("no CCCD → READY (handshake done)");
                     ready = true;
+                    main.removeCallbacks(handshakeTimeout);
                     main.post(callback::onReady);
                 }
             }
@@ -288,6 +324,7 @@ public class BleCredentialClient {
                 // 3) notify 開啟 → 就緒
                 seq("CCCD written (status=" + status + ") → READY (handshake done)");
                 ready = true;
+                main.removeCallbacks(handshakeTimeout);
                 main.post(callback::onReady);
             }
         }
