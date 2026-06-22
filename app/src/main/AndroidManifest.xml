@@ -88,8 +88,7 @@
         <activity
             android:name=".ui.profile.AvatarCropActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.KissLink" />
+            android:theme="@style/Theme.KissLink.TransparentWindow" />
 
         <!-- ══════════════════════════════════════════════════
              NFC HCE Service

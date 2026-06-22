@@ -35,6 +35,11 @@
         <item name="android:textViewStyle">@style/Beam.TextView.Base</item>
     </style>
 
+    <!-- AvatarCropActivity: 透明視窗背景避免與根佈局黑色背景重疊繪製 -->
+    <style name="Theme.KissLink.TransparentWindow" parent="Theme.KissLink">
+        <item name="android:windowBackground">@null</item>
+    </style>
+
     <!-- 全域按鈕基底樣式 -->
     <style name="Beam.Button.Base" parent="Widget.Material3.Button">
         <item name="android:includeFontPadding">false</item>

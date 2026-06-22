@@ -50,8 +50,6 @@
     <string name="send_card">傳送</string>
     <string name="btn_send_n">傳送 %1$d 個項目</string>
     <string name="btn_clear">清除</string>
-    <string name="sending">傳送中</string>
-    <string name="receiving">接收中</string>
     <string name="sent_to">已傳送給 %1$s</string>
     <string name="received_from">已接收自 %1$s</string>
 

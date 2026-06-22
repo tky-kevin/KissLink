@@ -112,6 +112,7 @@ public class AvatarCropView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
+        performClick();
         scaleDetector.onTouchEvent(e);
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
