@@ -10,7 +10,7 @@ import com.kisslink.util.FileUtils;
 
 /**
  * 一個待送出的項目(雙向 peer 模型下,任一端都能送)。
- * 來源可為 {@link Uri}(檔案 / 照片)或 raw bytes(名片 vCard)。
+ * 來源可為 {@link Uri}(檔案 / 照片)、raw bytes(名片 vCard)或純文字。
  */
 public final class SendItem {
 
@@ -19,7 +19,7 @@ public final class SendItem {
     public final String  mime;
     public final long    size;      // bytes；未知為 -1
     @Nullable public final Uri    uri;    // FILE / PHOTO
-    @Nullable public final byte[] bytes;  // VCARD
+    @Nullable public final byte[] bytes;  // VCARD / TEXT
 
     private SendItem(byte itemType, String name, String mime, long size,
                      @Nullable Uri uri, @Nullable byte[] bytes) {
@@ -43,5 +43,11 @@ public final class SendItem {
     public static SendItem vcard(@NonNull String fileName, @NonNull byte[] vcf) {
         String fn = fileName.isEmpty() ? "contact" : fileName;
         return new SendItem(TransferProtocol.ITEM_VCARD, fn, "text/vcard", vcf.length, null, vcf);
+    }
+
+    /** 純文字/連結。{@code content} 為全文（顯示於列表時 layout 會自動截斷）；以 UTF-8 bytes 攜帶。 */
+    public static SendItem text(@NonNull String content) {
+        byte[] b = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return new SendItem(TransferProtocol.ITEM_TEXT, content, "text/plain", b.length, null, b);
     }
 }

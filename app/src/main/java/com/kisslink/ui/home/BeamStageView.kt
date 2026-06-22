@@ -2,10 +2,14 @@ package com.kisslink.ui.home
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.util.AttributeSet
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -39,14 +43,19 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.airbnb.lottie.LottieProperty
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.rememberLottieComposition
+import com.airbnb.lottie.compose.rememberLottieDynamicProperties
+import com.airbnb.lottie.compose.rememberLottieDynamicProperty
 import kotlinx.coroutines.delay
 import nl.dionsegijn.konfetti.compose.KonfettiView
 import nl.dionsegijn.konfetti.core.Party
@@ -156,13 +165,45 @@ private fun beamStage(
             phase == BeamStageView.TRANSFERRING || phase == BeamStageView.DONE
     val transferring = phase == BeamStageView.TRANSFERRING
     val done = phase == BeamStageView.DONE
+    val error = phase == BeamStageView.ERROR
 
-    // 常駐 NFC 漣漪
+    // ── 狀態以「顏色」傳達（取代僅靠文字搬動）──
+    // 連線中→藍↔藍綠之間平滑循環（積極感）；錯誤→紅；其餘→品牌藍。
+    // 波紋／進度環／打勾統一吃這個顏色，光看中央光環的色彩就能表達狀態，標題文字退為輔助。
+    val errorColor = if (dark) Color(0xFFCF6E60) else Color(0xFFB0463A)
+    val tealColor = Color(0xFF12B5A6)
+    val connecting = phase == BeamStageView.CONNECTING
+
     val infinite = rememberInfiniteTransition(label = "beam")
+    // 連線中：藍↔藍綠來回補間。
+    val connectPulse by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "connectPulse",
+    )
+    // 非連線中的狀態色（錯誤紅/品牌藍）平滑補間；連線中改用上面的藍綠循環。
+    val baseColor by animateColorAsState(
+        targetValue = if (error) errorColor else ACCENT,
+        animationSpec = tween(420),
+        label = "baseColor",
+    )
+    // 連線中與傳輸中都用藍↔藍綠循環（傳輸中的顏色變化比照連線中）。
+    val stateColor = if (connecting || transferring) lerp(ACCENT, tealColor, connectPulse) else baseColor
+
+    // 律動也編碼狀態：配對/連線中加快波紋（積極感），錯誤放慢（凝滯感），其餘為待機呼吸。
+    val rippleMs =
+        when (phase) {
+            BeamStageView.CONNECTING -> 1500
+            BeamStageView.ERROR -> 3200
+            else -> 2600
+        }
+    // 波紋統一 3 環，各狀態僅速度不同。
+    val rippleCount = 3
     val ripple by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(rippleMs, easing = LinearEasing)),
         label = "ripple",
     )
 
@@ -208,7 +249,8 @@ private fun beamStage(
     }
 
     val avatarR = 56.dp // 比之前(48dp)更大
-    val ringGap = 16.dp
+    // 進度環貼著頭像外緣：環內緣≈頭像邊（環寬 5dp，半徑外推約半個環寬即可，不留空隙）。
+    val ringGap = 2.dp
 
     // 用整個可用空間置中（不再用固定 240dp，避免畫面較矮時上/下緣被裁切）
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -220,23 +262,23 @@ private fun beamStage(
                 val ringR = avatarPx + ringGap.toPx()
                 val strokeW = 5.dp.toPx()
 
-                // 常駐 NFC 漣漪 (現代流體感)
-                val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else 0f
-                val rippleMax = (if (transferring || done) ringR else avatarPx) + 80.dp.toPx()
-                for (i in 0..2) {
-                    val t = (ripple + i / 3f) % 1f
+                // 常駐 NFC 漣漪 (現代流體感)。已連線/傳輸/完成時從外圈起跑(不穿過頭像)。
+                val rippleStart = if (connected) ringR + 3.dp.toPx() else 0f
+                val rippleMax = (if (connected) ringR else avatarPx) + 80.dp.toPx()
+                for (i in 0 until rippleCount) {
+                    val t = (ripple + i.toFloat() / rippleCount) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
                     val fadeIn = (t / 0.15f).coerceIn(0f, 1f)
                     val fadeOut = (1f - t).coerceIn(0f, 1f)
                     val a = fadeIn * fadeOut * 0.35f
                     if (a > 0f) {
                         drawCircle(
-                            color = ACCENT.copy(alpha = a),
+                            color = stateColor.copy(alpha = a),
                             radius = r,
                             center = c,
                         )
                         drawCircle(
-                            color = ACCENT.copy(alpha = a * 1.5f),
+                            color = stateColor.copy(alpha = a * 1.5f),
                             radius = r,
                             center = c,
                             style = Stroke(width = 1.5.dp.toPx()),
@@ -244,7 +286,8 @@ private fun beamStage(
                     }
                 }
 
-                // 傳輸/完成：頭像外圈進度環 (現代平滑風格)
+                // 傳輸/完成：頭像外圈進度環（底環 track + 進度弧 stateColor）。
+                // 已連線待機不畫環（僅頭像 + 波紋）。
                 if (transferring || done) {
                     drawArc(
                         color = track,
@@ -256,7 +299,7 @@ private fun beamStage(
                         size = Size(ringR * 2, ringR * 2),
                     )
                     drawArc(
-                        color = ACCENT,
+                        color = stateColor,
                         startAngle = -90f,
                         sweepAngle = 360f * animProgress,
                         useCenter = false,
@@ -267,13 +310,23 @@ private fun beamStage(
                 }
             }
 
-            // ── 中央節點（Lottie 動畫）──
+            // ── 中央節點（Lottie 雷達）──
+            // 雷達整體染成 stateColor → 各狀態（就緒藍／連線中藍綠循環／錯誤紅）雷達跟著變色。
             if (!connected) {
                 val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(com.kisslink.R.raw.lottie_radar))
+                val radarTint =
+                    rememberLottieDynamicProperties(
+                        rememberLottieDynamicProperty(
+                            LottieProperty.COLOR_FILTER,
+                            PorterDuffColorFilter(stateColor.toArgb(), PorterDuff.Mode.SRC_ATOP),
+                            "**",
+                        ),
+                    )
                 Box(modifier = Modifier.size(avatarR * 2.5f), contentAlignment = Alignment.Center) {
                     LottieAnimation(
                         composition = composition,
                         iterations = LottieConstants.IterateForever,
+                        dynamicProperties = radarTint,
                         modifier = Modifier.matchParentSize(),
                     )
                 }
@@ -332,7 +385,7 @@ private fun beamStage(
                         Canvas(modifier = Modifier.matchParentSize()) {
                             val c = Offset(size.width / 2f, size.height / 2f)
                             val s = size.minDimension * 0.40f
-                            drawModernCheckMark(c, s, checkDraw.value, ACCENT, 6.dp.toPx(), checkAlpha.value)
+                            drawModernCheckMark(c, s, checkDraw.value, stateColor, 6.dp.toPx(), checkAlpha.value)
                         }
                     }
                 }

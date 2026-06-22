@@ -81,6 +81,9 @@ public class FileTransferService extends Service {
 
         public void clearIncomingCard() { incomingCardLd.postValue(null); }
 
+        /** 接收方：每收完一個檔案發射一筆（含存檔 Uri），供接收列表把該列變成可點開。 */
+        public androidx.lifecycle.LiveData<ReceivedItem> getReceivedItem() { return receivedItemLd; }
+
         public void onNfcLatchedAsReader(@NonNull PairingToken peerToken) {
             handleLatch(peerToken, () -> coordinator.onLatchedAsReader(peerToken));
         }
@@ -124,6 +127,21 @@ public class FileTransferService extends Service {
     }
 
     private final MutableLiveData<byte[]> incomingCardLd = new MutableLiveData<>(null);
+    private final MutableLiveData<ReceivedItem> receivedItemLd = new MutableLiveData<>(null);
+
+    /** 接收完成的單一檔案（供 UI 接收列表顯示與點開）。 */
+    public static final class ReceivedItem {
+        public final String name;
+        @Nullable public final String contentUri;
+        @Nullable public final String mime;
+        public final long batchId;
+        public ReceivedItem(String name, @Nullable String contentUri, @Nullable String mime, long batchId) {
+            this.name = name;
+            this.contentUri = contentUri;
+            this.mime = mime;
+            this.batchId = batchId;
+        }
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -298,7 +316,9 @@ public class FileTransferService extends Service {
         if (groupOwner) {
             peerConnector.acceptAsServer(cb);
         } else {
-            peerConnector.connectAsClient(wifi.getClientNetwork(), cb);
+            // 傳 supplier(非當下值):P2P 網路是 CONNECTED 後才非同步綁定的,
+            // connectAsClient 內每次重試重抓,綁定一就緒即走 bindSocket。
+            peerConnector.connectAsClient(wifi::getClientNetwork, cb);
         }
     }
 
@@ -324,6 +344,10 @@ public class FileTransferService extends Service {
                                                   long batchId) {
                 logTransfer(sent, name, size, avgSpeedBps, success, itemType,
                         contentUri, mime, batchId);
+                // 接收方收完一檔 → 通知 UI 把該列補上 Uri（可點開）。
+                if (!sent && success && contentUri != null) {
+                    receivedItemLd.postValue(new ReceivedItem(name, contentUri, mime, batchId));
+                }
             }
             @Override public void onDisconnected() {
                 Log.i(TAG, "Peer disconnected");

@@ -185,38 +185,42 @@ class ClientConnector {
         clientNetworkCallback = new ConnectivityManager.NetworkCallback() {
             @Override
             public void onAvailable(@NonNull Network network) {
+                // 關鍵:TRANSPORT_WIFI + 去 INTERNET 的請求會同時符合「Wi-Fi AP(STA,有 INTERNET)」
+                // 與「P2P 網路(無 INTERNET)」。實機證實系統常先回報 STA。若綁到 STA,socket 會被逼走
+                // AP 介面,而 192.168.49.1 在 P2P 介面上 → 不可達(timeout)。反之 192.168.49.1 與 p2p0
+                // 同網段屬直連路由,「不綁」時預設路由本來就會走 p2p0。故只綁真正的 P2P(無 INTERNET)網路。
+                android.net.NetworkCapabilities nc = core.connManager.getNetworkCapabilities(network);
+                boolean isP2p = nc != null
+                        && !nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+                if (!isP2p) {
+                    Log.w(TAG, "Ignoring non-P2P match (Wi-Fi AP/STA) " + network
+                            + " — binding it would break route to 192.168.49.1; rely on direct p2p0 route");
+                    return; // 等真正的 P2P 網路;若始終沒有,預設路由走直連 p2p0 仍可達
+                }
                 core.cancelTimeout();
                 clientNetwork = network;
                 core.connManager.bindProcessToNetwork(network);
-                Log.i(TAG, "P2P network bound: " + network);
+                Log.i(TAG, "P2P network bound: " + network + " (real P2P, no INTERNET)");
                 core.setState(ConnectionState.CONNECTED);
             }
 
             @Override
             public void onLost(@NonNull Network network) {
+                if (!network.equals(clientNetwork)) return; // 非我們綁的 P2P 網路,忽略
                 Log.w(TAG, "P2P network lost");
                 core.connManager.bindProcessToNetwork(null);
                 clientNetwork = null;
                 core.setState(ConnectionState.DISCONNECTED);
             }
-
-            @Override
-            public void onUnavailable() {
-                // P2P group 已形成（state=CONNECTED），此處僅代表路由綁定失敗。
-                // TCP socket 仍會嘗試連線 192.168.49.1，OS 通常仍能正確路由 P2P 流量。
-                Log.w(TAG, "P2P network unavailable from ConnectivityManager, routing may use default interface");
-            }
         };
 
-        // bindToP2pNetwork() 只是路由優化（讓 socket 走 P2P 介面）。狀態已是 CONNECTED，
-        // 即使此處被系統拒絕，TCP 仍能透過預設路由連到 192.168.49.1，因此絕不可讓它使 App 崩潰。
+        // 改用 registerNetworkCallback:它會回報「所有」符合的網路(STA 與 P2P 都會進 onAvailable),
+        // 讓我們挑出無 INTERNET 的 P2P 那個;requestNetwork 只給單一「最佳」網路(通常是 STA)。
+        // 純為路由優化,狀態已是 CONNECTED,任何失敗都不得使 App 崩潰——TCP 仍可走直連 p2p0。
         try {
-            core.connManager.requestNetwork(req, clientNetworkCallback);
+            core.connManager.registerNetworkCallback(req, clientNetworkCallback);
         } catch (RuntimeException e) {
-            // SecurityException(受限網路權限)外,部分 OEM 對不完整 NetworkRequest 會丟
-            // IllegalArgumentException。此處僅為路由優化,任何失敗都不得使 App 崩潰——
-            // TCP 仍可走預設路由連到 GO(192.168.49.1)。
-            Log.w(TAG, "requestNetwork failed, relying on default routing to GO", e);
+            Log.w(TAG, "registerNetworkCallback failed, relying on default routing to GO", e);
             clientNetworkCallback = null;
         }
     }

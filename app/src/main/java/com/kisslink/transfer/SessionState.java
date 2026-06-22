@@ -8,7 +8,7 @@ public final class SessionState {
     public enum Phase {
         RESETTING,
         IDLE, PAIRING_LATCHED, PAIRING_LINKING, PAIRING_ELECTING,
-        CREATING_GROUP, HOSTING, CONNECTING, CONNECTED,
+        CREATING_GROUP, HOSTING, CONNECTING, SOCKETING, CONNECTED,
         TRANSFERRING, FILE_DONE, ALL_DONE,
         CANCELLED, ERROR
     }
@@ -29,7 +29,7 @@ public final class SessionState {
         return phase == Phase.RESETTING || phase == Phase.PAIRING_LATCHED
                 || phase == Phase.PAIRING_LINKING || phase == Phase.PAIRING_ELECTING
                 || phase == Phase.CREATING_GROUP || phase == Phase.HOSTING
-                || phase == Phase.CONNECTING;
+                || phase == Phase.CONNECTING || phase == Phase.SOCKETING;
     }
 
     public boolean isTransferStartedOrConnected() {

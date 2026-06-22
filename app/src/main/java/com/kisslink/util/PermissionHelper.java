@@ -39,9 +39,6 @@ public class PermissionHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES);
             permissions.add(Manifest.permission.POST_NOTIFICATIONS);
-            permissions.add(Manifest.permission.READ_MEDIA_IMAGES);
-            permissions.add(Manifest.permission.READ_MEDIA_VIDEO);
-            permissions.add(Manifest.permission.READ_MEDIA_AUDIO);
         } else {
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
         }

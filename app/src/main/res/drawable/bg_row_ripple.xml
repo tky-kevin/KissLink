@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 整列點擊回饋（圓角）：全 app 共用，取代矩形的 ?attr/selectableItemBackground。
+     圓角半徑統一引用 @dimen/row_corner_radius。 -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?attr/colorControlHighlight">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <corners android:radius="@dimen/row_corner_radius" />
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+</ripple>

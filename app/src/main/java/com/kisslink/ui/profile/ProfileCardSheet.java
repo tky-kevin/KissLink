@@ -6,7 +6,7 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Dialog;
-import android.graphics.Bitmap;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
@@ -60,13 +60,20 @@ public class ProfileCardSheet extends DialogFragment {
     private boolean editing = false;
     private final List<View> fieldRows = new ArrayList<>();
 
-    private final ActivityResultLauncher<PickVisualMediaRequest> avatarPicker =
-            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
-                if (uri == null) return;
-                if (ProfileStore.get(requireContext()).setAvatarFromUri(uri)) {
+    // 套用裁切後的結果：AvatarCropActivity 已存好頭像,這裡只需重繪並通知主畫面。
+    private final ActivityResultLauncher<Intent> avatarCropLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == android.app.Activity.RESULT_OK) {
                     renderAvatar();
                     notifyHost();
                 }
+            });
+
+    // 選圖後不直接存,先進圓形裁切頁讓使用者指定顯示範圍。
+    private final ActivityResultLauncher<PickVisualMediaRequest> avatarPicker =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
+                if (uri == null) return;
+                avatarCropLauncher.launch(AvatarCropActivity.newIntent(requireContext(), uri));
             });
 
     public static ProfileCardSheet newInstance() { return new ProfileCardSheet(); }
@@ -219,16 +226,13 @@ public class ProfileCardSheet extends DialogFragment {
     }
 
     private void renderAvatar() {
-        Bitmap a = ProfileStore.get(requireContext()).loadAvatar();
-        if (a != null) {
-            ivAvatar.setPadding(0, 0, 0, 0);
-            ivAvatar.setImageBitmap(a);
-        } else {
-            int pad = Math.round(26 * getResources().getDisplayMetrics().density);
-            ivAvatar.setPadding(pad, pad, pad, pad);
-            ivAvatar.setImageResource(R.drawable.ic_avatar_default);
-        }
+        // 真實頭像與預設字符走同一條顯示路徑(固定 centerCrop/零內距),避免切換內距時被縮小/裁切。
+        ivAvatar.setPadding(0, 0, 0, 0);
+        ivAvatar.setImageBitmap(
+                ProfileStore.get(requireContext()).loadAvatarForDisplay(requireContext(), AVATAR_DISPLAY_PX));
     }
+
+    private static final int AVATAR_DISPLAY_PX = 256;
 
     private void notifyHost() {
         if (getActivity() instanceof Host) ((Host) getActivity()).onProfileChanged();

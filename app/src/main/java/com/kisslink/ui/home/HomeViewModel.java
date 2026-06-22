@@ -37,6 +37,62 @@ public class HomeViewModel extends ViewModel {
     private int recvCount = 0; // 目前接收批次已完成件數
     private final MutableLiveData<Integer> receivedCountLd = new MutableLiveData<>(0);
 
+    // ── 接收清單（接收方列表，取代「收到 N 個」橫幅）──────────────
+    // 存於 VM → 跨 Activity 重建（如切換深淺色）存活。逐檔累積：名稱→該檔狀態。
+    public static final class RecvFile {
+        public final String name;
+        public final long size;
+        public final byte type;
+        public int percent = -1;
+        public boolean done;
+        public boolean highlight;   // 當前正在接收的那一檔
+        @androidx.annotation.Nullable public String uri;   // 存檔位置（收完才有，供點開）
+        @androidx.annotation.Nullable public String mime;
+        RecvFile(String name, long size, byte type) { this.name = name; this.size = size; this.type = type; }
+    }
+    private final java.util.LinkedHashMap<String, RecvFile> received = new java.util.LinkedHashMap<>();
+    private long receiveListBatchId = 0;
+
+    public java.util.Collection<RecvFile> receivedFiles() { return received.values(); }
+    public boolean hasReceivedList() { return !received.isEmpty(); }
+
+    /**
+     * 接收到某檔的進度/完成；遇到新批次先清空。高亮設於當前傳輸中的那一檔。
+     * @return true 表示此檔為新加入（以前不在清單中）
+     */
+    public boolean upsertReceived(long batchId, @NonNull String name, long size, byte type,
+                                  int percent, boolean done) {
+        if (batchId != receiveListBatchId) { received.clear(); receiveListBatchId = batchId; }
+        RecvFile f = received.get(name);
+        boolean isNew = (f == null);
+        if (isNew) { f = new RecvFile(name, size, type); received.put(name, f); }
+        f.percent = done ? 100 : percent;
+        f.done = done;
+        for (RecvFile o : received.values()) o.highlight = false;
+        if (!done) f.highlight = true;
+        return isNew;
+    }
+
+    /** 收完某檔 → 補上存檔 Uri/MIME，使該列可點開。 */
+    public void setReceivedUri(@NonNull String name, @androidx.annotation.Nullable String uri,
+                               @androidx.annotation.Nullable String mime) {
+        RecvFile f = received.get(name);
+        if (f != null) { f.uri = uri; f.mime = mime; }
+    }
+
+    public void clearReceivedList() { received.clear(); receiveListBatchId = 0; }
+
+    /** 把接收列表收合為橫幅：統計已完成件數，餵入 receivedCountLd 讓 banner 顯示。 */
+    public void collapseReceiveListToBanner() {
+        int done = 0;
+        for (RecvFile f : received.values()) {
+            if (f.done) done++;
+        }
+        recvBatchId = receiveListBatchId;
+        recvCount = done;
+        receivedCountLd.setValue(recvCount);
+    }
+
     // ── 旗標 ────────────────────────────────────────────────────
     // #1：未連線時按傳送名片 → 排隊，連上後自動送出
     private boolean pendingCardSend = false;
@@ -45,6 +101,12 @@ public class HomeViewModel extends ViewModel {
 
     // ── 連線階段 ────────────────────────────────────────────────
     private SessionState.Phase lastPhase = SessionState.Phase.IDLE;
+
+    // ── 完成動畫一次性消費（#2）──────────────────────────────────
+    // 傳輸完成是「事件」不是「持久狀態」，但 sessionLd 會黏在 ALL_DONE 並在每次重綁/重建
+    // （如切換深淺色重建 Activity）補送給新訂閱者。以 batchId 記住「已慶祝過的批次」，
+    // 同批只播一次打勾/彩帶；重建補送的同批 ALL_DONE 不重播。ViewModel 跨重建存活，旗標也隨之存活。
+    private long celebratedBatchId = Long.MIN_VALUE;
 
     // ── 進度單調化狀態 ──────────────────────────────────────────
     private long progBatchId = Long.MIN_VALUE;
@@ -152,6 +214,22 @@ public class HomeViewModel extends ViewModel {
     /** 由 Activity 在處理完一次 {@link SessionState} 後呼叫，記錄最後階段。 */
     public void onSession(@NonNull SessionState st) {
         this.lastPhase = st.phase;
+    }
+
+    /**
+     * 完成動畫一次性閘門：對某批次回 {@code true} 僅一次（首次真實送達的 ALL_DONE）。
+     * 重綁/重建補送同批 ALL_DONE 時回 {@code false}，呼叫端據此略過打勾/彩帶、只呈現已連線穩態。
+     * 每批完成事件只會送達一次（單檔走 ALL_DONE、多檔中間檔走 FILE_DONE 不到此），故以 batchId 為鍵安全。
+     */
+    public boolean shouldCelebrate(long batchId) {
+        if (batchId == celebratedBatchId) return false;
+        celebratedBatchId = batchId;
+        return true;
+    }
+
+    /** 回到就緒/閒置時清掉「已慶祝」記號，讓下一輪連線的新批次能正常慶祝（即使 batchId 罕見重用）。 */
+    public void resetCelebration() {
+        celebratedBatchId = Long.MIN_VALUE;
     }
 
     /** 已連線（含傳輸中／單檔完成／全部完成）→ 可送出。 */

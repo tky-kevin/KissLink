@@ -52,19 +52,33 @@ public final class PeerConnector {
 
     /**
      * Connect to GO as client with retry loop.
+     *
+     * <p>P2P 網路是在 P2P 群組形成({@code CONNECTED})<b>之後</b>才非同步綁定的,
+     * 故不可在迴圈外抓一次 {@link Network}(那時必為 null)。改傳 {@code networkSupplier}
+     * 每次重試重抓:背景綁定一就緒即走 {@link Network#bindSocket} 強制走 P2P 介面。
+     * 這是必要的——當裝置同時連著 Wi-Fi AP 時,預設路由走 AP,{@code 192.168.49.1}
+     * 在 P2P 介面上不可達(見 LESSONS_LEARNED 坑9/坑11),僅靠 process 綁定並不可靠。
      */
-    public void connectAsClient(Network p2pNetwork, Callback callback) {
+    public void connectAsClient(java.util.function.Supplier<Network> networkSupplier, Callback callback) {
         new Thread(() -> {
             final long deadline = System.currentTimeMillis() + CONNECT_BUDGET_MS;
             int attempt = 0;
+            boolean loggedBind = false;
             while (System.currentTimeMillis() < deadline) {
                 attempt++;
                 Socket s = null;
                 try {
                     s = new Socket();
+                    Network p2pNetwork = networkSupplier != null ? networkSupplier.get() : null;
                     if (p2pNetwork != null) {
                         p2pNetwork.bindSocket(s);
-                        Log.d(TAG, "Client: socket bound to P2P network");
+                        if (!loggedBind) {
+                            Log.i(TAG, "Client: socket bound to P2P network " + p2pNetwork
+                                    + " (attempt " + attempt + ")");
+                            loggedBind = true;
+                        }
+                    } else if (attempt == 1) {
+                        Log.w(TAG, "Client: P2P network not ready yet → retry will rebind once bound");
                     }
                     s.connect(new InetSocketAddress(
                             WifiDirectManager.GO_IP_ADDRESS, WifiDirectManager.TRANSFER_PORT),
@@ -73,6 +87,12 @@ public final class PeerConnector {
                     callback.onSocketReady(s); // 所有權移交給呼叫端，不在此 close
                     return;
                 } catch (Exception e) {
+                    // 失敗原因留診斷:逾時(SocketTimeoutException)=路由不通、
+                    // 被拒(ConnectException)=GO 尚未 listen,兩者排查方向不同。
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "Client connect attempt " + attempt + " failed: "
+                                + e.getClass().getSimpleName() + " " + e.getMessage());
+                    }
                     // 連線失敗務必關閉本次 socket，否則每次重試都洩漏一個 native FD
                     // （bind 後 connect 逾時／被拒的 Socket 仍持有未釋放的描述子）。
                     closeQuietly(s);

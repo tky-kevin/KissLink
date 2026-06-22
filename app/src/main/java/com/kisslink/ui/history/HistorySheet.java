@@ -1,5 +1,7 @@
 package com.kisslink.ui.history;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -8,6 +10,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.format.DateUtils;
+import android.text.method.LinkMovementMethod;
+import android.text.util.Linkify;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +25,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
@@ -234,6 +239,10 @@ public class HistorySheet extends BottomSheetDialogFragment {
     }
 
     private void openFile(Context ctx, TransferRecordEntity r) {
+        if ("text/plain".equals(r.mimeType)) {
+            showTextRecordDialog(ctx, r);
+            return;
+        }
         if (r.filePath == null || !r.filePath.startsWith("content:")) {
             toast("此檔案位置未記錄，無法開啟");
             return;
@@ -247,6 +256,40 @@ public class HistorySheet extends BottomSheetDialogFragment {
             startActivity(i);
         } catch (Exception e) {
             toast("沒有可開啟此檔案的應用程式");
+        }
+    }
+
+    /** 歷史記錄中的純文字項目 → 對話框顯示全文（連結可點擊），可複製；連結可開啟。 */
+    private void showTextRecordDialog(Context ctx, TransferRecordEntity r) {
+        String text = r.fileName;
+        boolean isLink = android.util.Patterns.WEB_URL.matcher(text).matches();
+        MaterialAlertDialogBuilder b = new MaterialAlertDialogBuilder(ctx)
+                .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
+                .setMessage(text)
+                .setPositiveButton(R.string.action_copy, (d, w) -> {
+                    ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("KissLink", text));
+                        toast("已複製到剪貼簿");
+                    }
+                })
+                .setNegativeButton(R.string.btn_cancel, null);
+        if (isLink) {
+            b.setNeutralButton(R.string.action_open, (d, w) -> {
+                try {
+                    ctx.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(text))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    toast("找不到可開啟連結的應用程式");
+                }
+            });
+        }
+        androidx.appcompat.app.AlertDialog dialog = b.show();
+        TextView msgTv = dialog.findViewById(android.R.id.message);
+        if (msgTv != null) {
+            msgTv.setAutoLinkMask(Linkify.WEB_URLS);
+            msgTv.setMovementMethod(LinkMovementMethod.getInstance());
+            msgTv.setTextIsSelectable(true);
         }
     }
 

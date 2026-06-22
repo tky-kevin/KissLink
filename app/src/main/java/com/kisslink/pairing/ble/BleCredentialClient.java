@@ -43,6 +43,11 @@ public class BleCredentialClient {
 
     private static final String TAG = "BleCredentialClient";
 
+    /** PAIRSEQ 診斷：預設靜默，{@code adb shell setprop log.tag.BleCredentialClient DEBUG} 可叫出。 */
+    private static void seq(String msg) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+    }
+
     public interface Callback {
         /** 已連線、自己的 token 已送達、notify 已開啟。 */
         void onReady();
@@ -60,6 +65,7 @@ public class BleCredentialClient {
     @Nullable private BluetoothGattCharacteristic credentialChar;
     @Nullable private BluetoothGattCharacteristic peerTokenChar;
     private boolean scanning = false;
+    @Nullable private String scanNonceB64;   // 正在掃描的對方 nonce(NFC 讀到的),供逾時診斷
     private final Runnable timeoutRunnable;
 
     // ── GATT 連線重試：吸收 Android BLE 常見的暫時性 status 133（密集重碰下高發），
@@ -77,10 +83,28 @@ public class BleCredentialClient {
     @Nullable private Runnable credentialReadPoll;
     private volatile boolean stopped = false;
 
+    // 交握逾時：GATT 連上後到 onReady 之間（discover→MTU→寫 token→CCCD）任一步驟卡住
+    // （BLE stack 偶發不回呼）→ 在預算內主動 close+重連，避免靜待外層 coordinator 看門狗或無限等待。
+    private static final long HANDSHAKE_TIMEOUT_MS = 7000L;
+    private final Runnable handshakeTimeout = this::onHandshakeStall;
+
     public BleCredentialClient(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
-        this.timeoutRunnable = () -> callback.onError("BLE 連線逾時，請重試");
+        this.timeoutRunnable = () -> {
+            // 仍在掃描卻逾時 = 整段都沒看到對方的 nonce 廣播。最常見成因是「不同源 nonce」:
+            // NFC 讀到的是對方舊場次 token,但對方已重建 coordinator 改廣播新 nonce(見 LESSONS 坑14)。
+            if (scanning) {
+                Log.w(TAG, "BLE timeout: never saw peer advertising nonce=" + scanNonceB64
+                        + " — peer not advertising it (likely stale/cross-session nonce mismatch)");
+            }
+            callback.onError("BLE 連線逾時，請重試");
+        };
+    }
+
+    private static String b64(@Nullable byte[] n) {
+        return n == null ? "null" : android.util.Base64.encodeToString(
+                n, android.util.Base64.URL_SAFE | android.util.Base64.NO_PADDING | android.util.Base64.NO_WRAP);
     }
 
     @SuppressLint("MissingPermission")
@@ -102,8 +126,9 @@ public class BleCredentialClient {
                 .build();
 
         scanning = true;
+        scanNonceB64 = b64(peerNonce);
         scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
-        Log.i(TAG, "Scanning for peer nonce…");
+        seq("scanning for peer nonce=" + scanNonceB64);
         main.postDelayed(timeoutRunnable, 15000);
     }
 
@@ -146,6 +171,7 @@ public class BleCredentialClient {
     public void stop() {
         stopped = true;
         main.removeCallbacks(timeoutRunnable);
+        main.removeCallbacks(handshakeTimeout);
         if (credentialReadPoll != null) { main.removeCallbacks(credentialReadPoll); credentialReadPoll = null; }
         try { if (scanning && scanner != null) scanner.stopScan(scanCallback); } catch (Exception ignored) {}
         try { if (gatt != null) { gatt.disconnect(); gatt.close(); } } catch (Exception ignored) {}
@@ -182,8 +208,31 @@ public class BleCredentialClient {
     private void connectGatt() {
         if (stopped || peerDevice == null) return;
         gattAttempts++;
-        Log.i(TAG, "Peer found, connecting GATT (attempt " + gattAttempts + ")…");
+        seq("peer found, connecting GATT (attempt " + gattAttempts + ")…");
         gatt = peerDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+    }
+
+    /**
+     * 交握逾時（GATT 已連上但 discover/MTU/token/CCCD 卡住未達 onReady）：
+     * 主動斷掉目前 gatt（其 DISCONNECTED 因 g!=gatt 會被忽略），在重試額度內換一條新連線重來；
+     * 用盡才回報錯誤。把「靜默卡住」轉成「快速重連」，多數暫時性 BLE 卡頓可自癒。
+     */
+    @SuppressLint("MissingPermission")
+    private void onHandshakeStall() {
+        if (stopped || ready || credentialDelivered) return;
+        Log.w(TAG, "PAIRSEQ handshake stalled (servicesDiscovered=" + servicesDiscovered
+                + ", attempt=" + gattAttempts + ") → reconnect/abort");
+        BluetoothGatt old = gatt;
+        gatt = null;                       // 先脫鉤 → 舊 gatt 的 DISCONNECTED 會被 g!=gatt 忽略
+        try { if (old != null) { old.disconnect(); old.close(); } } catch (Exception ignored) {}
+        servicesDiscovered = false;
+        credentialChar = null;
+        peerTokenChar = null;
+        if (gattAttempts < MAX_GATT_ATTEMPTS) {
+            main.postDelayed(this::connectGatt, GATT_RETRY_BACKOFF_MS);
+        } else {
+            main.post(() -> callback.onError("BLE 交握逾時，請再碰一下重試"));
+        }
     }
 
     // ══════════════════════════════════════════════════════════
@@ -197,14 +246,21 @@ public class BleCredentialClient {
                 // BLE 已連上 → 取消逾時。後續 token/憑證走 live link(快),
                 // Wi-Fi 建群有 WifiDirectManager 自己的逾時保護,不該再算進 BLE 額度。
                 main.removeCallbacks(timeoutRunnable);
-                Log.d(TAG, "GATT connected → discovering services");
+                // 連上後改由「交握逾時」看門狗保護後續步驟（見 onHandshakeStall）。
+                main.removeCallbacks(handshakeTimeout);
+                main.postDelayed(handshakeTimeout, HANDSHAKE_TIMEOUT_MS);
+                seq("GATT connected → discovering services");
                 g.discoverServices();
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 // 連線失敗(常見 status 133)或交握完成前掉線。務必 close 釋放 client 介面,
                 // 否則密集重碰會讓失敗的 GATT 物件堆疊洩漏、BLE 越來越不穩。
-                Log.w(TAG, "GATT disconnected (status=" + status + ")");
                 try { g.close(); } catch (Exception ignored) {}
-                if (gatt == g) gatt = null;
+                // 來自「已被手動換掉的舊 gatt」的回呼 → 忽略，避免與交握逾時重連互相打架（重複重試/誤判失敗）。
+                if (g != gatt) return;
+                Log.w(TAG, "PAIRSEQ GATT disconnected (status=" + status + ", servicesDiscovered="
+                        + servicesDiscovered + ", attempts=" + gattAttempts + ")");
+                main.removeCallbacks(handshakeTimeout);
+                gatt = null;
                 if (ready || credentialDelivered) return;          // 交握已過,正常收尾,不介入
                 if (!servicesDiscovered && gattAttempts < MAX_GATT_ATTEMPTS) {
                     main.postDelayed(BleCredentialClient.this::connectGatt, GATT_RETRY_BACKOFF_MS); // 早期 133 → 自動重試
@@ -221,6 +277,7 @@ public class BleCredentialClient {
                 return;
             }
             servicesDiscovered = true; // 進入交握階段：之後的掉線不再當作可重試的早期 133
+            seq("services discovered → requestMtu");
             peerTokenChar  = g.getService(BleConstants.SERVICE_UUID).getCharacteristic(BleConstants.CHAR_PEER_TOKEN);
             credentialChar = g.getService(BleConstants.SERVICE_UUID).getCharacteristic(BleConstants.CHAR_CREDENTIAL);
             if (peerTokenChar == null || credentialChar == null) {
@@ -234,7 +291,7 @@ public class BleCredentialClient {
         @SuppressLint({"MissingPermission", "deprecation"})
         @SuppressWarnings("deprecation")
         @Override public void onMtuChanged(BluetoothGatt g, int mtu, int status) {
-            Log.d(TAG, "MTU = " + mtu + " → writing own token");
+            seq("MTU = " + mtu + " (status=" + status + ") → writing own token");
             // 1) 寫自己的 token 給 peripheral
             peerTokenChar.setValue(localToken.toUri().getBytes(StandardCharsets.UTF_8));
             peerTokenChar.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
@@ -247,13 +304,16 @@ public class BleCredentialClient {
             if (ch == null) return;
             if (BleConstants.CHAR_PEER_TOKEN.equals(ch.getUuid())) {
                 // 2) token 已送達 → 開啟 credential 的 notify
+                seq("own token written (status=" + status + ") → enabling notify");
                 g.setCharacteristicNotification(credentialChar, true);
                 BluetoothGattDescriptor cccd = credentialChar.getDescriptor(BleConstants.CCCD);
                 if (cccd != null) {
                     cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                     g.writeDescriptor(cccd);
                 } else {
+                    seq("no CCCD → READY (handshake done)");
                     ready = true;
+                    main.removeCallbacks(handshakeTimeout);
                     main.post(callback::onReady);
                 }
             }
@@ -262,7 +322,9 @@ public class BleCredentialClient {
         @Override public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor d, int status) {
             if (d != null && BleConstants.CCCD.equals(d.getUuid())) {
                 // 3) notify 開啟 → 就緒
+                seq("CCCD written (status=" + status + ") → READY (handshake done)");
                 ready = true;
+                main.removeCallbacks(handshakeTimeout);
                 main.post(callback::onReady);
             }
         }

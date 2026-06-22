@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
-import android.net.Uri;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -16,7 +15,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 
 /**
  * 名片資料的單一儲存點（process 範圍 singleton）：
@@ -122,18 +120,51 @@ public final class ProfileStore {
         return BitmapFactory.decodeFile(f.getAbsolutePath());
     }
 
-    /** 從使用者選的圖片 Uri 匯入：置中裁正方、縮到 AVATAR_MAX、存成 png。 */
-    public boolean setAvatarFromUri(@NonNull Uri uri) {
-        try (InputStream in = app.getContentResolver().openInputStream(uri)) {
-            if (in == null) return false;
-            Bitmap src = BitmapFactory.decodeStream(in);
-            if (src == null) return false;
-            Bitmap square = centerCropScale(src, AVATAR_MAX);
+    /** 預設頭像字符相對畫布的內距比例（對齊名片 26dp / 100dp）。 */
+    private static final float DEFAULT_GLYPH_INSET = 0.26f;
+
+    /**
+     * 取得「可直接顯示」的方形頭像點陣圖：有自訂頭像回真實圖，否則把預設字符畫在透明方形畫布上。
+     *
+     * <p>讓兩種狀態都走同一條顯示路徑（固定 {@code centerCrop} + 零內距），避免在
+     * 「切換 ImageView 內距/scaleType」時 centerCrop 矩陣沿用舊值而把頭像縮小或裁切。
+     *
+     * <p>{@code uiContext} 必須是「會跟隨 App 內深/淺色覆寫」的 themed context（Activity / Fragment
+     * 的 requireContext），不可用 application context——後者的 Configuration 不吃
+     * {@code AppCompatDelegate.setDefaultNightMode}，會導致預設頭像顏色固定不隨主題切換。
+     */
+    @NonNull
+    public Bitmap loadAvatarForDisplay(@NonNull Context uiContext, int sizePx) {
+        Bitmap real = loadAvatar();
+        if (real != null) return real;
+        return renderDefaultAvatar(uiContext, sizePx);
+    }
+
+    /** 把預設頭像字符（固定內距）畫到透明方形畫布，使其顯示比例與真實頭像一致。 */
+    @NonNull
+    public Bitmap renderDefaultAvatar(@NonNull Context uiContext, int sizePx) {
+        int size = Math.max(1, sizePx);
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(bmp);
+        android.graphics.drawable.Drawable d = androidx.core.content.ContextCompat.getDrawable(
+                uiContext, com.kisslink.R.drawable.ic_avatar_default);
+        if (d != null) {
+            int inset = Math.round(size * DEFAULT_GLYPH_INSET);
+            d.setBounds(inset, inset, size - inset, size - inset);
+            d.draw(c);
+        }
+        return bmp;
+    }
+
+    /** 存入裁切介面產出的方形頭像：縮到 {@code AVATAR_MAX} 存成 png，版本號 +1。 */
+    public boolean saveAvatarBitmap(@NonNull Bitmap square) {
+        try {
+            Bitmap scaled = centerCropScale(square, AVATAR_MAX);
             try (FileOutputStream out = new FileOutputStream(avatarFile())) {
-                square.compress(Bitmap.CompressFormat.PNG, 100, out);
+                scaled.compress(Bitmap.CompressFormat.PNG, 100, out);
             }
             prefs.edit().putInt(K_AVATAR_VER, avatarVersion() + 1).apply();
-            if (square != src) src.recycle();
+            if (scaled != square) scaled.recycle();
             return true;
         } catch (Exception e) {
             return false;

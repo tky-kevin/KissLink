@@ -185,10 +185,12 @@ final class PeerReceiver implements Runnable {
             this.name = name; this.mime = mime; this.size = size; this.itemType = itemType;
             this.fileIndex = fileIndex; this.fileCount = fileCount;
             if (itemType == TransferProtocol.ITEM_VCARD) cardBuf = new java.io.ByteArrayOutputStream();
+            String saveName = itemType == TransferProtocol.ITEM_TEXT
+                    ? "Shared_Text_" + System.currentTimeMillis() + ".txt" : name;
             try {
                 ContentResolver cr = context.getContentResolver();
                 ContentValues v = new ContentValues();
-                v.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                v.put(MediaStore.Downloads.DISPLAY_NAME, saveName);
                 v.put(MediaStore.Downloads.MIME_TYPE, mime);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     v.put(MediaStore.Downloads.RELATIVE_PATH, SAVE_DIR);
