@@ -346,7 +346,17 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         List<Uri> uris = new ArrayList<>();
         if (single) {
             Uri u = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri.class);
-            if (u != null) uris.add(u);
+            if (u != null) {
+                uris.add(u);
+            } else {
+                // 沒有檔案串流 → 分享的是純文字/連結：彈出可複製（連結另可開啟）。
+                CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+                if (text != null && text.toString().trim().length() > 0) {
+                    showSharedTextDialog(text.toString().trim());
+                    clearShareIntent();
+                    return;
+                }
+            }
         } else {
             ArrayList<Uri> list =
                     IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri.class);
@@ -376,6 +386,40 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 消費掉分享 intent,換成普通 intent,避免後續生命週期重複處理。 */
     private void clearShareIntent() {
         setIntent(new Intent(this, HomeActivity.class));
+    }
+
+    /**
+     * 分享進來的純文字/連結：彈出對話框顯示內容，文字可「複製」；若為連結另提供「開啟」。
+     */
+    private void showSharedTextDialog(@NonNull String text) {
+        boolean isLink = android.util.Patterns.WEB_URL.matcher(text).matches();
+        com.google.android.material.dialog.MaterialAlertDialogBuilder b =
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                        .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
+                        .setMessage(text)
+                        .setNegativeButton(R.string.btn_cancel, null)
+                        .setPositiveButton(R.string.action_copy, (d, w) -> copyToClipboard(text));
+        if (isLink) {
+            // 連結：另提供「開啟」（由使用者點擊觸發，於外部瀏覽器開啟）。
+            b.setNeutralButton(R.string.action_open, (d, w) -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(text))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    toast(getString(R.string.share_open_failed));
+                }
+            });
+        }
+        b.show();
+    }
+
+    private void copyToClipboard(@NonNull String text) {
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("KissLink", text));
+            toast(getString(R.string.share_copied));
+        }
     }
 
     @Override protected void onDestroy() {
