@@ -86,6 +86,7 @@ public final class TransferProtocol {
     public static final byte ITEM_FILE  = 0;
     public static final byte ITEM_VCARD = 1; // 名片（vCard）
     public static final byte ITEM_PHOTO = 2;
+    public static final byte ITEM_TEXT  = 3; // 純文字/連結
 
     // ══════════════════════════════════════════════════════════
     //  Header POJO
