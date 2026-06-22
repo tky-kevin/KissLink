@@ -11,6 +11,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.text.method.LinkMovementMethod;
+import android.text.util.Linkify;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -356,10 +358,17 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             if (u != null) {
                 uris.add(u);
             } else {
-                // 沒有檔案串流 → 分享的是純文字/連結：彈出可複製（連結另可開啟）。
+                // 沒有檔案串流 → 分享的是純文字/連結：加入待傳清單。
                 CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
                 if (text != null && text.toString().trim().length() > 0) {
-                    showSharedTextDialog(text.toString().trim());
+                    String content = text.toString().trim();
+                    CharSequence subj = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT);
+                    if (subj != null && subj.toString().trim().length() > 0)
+                        content = subj.toString().trim() + "\n\n" + content;
+                    List<SendItem> picked = new ArrayList<>();
+                    picked.add(SendItem.text(content));
+                    viewModel.addAllToSelection(picked);
+                    toast(getString(R.string.share_added_text));
                     clearShareIntent();
                     return;
                 }
@@ -395,19 +404,25 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         setIntent(new Intent(this, HomeActivity.class));
     }
 
-    /**
-     * 分享進來的純文字/連結：彈出對話框顯示內容，文字可「複製」；若為連結另提供「開啟」。
-     */
-    private void showSharedTextDialog(@NonNull String text) {
+    private void copyToClipboard(@NonNull String text) {
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("KissLink", text));
+            toast(getString(R.string.share_copied));
+        }
+    }
+
+    /** 點擊收到的文字/連結：彈出對話框顯示全文（連結可點擊），可複製；連結可開啟。 */
+    private void showReceivedTextDialog(@NonNull String text, @Nullable Uri fileUri) {
         boolean isLink = android.util.Patterns.WEB_URL.matcher(text).matches();
         com.google.android.material.dialog.MaterialAlertDialogBuilder b =
                 new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                         .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
                         .setMessage(text)
-                        .setNegativeButton(R.string.btn_cancel, null)
-                        .setPositiveButton(R.string.action_copy, (d, w) -> copyToClipboard(text));
+                        .setPositiveButton(R.string.action_copy, (d, w) -> copyToClipboard(text))
+                        .setNegativeButton(R.string.btn_cancel, null);
         if (isLink) {
-            // 連結：另提供「開啟」（由使用者點擊觸發，於外部瀏覽器開啟）。
             b.setNeutralButton(R.string.action_open, (d, w) -> {
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(text))
@@ -417,15 +432,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 }
             });
         }
-        b.show();
-    }
-
-    private void copyToClipboard(@NonNull String text) {
-        android.content.ClipboardManager cm =
-                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        if (cm != null) {
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("KissLink", text));
-            toast(getString(R.string.share_copied));
+        androidx.appcompat.app.AlertDialog dialog = b.show();
+        TextView msgTv = dialog.findViewById(android.R.id.message);
+        if (msgTv != null) {
+            msgTv.setAutoLinkMask(Linkify.WEB_URLS);
+            msgTv.setMovementMethod(LinkMovementMethod.getInstance());
+            msgTv.setTextIsSelectable(true);
         }
     }
 
@@ -1013,6 +1025,10 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     private void openFile(@androidx.annotation.NonNull SendRow row) {
+        if (row.itemType == TransferProtocol.ITEM_TEXT) {
+            showReceivedTextDialog(row.name, row.fileUri);
+            return;
+        }
         if (row.fileUri == null) return;
         try {
             Intent i = new Intent(Intent.ACTION_VIEW);

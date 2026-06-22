@@ -14,7 +14,7 @@ public final class SendRow {
     public final String sizeLabel;     // 例如 "4.2 MB"，未知為 ""
     public final byte   itemType;      // TransferProtocol.ITEM_*
     @Nullable public Uri thumbUri;  // 相片/影片縮圖來源（檔案為 null）；接收端收完後才補上
-    @Nullable public final Uri fileUri;   // 檔案 Uri（用於點擊開啟）
+    @Nullable public Uri fileUri;   // 檔案 Uri（用於點擊開啟）；接收端收完後才補上
     @Nullable public String mime;   // MIME 類型
 
     public boolean done = false;

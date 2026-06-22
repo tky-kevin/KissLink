@@ -69,6 +69,7 @@ public final class FileUtils {
     public static int iconFor(byte itemType, @Nullable String mime, @Nullable String name) {
         if (itemType == TransferProtocol.ITEM_VCARD) return R.drawable.ic_person;
         if (itemType == TransferProtocol.ITEM_PHOTO) return R.drawable.ic_image;
+        if (itemType == TransferProtocol.ITEM_TEXT) return R.drawable.ic_file;
         if (mime != null) return guessIconFromMime(mime);
         return guessIcon(name);
     }

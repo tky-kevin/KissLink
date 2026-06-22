@@ -102,6 +102,7 @@
 
     <!-- 分享選單接收 -->
     <string name="share_added">已加入 %1$d 個待傳項目，背貼連接後即可傳送</string>
+    <string name="share_added_text">文字已加入待傳清單</string>
     <string name="share_unsupported">這個分享內容無法傳送</string>
     <string name="share_text_title">分享的文字</string>
     <string name="share_link_title">分享的連結</string>

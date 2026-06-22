@@ -86,16 +86,17 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     }
 
     /**
-     * 接收方某檔收完後補上縮圖 Uri（來自 ReceivedItem → setReceivedUri），
+     * 接收方某檔收完後補上存檔 Uri（縮圖/開啟用，來自 ReceivedItem → setReceivedUri），
      * 只更新該列不觸發其他列的 notifyDataSetChanged，避免 flicker。
      */
-    public void updateReceivedThumbnail(@NonNull String name, @Nullable Uri thumbUri, @Nullable String mime) {
+    public void updateReceivedThumbnail(@NonNull String name, @Nullable Uri uri, @Nullable String mime) {
         int pos = indexOfName(name);
         if (pos < 0) return;
         SendRow r = rows.get(pos);
-        r.thumbUri = thumbUri;
+        r.thumbUri = uri;
+        r.fileUri = uri;
         if (mime != null) r.mime = mime;
-        notifyItemChanged(pos);  // 完整 rebind 該列（載入縮圖），不影響其他列
+        notifyItemChanged(pos);
     }
 
     /** 依檔名查詢列位置；無匹配回 -1。 */
