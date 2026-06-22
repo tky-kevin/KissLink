@@ -65,6 +65,7 @@ public class BleCredentialClient {
     @Nullable private BluetoothGattCharacteristic credentialChar;
     @Nullable private BluetoothGattCharacteristic peerTokenChar;
     private boolean scanning = false;
+    @Nullable private String scanNonceB64;   // 正在掃描的對方 nonce(NFC 讀到的),供逾時診斷
     private final Runnable timeoutRunnable;
 
     // ── GATT 連線重試：吸收 Android BLE 常見的暫時性 status 133（密集重碰下高發），
@@ -85,7 +86,20 @@ public class BleCredentialClient {
     public BleCredentialClient(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
-        this.timeoutRunnable = () -> callback.onError("BLE 連線逾時，請重試");
+        this.timeoutRunnable = () -> {
+            // 仍在掃描卻逾時 = 整段都沒看到對方的 nonce 廣播。最常見成因是「不同源 nonce」:
+            // NFC 讀到的是對方舊場次 token,但對方已重建 coordinator 改廣播新 nonce(見 LESSONS 坑14)。
+            if (scanning) {
+                Log.w(TAG, "BLE timeout: never saw peer advertising nonce=" + scanNonceB64
+                        + " — peer not advertising it (likely stale/cross-session nonce mismatch)");
+            }
+            callback.onError("BLE 連線逾時，請重試");
+        };
+    }
+
+    private static String b64(@Nullable byte[] n) {
+        return n == null ? "null" : android.util.Base64.encodeToString(
+                n, android.util.Base64.URL_SAFE | android.util.Base64.NO_PADDING | android.util.Base64.NO_WRAP);
     }
 
     @SuppressLint("MissingPermission")
@@ -107,8 +121,9 @@ public class BleCredentialClient {
                 .build();
 
         scanning = true;
+        scanNonceB64 = b64(peerNonce);
         scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
-        seq("scanning for peer nonce…");
+        seq("scanning for peer nonce=" + scanNonceB64);
         main.postDelayed(timeoutRunnable, 15000);
     }
 

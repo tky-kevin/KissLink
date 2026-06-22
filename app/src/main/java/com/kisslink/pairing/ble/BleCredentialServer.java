@@ -120,7 +120,8 @@ public class BleCredentialServer {
                 .addManufacturerData(BleConstants.MANUFACTURER_ID, localToken.nonce)
                 .build();
         advertiser.startAdvertising(settings, data, advertiseCallback);
-        seq("GATT server up + startAdvertising called (awaiting onStartSuccess)");
+        seq("GATT server up + advertising nonce=" + localToken.nonceB64()
+                + " (central must scan for this exact nonce)");
         main.postDelayed(timeoutRunnable, 15000);
     }
 

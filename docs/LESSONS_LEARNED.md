@@ -217,6 +217,33 @@ GO 端 `acceptAsServer` 逾時、client 端每次 `connect` 2 秒逾時直到預
 
 ---
 
+### 坑 14：BLE 掃不到對方 — 跨場次 nonce 不同源
+
+**嚴重度**：中 | **狀態**：觀察中（已加診斷 log）
+
+**症狀**：偶發某次配對卡在 LINKING——central 一直 `scanning…` 找不到 peripheral，最後 BLE 逾時。
+BLE/Wi-Fi 本身都正常。
+
+**推定根因**：central 掃描用的 nonce 來自 NFC 當下讀到的對方 HCE token；但若對方在「碰一下」之後
+走了 dirty teardown → `createCoordinator()` 重建出**新 token / 新 nonce**（HCE 也換新），則對方
+BLE 廣播的是新 nonce，而 central 還在找舊 nonce → 永遠對不上。即「NFC 讀到的 nonce」與
+「BLE 廣播的 nonce」不同源。
+
+**目前處置（診斷）**：
+- central：`scanning for peer nonce=<X>`；逾時仍在掃描時明確警告
+  `never saw peer advertising nonce=<X> — likely stale/cross-session nonce mismatch`。
+- peripheral：`advertising nonce=<Y>`。
+- 下次重現只要比對兩台的 `<X>` 與 `<Y>` 即可確認是否同源。
+
+**待辦（若確認）**：讓 NFC HCE token 與該場次 BLE 廣播 token 的生命週期一致，
+或 central 在掃不到時改用對方「當前」HCE token 重新掃描。
+
+**教訓**：
+- 跨裝置的識別鍵（nonce）必須保證「讀取端看到的」=「廣播端正在用的」同一份。
+- 偶發性連線問題優先把雙方的關鍵識別值印出來對比,比猜測快得多。
+
+---
+
 ## 五、傳輸相關
 
 ### 坑 12：斷線閃爍 — 錯誤訊息不當
