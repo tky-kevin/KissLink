@@ -46,6 +46,12 @@ public class HomeViewModel extends ViewModel {
     // ── 連線階段 ────────────────────────────────────────────────
     private SessionState.Phase lastPhase = SessionState.Phase.IDLE;
 
+    // ── 完成動畫一次性消費（#2）──────────────────────────────────
+    // 傳輸完成是「事件」不是「持久狀態」，但 sessionLd 會黏在 ALL_DONE 並在每次重綁/重建
+    // （如切換深淺色重建 Activity）補送給新訂閱者。以 batchId 記住「已慶祝過的批次」，
+    // 同批只播一次打勾/彩帶；重建補送的同批 ALL_DONE 不重播。ViewModel 跨重建存活，旗標也隨之存活。
+    private long celebratedBatchId = Long.MIN_VALUE;
+
     // ── 進度單調化狀態 ──────────────────────────────────────────
     private long progBatchId = Long.MIN_VALUE;
     private String progFile = "";
@@ -152,6 +158,22 @@ public class HomeViewModel extends ViewModel {
     /** 由 Activity 在處理完一次 {@link SessionState} 後呼叫，記錄最後階段。 */
     public void onSession(@NonNull SessionState st) {
         this.lastPhase = st.phase;
+    }
+
+    /**
+     * 完成動畫一次性閘門：對某批次回 {@code true} 僅一次（首次真實送達的 ALL_DONE）。
+     * 重綁/重建補送同批 ALL_DONE 時回 {@code false}，呼叫端據此略過打勾/彩帶、只呈現已連線穩態。
+     * 每批完成事件只會送達一次（單檔走 ALL_DONE、多檔中間檔走 FILE_DONE 不到此），故以 batchId 為鍵安全。
+     */
+    public boolean shouldCelebrate(long batchId) {
+        if (batchId == celebratedBatchId) return false;
+        celebratedBatchId = batchId;
+        return true;
+    }
+
+    /** 回到就緒/閒置時清掉「已慶祝」記號，讓下一輪連線的新批次能正常慶祝（即使 batchId 罕見重用）。 */
+    public void resetCelebration() {
+        celebratedBatchId = Long.MIN_VALUE;
     }
 
     /** 已連線（含傳輸中／單檔完成／全部完成）→ 可送出。 */

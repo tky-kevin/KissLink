@@ -39,6 +39,7 @@ final class TransferUiController {
     private final TextView tvHeadline;
     private final TextView tvSub;
     private final TextView tvPercent;
+    private final TextView tvPercentUnit;
     private final View percentRow;
 
     // ── Stage ticker state ──
@@ -63,12 +64,14 @@ final class TransferUiController {
                          @NonNull TextView tvHeadline,
                          @NonNull TextView tvSub,
                          @NonNull TextView tvPercent,
+                         @NonNull TextView tvPercentUnit,
                          @NonNull View percentRow) {
         this.context = context.getApplicationContext();
         this.main = main;
         this.tvHeadline = tvHeadline;
         this.tvSub = tvSub;
         this.tvPercent = tvPercent;
+        this.tvPercentUnit = tvPercentUnit;
         this.percentRow = percentRow;
     }
 
@@ -85,9 +88,12 @@ final class TransferUiController {
         tvHeadline.setText(title);
         if (changed) Anim.fadeUp(tvHeadline);
         if (sub != null) {
+            // 傳輸中曾把副標隱藏（只留速度），離開傳輸恢復顯示。
+            boolean wasHidden = tvSub.getVisibility() != View.VISIBLE;
+            tvSub.setVisibility(View.VISIBLE);
             boolean subChanged = !sub.contentEquals(tvSub.getText());
             tvSub.setText(sub);
-            if (subChanged) Anim.fadeUp(tvSub);
+            if (subChanged || wasHidden) Anim.fadeUp(tvSub);
         }
     }
 
@@ -99,18 +105,19 @@ final class TransferUiController {
         tvPercent.setText(pct >= 0 ? String.valueOf(pct) : "0");
     }
 
-    void showTransferHeadline(String speed, @Nullable String sub) {
+    /**
+     * 傳輸中速度「英雄字」：大號數字（tabular）＋單位，借用 percentRow 的大字版位。
+     * 不顯示副標（傳輸細節改由列表方塊呈現）；只在進入傳輸的第一幀播一次淡入上滑，
+     * 之後速度持續更新只換字、不重播動畫，避免跳動閃爍。
+     */
+    void showSpeedHero(String number, String unit) {
         stopEllipsis();
-        percentRow.setVisibility(View.GONE);
-        tvHeadline.setVisibility(View.VISIBLE);
-        tvHeadline.setText(speed);
-        // 進入傳輸的第一幀才播淡入上滑;之後速度持續更新只換字,避免每次跳動都閃。
-        if (!inTransfer) { inTransfer = true; Anim.fadeUp(tvHeadline); }
-        if (sub != null) {
-            boolean subChanged = !sub.contentEquals(tvSub.getText());
-            tvSub.setText(sub);
-            if (subChanged) Anim.fadeUp(tvSub);   // 換檔名時才動畫
-        }
+        tvHeadline.setVisibility(View.INVISIBLE);
+        tvSub.setVisibility(View.GONE);
+        percentRow.setVisibility(View.VISIBLE);
+        tvPercent.setText(number);
+        tvPercentUnit.setText(unit);
+        if (!inTransfer) { inTransfer = true; Anim.fadeUp(percentRow); }
     }
 
     void hidePercent() {
@@ -257,11 +264,20 @@ final class TransferUiController {
     //  Utility (pure, no state)
     // ══════════════════════════════════════════════════════════
 
-    static String speedLabelInt(long bps) {
+    /** 速度英雄字：純數字部分（搭配 {@link #speedUnit}）。 */
+    static String speedNumber(long bps) {
         if (bps < 0) bps = 0;
-        if (bps >= 1024L * 1024) return Math.round(bps / (1024.0 * 1024)) + " MB/s";
-        if (bps >= 1024) return Math.round(bps / 1024.0) + " KB/s";
-        return bps + " B/s";
+        if (bps >= 1024L * 1024) return String.valueOf(Math.round(bps / (1024.0 * 1024)));
+        if (bps >= 1024) return String.valueOf(Math.round(bps / 1024.0));
+        return String.valueOf(bps);
+    }
+
+    /** 速度英雄字：單位部分（MB/s、KB/s、B/s）。 */
+    static String speedUnit(long bps) {
+        if (bps < 0) bps = 0;
+        if (bps >= 1024L * 1024) return "MB/s";
+        if (bps >= 1024) return "KB/s";
+        return "B/s";
     }
 
     static String sizeLabel(long bytes) {

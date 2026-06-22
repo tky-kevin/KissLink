@@ -228,7 +228,8 @@ public class ProfileCardSheet extends DialogFragment {
     private void renderAvatar() {
         // 真實頭像與預設字符走同一條顯示路徑(固定 centerCrop/零內距),避免切換內距時被縮小/裁切。
         ivAvatar.setPadding(0, 0, 0, 0);
-        ivAvatar.setImageBitmap(ProfileStore.get(requireContext()).loadAvatarForDisplay(AVATAR_DISPLAY_PX));
+        ivAvatar.setImageBitmap(
+                ProfileStore.get(requireContext()).loadAvatarForDisplay(requireContext(), AVATAR_DISPLAY_PX));
     }
 
     private static final int AVATAR_DISPLAY_PX = 256;

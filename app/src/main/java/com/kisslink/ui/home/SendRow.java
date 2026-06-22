@@ -21,6 +21,7 @@ public final class SendRow {
     public int     percent = -1;       // 傳輸中 0..100；-1 表示尚未/不適用
     public boolean incoming = false;   // true=接收中（對方送來）
     public boolean removable = false;  // true=待傳清單，顯示移除鈕
+    public boolean highlight = false;  // true=傳輸中當前列，底色高亮（accent_soft）
 
     public SendRow(String name, String sizeLabel, byte itemType, @Nullable Uri thumbUri) {
         this(name, sizeLabel, itemType, thumbUri, null, null);

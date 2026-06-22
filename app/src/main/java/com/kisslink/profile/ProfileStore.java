@@ -128,22 +128,26 @@ public final class ProfileStore {
      *
      * <p>讓兩種狀態都走同一條顯示路徑（固定 {@code centerCrop} + 零內距），避免在
      * 「切換 ImageView 內距/scaleType」時 centerCrop 矩陣沿用舊值而把頭像縮小或裁切。
+     *
+     * <p>{@code uiContext} 必須是「會跟隨 App 內深/淺色覆寫」的 themed context（Activity / Fragment
+     * 的 requireContext），不可用 application context——後者的 Configuration 不吃
+     * {@code AppCompatDelegate.setDefaultNightMode}，會導致預設頭像顏色固定不隨主題切換。
      */
     @NonNull
-    public Bitmap loadAvatarForDisplay(int sizePx) {
+    public Bitmap loadAvatarForDisplay(@NonNull Context uiContext, int sizePx) {
         Bitmap real = loadAvatar();
         if (real != null) return real;
-        return renderDefaultAvatar(sizePx);
+        return renderDefaultAvatar(uiContext, sizePx);
     }
 
     /** 把預設頭像字符（固定內距）畫到透明方形畫布，使其顯示比例與真實頭像一致。 */
     @NonNull
-    public Bitmap renderDefaultAvatar(int sizePx) {
+    public Bitmap renderDefaultAvatar(@NonNull Context uiContext, int sizePx) {
         int size = Math.max(1, sizePx);
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         android.graphics.Canvas c = new android.graphics.Canvas(bmp);
         android.graphics.drawable.Drawable d = androidx.core.content.ContextCompat.getDrawable(
-                app, com.kisslink.R.drawable.ic_avatar_default);
+                uiContext, com.kisslink.R.drawable.ic_avatar_default);
         if (d != null) {
             int inset = Math.round(size * DEFAULT_GLYPH_INSET);
             d.setBounds(inset, inset, size - inset, size - inset);

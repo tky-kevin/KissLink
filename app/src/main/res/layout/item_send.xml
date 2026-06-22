@@ -6,6 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
+    android:background="@drawable/bg_send_row"
     android:paddingTop="0dp"
     android:paddingBottom="0dp">
 
@@ -61,17 +62,17 @@
         android:textFontWeight="600"
         tools:text="✓" />
 
-    <!-- 移除（僅待傳清單顯示） -->
+    <!-- 移除（僅待傳清單顯示）— 尾端按鈕規格與「已接收」列的刪除鈕統一（36dp / padding 9 / alpha 0.5） -->
     <ImageButton
         android:id="@+id/ibRemove"
-        android:layout_width="34dp"
-        android:layout_height="34dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
         android:layout_marginStart="4dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@drawable/ic_close"
         android:scaleType="centerInside"
-        android:padding="8dp"
-        android:alpha="0.55"
+        android:padding="9dp"
+        android:alpha="0.5"
         android:visibility="gone"
         tools:visibility="visible" />
 </LinearLayout>

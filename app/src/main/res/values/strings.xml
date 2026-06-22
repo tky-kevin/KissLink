@@ -21,6 +21,7 @@
     <string name="home_ready_sub">把兩支手機背靠背貼一下</string>
     <string name="home_connecting_title">連線中</string>
     <string name="home_connected_title">已連線</string>
+    <string name="home_connected_sub">已連線至 %1$s</string>
     <string name="home_resetting_title">重整連線</string>
     <string name="home_error_title">連線中斷</string>
     <string name="home_error_retry">請再碰一下重試</string>

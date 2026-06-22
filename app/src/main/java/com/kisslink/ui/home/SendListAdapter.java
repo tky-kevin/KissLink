@@ -102,6 +102,9 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
         });
 
+        // 傳輸中當前列高亮（accent_soft，透過 activated 狀態）
+        h.itemView.setActivated(r.highlight);
+
         // 項目點擊（開啟檔案）
         h.itemView.setOnClickListener(v -> {
             if (onItemClickListener != null && r.fileUri != null) {
