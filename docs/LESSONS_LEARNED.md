@@ -153,29 +153,34 @@
 
 ### 坑 9：WiFi 已連接時無法建立連線（超時）
 
-**嚴重度**：嚴重 | **狀態**：待修
+**嚴重度**：嚴重 | **狀態**：已修（實機 logcat 定位）
 
-**症狀**：WiFi 已連接到家用 AP 時，P2P 連接逾時失敗。WiFi 關閉時正常。
+**症狀**：WiFi 已連接到家用 AP 時，P2P 群組已形成（雙方 `CONNECTED`）但 TCP socket 永遠建不起來——
+GO 端 `acceptAsServer` 逾時、client 端每次 `connect` 2 秒逾時直到預算耗盡。WiFi 關閉時正常。
 
-**根因**（多層）：
+**真正根因（實機 logcat 推翻原本假設）**：
+不是「沒綁 P2P」，而是 **`bindToP2pNetwork()` 綁錯到 Wi-Fi AP(STA)**。
+診斷 log 證實：
 
-1. **TCP 路由失敗**：P2P 群組建立後，TCP socket 走預設路由（WiFi AP），不是 P2P 介面。`192.168.49.1` 在 P2P 介面上，預設路由不可達。
+- `requestNetwork(TRANSPORT_WIFI, removeCapability(INTERNET))` 會**同時符合** STA（有 INTERNET）與 P2P（無 INTERNET），
+  系統回報「最佳」網路時常給 STA。`P2P network bound: ... hasINTERNET=true` 即誤配的鐵證。
+- 綁到 STA 後，socket 被逼走 AP 介面（source IP `192.168.0.x`）→ `192.168.49.1` 不可達 → `SocketTimeoutException`。
+- **反之「不綁」時**，client 第一發 source IP 是 `192.168.49.x`（p2p0）且收到 `ECONNREFUSED`——代表封包
+  **有到達 GO**，只是 GO 當下還沒 listen（時序，retry 即可）。`192.168.49.1` 與 p2p0 同網段是**直連路由**，
+  預設路由本來就會走 p2p0。
 
-2. **`bindToP2pNetwork()` 異步且可能永不觸發**：`requestNetwork()` 呼叫 `onUnavailable()`，`bindProcessToNetwork()` 永遠不會被呼叫。
-
-3. **TCP 與 network bind 競爭**：TCP 連接和 `requestNetwork()` 同時開始，即使 binding 最終成功，初始嘗試已失敗。
-
-4. **P2P 框架 BUSY**：STA（Station Mode）活躍時，P2P `createGroup`/`connect` 可能回傳 BUSY，重試預算不足。
-
-**解法**（待實作）：
-- 使用 `Network.bindSocket()` 強制 TCP 走 P2P 介面
-- 或在 P2P 操作前暫時斷開 WiFi AP
-- 增加 P2P 重試預算
+**解法（已實作）**：
+- `ClientConnector.bindToP2pNetwork()` 改用 `registerNetworkCallback`（回報所有符合網路），
+  **只綁無 INTERNET 的真正 P2P 網路；配到 STA 一律跳過**，讓預設路由走直連 p2p0。
+- `PeerConnector.connectAsClient()` 改傳 `Supplier<Network>` 每次重試重抓——P2P 網路是 `CONNECTED`
+  之後才非同步綁定，迴圈外抓一次永遠是 null（會略過 `bindSocket`）。
 
 **教訓**：
-- Wi-Fi Direct 和 WiFi STA 共用天線/驅動，會互相干擾
-- P2P 網路可能對 `ConnectivityManager` 不可見
-- TCP 路由必須明確綁定到 P2P 介面，不能依賴預設路由
+- ⚠️ **不要綁到 STA**：對 `192.168.49.1` 這種與 p2p0 同網段的直連位址，「不綁」比「綁錯網路」更安全。
+- `requestNetwork` 去掉 INTERNET 不等於「只要 P2P」——STA 仍符合；要在 callback 內以 `NET_CAPABILITY_INTERNET` 自行濾掉。
+- 這類「必定失敗」的回歸，純靠 code review 看不出來，**一定要實機 logcat 看 socket 的 source IP 與失敗型別**（timeout vs refused 指向完全不同的方向）。
+- 排查用的 PAIRSEQ 序列 log 以 `Log.isLoggable(TAG, DEBUG)` 控制，平時靜默、
+  `adb shell setprop log.tag.<TAG> DEBUG` 即可叫出，免重編譯。
 
 ---
 

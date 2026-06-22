@@ -298,7 +298,9 @@ public class FileTransferService extends Service {
         if (groupOwner) {
             peerConnector.acceptAsServer(cb);
         } else {
-            peerConnector.connectAsClient(wifi.getClientNetwork(), cb);
+            // 傳 supplier(非當下值):P2P 網路是 CONNECTED 後才非同步綁定的,
+            // connectAsClient 內每次重試重抓,綁定一就緒即走 bindSocket。
+            peerConnector.connectAsClient(wifi::getClientNetwork, cb);
         }
     }
 
