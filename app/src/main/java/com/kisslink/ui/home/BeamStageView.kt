@@ -198,10 +198,8 @@ private fun beamStage(
             BeamStageView.ERROR -> 3200
             else -> 2600
         }
-    // 波紋「密度」(同時在場的環數)依中央內容分三類：
-    //  · 中央是頭像/打勾(已連線/傳輸/完成) → 5 環；
-    //  · 中央是 Lottie 雷達(就緒/連線中) 與 錯誤 → 維持 3 環。
-    val rippleCount = if (connected) 5 else 3
+    // 波紋統一 3 環，各狀態僅速度不同。
+    val rippleCount = 3
     val ripple by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -264,9 +262,9 @@ private fun beamStage(
                 val ringR = avatarPx + ringGap.toPx()
                 val strokeW = 5.dp.toPx()
 
-                // 常駐 NFC 漣漪 (現代流體感)。傳輸/完成時從外圈進度環外緣起跑(不穿過頭像)。
-                val rippleStart = if (transferring || done) ringR + 3.dp.toPx() else 0f
-                val rippleMax = (if (transferring || done) ringR else avatarPx) + 80.dp.toPx()
+                // 常駐 NFC 漣漪 (現代流體感)。已連線/傳輸/完成時從外圈起跑(不穿過頭像)。
+                val rippleStart = if (connected) ringR + 3.dp.toPx() else 0f
+                val rippleMax = (if (connected) ringR else avatarPx) + 80.dp.toPx()
                 for (i in 0 until rippleCount) {
                     val t = (ripple + i.toFloat() / rippleCount) % 1f
                     val r = rippleStart + (rippleMax - rippleStart) * t
