@@ -21,6 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
+            android:animateLayoutChanges="true"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
             android:paddingTop="20dp"
@@ -101,6 +102,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:animateLayoutChanges="true"
                 android:layout_marginTop="6dp" />
 
             <com.google.android.material.button.MaterialButton

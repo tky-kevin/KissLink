@@ -4,7 +4,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -115,7 +114,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                         getContentResolver().takePersistableUriPermission(
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     } catch (SecurityException ignored) {}
-                    picked.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_FILE));
+                    // 由 MIME 判定型別:圖片/影片走 ITEM_PHOTO 才會顯示縮圖(否則一律檔案圖示)。
+                    byte type = itemTypeForMime(getContentResolver().getType(uri));
+                    picked.add(SendItem.fromUri(getContentResolver(), uri, type));
                 }
                 viewModel.addAllToSelection(picked);
             });
@@ -310,15 +311,21 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         List<SendItem> picked = new ArrayList<>();
         for (Uri uri : uris) {
-            byte type = TransferProtocol.ITEM_FILE;
             String mt = getContentResolver().getType(uri);
             if (mt == null) mt = intent.getType();
-            if (mt != null && mt.startsWith("image/")) type = TransferProtocol.ITEM_PHOTO;
-            picked.add(SendItem.fromUri(getContentResolver(), uri, type));
+            picked.add(SendItem.fromUri(getContentResolver(), uri, itemTypeForMime(mt)));
         }
         viewModel.addAllToSelection(picked);
         toast(getString(R.string.share_added, uris.size()));
         clearShareIntent(); // 避免旋轉/重綁時重複加入
+    }
+
+    /** 圖片/影片 → ITEM_PHOTO(可顯示縮圖);其餘 → ITEM_FILE。供檔案選擇器與分享接收共用。 */
+    private static byte itemTypeForMime(@Nullable String mime) {
+        if (mime != null && (mime.startsWith("image/") || mime.startsWith("video/"))) {
+            return TransferProtocol.ITEM_PHOTO;
+        }
+        return TransferProtocol.ITEM_FILE;
     }
 
     /** 消費掉分享 intent,換成普通 intent,避免後續生命週期重複處理。 */
@@ -412,7 +419,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case RESETTING:
                 ui.stopStageTicker();
                 beam.setPhase(BeamStageView.CONNECTING);
-                ui.showHeadlineText(getString(R.string.home_resetting_title), "");
+                ui.showLoadingHeadline(getString(R.string.home_resetting_title), "");
                 break;
 
             case PAIRING_LATCHED:
@@ -421,24 +428,30 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case CREATING_GROUP:
             case HOSTING:
             case CONNECTING:
+            case SOCKETING:
                 beam.setPhase(BeamStageView.CONNECTING);
                 ui.runStageTicker(TransferUiController.stageTargetFor(p));
                 break;
 
             case CONNECTED:
-                ui.stopStageTicker();
-                beam.setPhase(BeamStageView.CONNECTED);
-                ui.showPeerIdentity(beam, connectedPeerName(), connectedPeerAvatar(),
-                        ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
-                ui.showHeadlineText(connectedHeadline(), "");
-                if (nfc != null) nfc.resetLatched();
-                viewModel.setSending(false);
-                updateSendButton();
-                rebuildSendStack();
-                if (viewModel.isPendingCardSend()) {
-                    viewModel.setPendingCardSend(false);
-                    main.post(this::sendMyProfileCard);
-                }
+                // 不立刻切「已連線」:讓階段 ticker 把最後的「建立 TCP 通道」走完並停留一拍再切,
+                // 避免 socket 太快時 TCP 階段只閃一下。ticker 未在跑時會立即執行。
+                ui.completeStagesThen(() -> {
+                    beam.setPhase(BeamStageView.CONNECTED);
+                    ui.showPeerIdentity(beam, connectedPeerName(), connectedPeerAvatar(),
+                            ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
+                    String connectedPeer = connectedPeerName();
+                    ui.showHeadlineText(getString(R.string.home_connected_title),
+                            connectedPeer != null ? connectedPeer : "");
+                    if (nfc != null) nfc.resetLatched();
+                    viewModel.setSending(false);
+                    updateSendButton();
+                    rebuildSendStack();
+                    if (viewModel.isPendingCardSend()) {
+                        viewModel.setPendingCardSend(false);
+                        main.post(this::sendMyProfileCard);
+                    }
+                });
                 break;
 
             case TRANSFERRING:
@@ -454,7 +467,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case ERROR:
                 ui.stopStageTicker();
                 beam.setPhase(BeamStageView.ERROR);
-                ui.showHeadlineText("連線中斷", st.error != null ? st.error : "請再碰一下重試");
+                ui.showHeadlineText(getString(R.string.home_error_title),
+                        st.error != null ? st.error : getString(R.string.home_error_retry));
                 if (nfc != null) nfc.resetLatched();
                 break;
 
@@ -468,7 +482,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         beam.setPhase(BeamStageView.READY);
         ui.showPeerIdentity(beam, null, null,
                 ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
-        ui.showHeadlineText(getString(R.string.home_ready_title), "");
+        ui.showHeadlineText(getString(R.string.home_ready_title),
+                getString(R.string.home_ready_sub));
         hideReceivedBanner();
         viewModel.resetReceived();
         viewModel.setSending(false);
@@ -522,8 +537,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         beam.setProgress(1f);
         ui.hidePercent();
         String peer = binder != null ? binder.connectedPeerName() : null;
-        String who = peer != null ? peer : "對方";
-        ui.showHeadlineText("傳輸完成",
+        String who = peer != null ? peer : getString(R.string.peer_fallback);
+        ui.showHeadlineText(getString(R.string.transfer_done),
                 outgoing ? getString(R.string.sent_to, who) : getString(R.string.received_from, who));
 
         if (isVcard) {
@@ -668,6 +683,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case CREATING_GROUP:
             case HOSTING:
             case CONNECTING:
+            case SOCKETING:
             case ERROR:
                 return true;
             default:
@@ -735,12 +751,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 .show();
     }
 
-    private String connectedHeadline() {
-        String peer = binder != null ? binder.connectedPeerName() : null;
-        return peer != null ? getString(R.string.home_connected_to, peer)
-                            : getString(R.string.home_connected_title);
-    }
-
     /** 傳送中：以待傳清單為基底，更新對應列的進度/完成（接收端改用收到橫幅，不進清單）。 */
     private void updateOutgoingRows(@NonNull TransferProgress tp, boolean done) {
         List<SendRow> rows = new ArrayList<>();
@@ -770,16 +780,13 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     // ── 頭像 ──
+    // 一律以「預先合成好的方形點陣圖」+ 固定 centerCrop/零內距顯示(真實頭像與預設字符同路徑),
+    // 避免切換內距/scaleType 造成 centerCrop 矩陣沿用舊值而把頭像縮小/裁切。
+    private static final int AVATAR_DISPLAY_PX = 256;
+
     private void refreshAvatar() {
-        Bitmap a = ProfileStore.get(this).loadAvatar();
-        if (a != null) {
-            ivAvatar.setPadding(0, 0, 0, 0);
-            ivAvatar.setImageBitmap(a);
-        } else {
-            int pad = Math.round(7 * getResources().getDisplayMetrics().density);
-            ivAvatar.setPadding(pad, pad, pad, pad);
-            ivAvatar.setImageResource(R.drawable.ic_avatar_default);
-        }
+        ivAvatar.setPadding(0, 0, 0, 0);
+        ivAvatar.setImageBitmap(ProfileStore.get(this).loadAvatarForDisplay(AVATAR_DISPLAY_PX));
     }
 
     // ── 工具 ──

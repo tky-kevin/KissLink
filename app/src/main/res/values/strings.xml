@@ -21,13 +21,18 @@
     <string name="home_ready_sub">把兩支手機背靠背貼一下</string>
     <string name="home_connecting_title">連線中</string>
     <string name="home_connected_title">已連線</string>
-    <string name="home_connected_to">已連線至\n%1$s</string>
-    <string name="home_resetting_title">重整連線…</string>
+    <string name="home_resetting_title">重整連線</string>
+    <string name="home_error_title">連線中斷</string>
+    <string name="home_error_retry">請再碰一下重試</string>
+    <string name="transfer_done">傳輸完成</string>
+    <string name="peer_fallback">對方</string>
 
     <!-- 連線階段（作為連線中的大字標題） -->
     <string name="stage_nfc">建立NFC連線</string>
     <string name="stage_ble">建立BLE連線</string>
+    <string name="stage_elect">協商主機</string>
     <string name="stage_wifi">建立Wi-Fi Direct連線</string>
+    <string name="stage_tcp">建立TCP通道</string>
     <string name="stage_tap_to_cancel">點一下可中斷重來</string>
 
     <!-- 配對前置檢查：權限 / 無線電開關 -->
@@ -59,6 +64,8 @@
     <string name="profile_field_value">內容</string>
     <string name="profile_change_avatar">更換頭像</string>
     <string name="profile_send_self">傳送我的名片</string>
+    <string name="avatar_crop_hint">拖曳・縮放選擇頭像顯示範圍</string>
+    <string name="avatar_crop_apply">套用</string>
 
     <!-- 接收方批次 -->
     <string name="received_batch">收到 %1$d 個項目</string>
