@@ -278,6 +278,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 把 ViewModel 的狀態接到 UI 渲染：待傳清單 → 疊圖/送出鈕；接收件數 → 橫幅。 */
     private void observeViewModel() {
         viewModel.getSelection().observe(this, items -> {
+            // 接收方：若接收列表顯示中且使用者新增待傳項目 → 收合為橫幅
+            if (receiveListActive && !inTransferUi && !viewModel.isSelectionEmpty()) {
+                receiveListActive = false;
+                rvTransfer.setVisibility(View.GONE);
+                viewModel.collapseReceiveListToBanner();
+            }
             rebuildSendStack();
             updateSendButton();
         });

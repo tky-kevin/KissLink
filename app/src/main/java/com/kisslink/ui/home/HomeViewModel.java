@@ -77,6 +77,17 @@ public class HomeViewModel extends ViewModel {
 
     public void clearReceivedList() { received.clear(); receiveListBatchId = 0; }
 
+    /** 把接收列表收合為橫幅：統計已完成件數，餵入 receivedCountLd 讓 banner 顯示。 */
+    public void collapseReceiveListToBanner() {
+        int done = 0;
+        for (RecvFile f : received.values()) {
+            if (f.done) done++;
+        }
+        recvBatchId = receiveListBatchId;
+        recvCount = done;
+        receivedCountLd.setValue(recvCount);
+    }
+
     // ── 旗標 ────────────────────────────────────────────────────
     // #1：未連線時按傳送名片 → 排隊，連上後自動送出
     private boolean pendingCardSend = false;
