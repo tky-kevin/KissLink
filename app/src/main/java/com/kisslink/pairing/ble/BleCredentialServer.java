@@ -42,6 +42,11 @@ public class BleCredentialServer {
 
     private static final String TAG = "BleCredentialServer";
 
+    /** PAIRSEQ 診斷：預設靜默，{@code adb shell setprop log.tag.BleCredentialServer DEBUG} 可叫出。 */
+    private static void seq(String msg) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+    }
+
     public interface Callback {
         void onPeerToken(@NonNull PairingToken peer);
         void onCredentialReceived(@NonNull GroupCredential credential);
@@ -115,7 +120,7 @@ public class BleCredentialServer {
                 .addManufacturerData(BleConstants.MANUFACTURER_ID, localToken.nonce)
                 .build();
         advertiser.startAdvertising(settings, data, advertiseCallback);
-        Log.i(TAG, "GATT server up + advertising nonce");
+        seq("GATT server up + startAdvertising called (awaiting onStartSuccess)");
         main.postDelayed(timeoutRunnable, 15000);
     }
 
@@ -150,8 +155,11 @@ public class BleCredentialServer {
     // ══════════════════════════════════════════════════════════
 
     private final AdvertiseCallback advertiseCallback = new AdvertiseCallback() {
+        @Override public void onStartSuccess(AdvertiseSettings settingsInEffect) {
+            seq("advertising started (central can now discover this peripheral)");
+        }
         @Override public void onStartFailure(int errorCode) {
-            Log.e(TAG, "Advertise failed: " + errorCode);
+            Log.e(TAG, "PAIRSEQ advertise FAILED: " + errorCode);
             main.post(() -> callback.onError("BLE 廣播失敗 (" + errorCode + ")"));
         }
     };
@@ -163,10 +171,10 @@ public class BleCredentialServer {
                 // central 已連上 → 取消逾時(BLE 已通,後續走 live link + Wi-Fi 自有逾時)。
                 main.removeCallbacks(timeoutRunnable);
                 connectedDevice = device;
-                Log.d(TAG, "Central connected");
+                seq("central connected (status=" + status + ")");
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 if (device != null && device.equals(connectedDevice)) connectedDevice = null;
-                Log.d(TAG, "Central disconnected");
+                Log.w(TAG, "PAIRSEQ central disconnected (status=" + status + ")");
             }
         }
 
@@ -179,9 +187,12 @@ public class BleCredentialServer {
             connectedDevice = device;
             if (BleConstants.CHAR_PEER_TOKEN.equals(characteristic.getUuid())) {
                 PairingToken peer = parseToken(value);
+                seq("peer token write received ("
+                        + (value == null ? 0 : value.length) + "B, parsed=" + (peer != null) + ")");
                 if (peer != null) main.post(() -> callback.onPeerToken(peer));
             } else if (BleConstants.CHAR_CREDENTIAL.equals(characteristic.getUuid())) {
                 GroupCredential cred = parseCredential(value);
+                seq("credential write received (parsed=" + (cred != null) + ")");
                 if (cred != null) main.post(() -> callback.onCredentialReceived(cred));
             }
             if (responseNeeded && gattServer != null) {
@@ -196,6 +207,7 @@ public class BleCredentialServer {
                                              boolean preparedWrite, boolean responseNeeded,
                                              int offset, byte[] value) {
             // CCCD：central 開啟 notify
+            seq("central subscribed to credential notify (CCCD written)");
             if (responseNeeded && gattServer != null) {
                 gattServer.sendResponse(device, requestId, android.bluetooth.BluetoothGatt.GATT_SUCCESS, offset, value);
             }

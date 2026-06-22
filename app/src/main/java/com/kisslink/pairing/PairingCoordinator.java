@@ -45,6 +45,14 @@ public class PairingCoordinator {
 
     private static final String TAG = "PairingCoordinator";
 
+    /**
+     * PAIRSEQ 配對序列診斷：預設靜默（不寫入 log），排查時以
+     * {@code adb shell setprop log.tag.PairingCoordinator DEBUG} 即可叫出，免重編譯。
+     */
+    private static void seq(String msg) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+    }
+
     public enum Phase { IDLE, LATCHED, LINKING, ELECTING, CONNECTING, CONNECTED }
 
     public interface Listener {
@@ -113,6 +121,7 @@ public class PairingCoordinator {
     public void onLatchedAsReader(@NonNull PairingToken peer) {
         if (finished || started) return; // 角色已鎖 → 忽略(含同一次貼合的反向 tag latch)
         started = true;
+        seq("latched as READER (BLE central), peer=" + peer);
         this.peerToken = peer;
         emit(Phase.LATCHED);
         observeWifi();
@@ -136,6 +145,7 @@ public class PairingCoordinator {
     public void onLatchedAsTag() {
         if (finished || started) return; // 角色已鎖 → 忽略(含同一次貼合的反向 reader latch)
         started = true;
+        seq("latched as TAG (BLE peripheral)");
         emit(Phase.LATCHED);
         observeWifi();
         emit(Phase.LINKING);
@@ -160,11 +170,16 @@ public class PairingCoordinator {
 
     @MainThread
     private void decideRoleAndProceed() {
-        if (finished || roleDecided || peerToken == null) return;
+        if (finished || roleDecided || peerToken == null) {
+            // 兩份 token 是否都到齊的關鍵診斷：peerToken==null 代表對方 token 還沒經 BLE 送達。
+            seq("decideRole skipped (finished=" + finished
+                    + " roleDecided=" + roleDecided + " havePeerToken=" + (peerToken != null) + ")");
+            return;
+        }
         roleDecided = true;
         iAmGroupOwner = localToken.shouldBeGroupOwner(peerToken);
         emit(Phase.ELECTING);
-        Log.i(TAG, "GO election: iAmGO=" + iAmGroupOwner
+        seq("GO election: iAmGO=" + iAmGroupOwner
                 + " (local=" + localToken + ", peer=" + peerToken + ")");
 
         // 任一台被 2.4GHz STA 綁住 → 群組只能落在 2.4GHz(連線優先),傳輸偏慢,提示使用者。
@@ -192,14 +207,14 @@ public class PairingCoordinator {
     private void publishCredentialToPeer(@NonNull GroupCredential cred) {
         if (bleClient != null) bleClient.publishCredential(cred);
         else if (bleServer != null) bleServer.publishCredential(cred);
-        Log.i(TAG, "Credential sent to peer via BLE");
+        seq("credential sent to peer via BLE (I am GO)");
     }
 
     /** 對方是 GO,經 BLE 收到憑證 → 以 client 連線。 */
     @MainThread
     private void onCredentialFromPeer(@NonNull GroupCredential cred) {
         if (finished || iAmGroupOwner) return;
-        Log.i(TAG, "Credential received from peer → connectAsClient");
+        seq("credential received from peer → connectAsClient (I am client)");
         wifi.connectAsClient(cred);
     }
 
@@ -283,6 +298,7 @@ public class PairingCoordinator {
     @MainThread
     private void emit(@NonNull Phase phase) {
         if (finished && phase != Phase.CONNECTED) return;
+        seq("phase → " + phase);
         listener.onPhase(phase);
         armWatchdog(phase);
     }
@@ -302,7 +318,7 @@ public class PairingCoordinator {
         }
         watchdogRunnable = () -> {
             watchdogRunnable = null;
-            Log.w(TAG, "Watchdog fired at phase " + phase);
+            Log.w(TAG, "PAIRSEQ watchdog FIRED at phase " + phase + " (budget " + budgetMs + "ms) → fail");
             fail(msg);
         };
         watchdog.postDelayed(watchdogRunnable, budgetMs);
