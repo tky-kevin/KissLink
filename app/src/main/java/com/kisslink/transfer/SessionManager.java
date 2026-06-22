@@ -92,7 +92,9 @@ public final class SessionManager {
                          @NonNull PairingCoordinator coordinator) {
         if (currentGen != sessionGen) return;
         connectedPeerToken = coordinator.peerToken();
-        publish(SessionState.of(SessionState.Phase.CONNECTING));
+        // P2P 群組已成形,進入「建立 TCP 通道」視窗(socket 仍在背景建,peer 尚未 alive)。
+        // 與 Wi-Fi Direct 群組成形(CONNECTING)區隔,讓階段文字能顯示到 TCP 這步。
+        publish(SessionState.of(SessionState.Phase.SOCKETING));
     }
 
     public void onError(@NonNull String message, int currentGen) {
