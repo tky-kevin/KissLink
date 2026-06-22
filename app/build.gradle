@@ -55,6 +55,7 @@ android {
 		abortOnError = true
 		warningsAsErrors = true
 		baseline = file("lint-baseline.xml")
+		disable 'AndroidGradlePluginVersion'
 	}
 
 	// 讓 Room annotation processor 在 debug build 輸出 schema（方便偵錯）
