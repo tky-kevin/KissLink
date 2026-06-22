@@ -28,6 +28,9 @@
         <!-- 全域按鈕樣式 -->
         <item name="materialButtonStyle">@style/Beam.Button.Base</item>
 
+        <!-- 全域對話框樣式（標題／內文行距統一） -->
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Beam.Dialog</item>
+
         <!-- 全域 TextView 樣式（移除額外字體邊距，確保 zpix 置中） -->
         <item name="android:textViewStyle">@style/Beam.TextView.Base</item>
     </style>

@@ -117,4 +117,23 @@
         <item name="elevation">0dp</item>
         <item name="rippleColor">@color/beam_accent_soft</item>
     </style>
+
+    <!--
+      全域對話框樣式：由主題的 materialAlertDialogTheme 套用到所有
+      MaterialAlertDialogBuilder,讓每個 AlertDialog 標題／內文外觀一致。
+      標題上下留白(16dp)略多於內文行距(1.5x),讓標題更突出。
+    -->
+    <style name="ThemeOverlay.Beam.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="materialAlertDialogTitleTextStyle">@style/Beam.Dialog.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/Beam.Dialog.Body</item>
+    </style>
+
+    <style name="Beam.Dialog.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">16dp</item>
+    </style>
+
+    <style name="Beam.Dialog.Body" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:lineSpacingMultiplier">1.5</item>
+    </style>
 </resources>

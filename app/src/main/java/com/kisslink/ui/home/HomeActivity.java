@@ -370,13 +370,15 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         nfc = new NfcPairingController(this, new NfcPairingController.Callback() {
             @Override public void onPeerToken(@NonNull PairingToken peer) {
                 haptic();
-                if (!connectivityReadyOrPrompt()) { if (nfc != null) nfc.resetLatched(); return; }
+                // 未就緒時由 connectivityReadyOrPrompt 自行決定解鎖時機(權限即時解鎖、
+                // radio 提示則於關閉後解鎖),避免在此提早解鎖造成兩機貼合連觸疊出多個提示。
+                if (!connectivityReadyOrPrompt()) return;
                 final FileTransferService.TransferBinder b = binder;
                 if (b != null) b.onNfcLatchedAsReader(peer);
             }
             @Override public void onTagRead() {
                 haptic();
-                if (!connectivityReadyOrPrompt()) { if (nfc != null) nfc.resetLatched(); return; }
+                if (!connectivityReadyOrPrompt()) return;
                 final FileTransferService.TransferBinder b = binder;
                 if (b != null) b.onNfcLatchedAsTag();
             }
@@ -644,7 +646,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private void onHeadlineTapped() {
         if (binder == null) return;
         if (viewModel.isConnected()) {
-            androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                     .setTitle(R.string.disconnect_title)
                     .setMessage(R.string.disconnect_msg)
                     .setNegativeButton(R.string.btn_cancel, null)
@@ -652,11 +654,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                         if (binder != null) binder.disconnect();
                     })
                     .show();
-            // 提升訊息文字行距
-            android.widget.TextView msgView = dialog.findViewById(android.R.id.message);
-            if (msgView != null) {
-                msgView.setLineSpacing(0f, 1.5f);
-            }
         } else if (isInterruptiblePairing(viewModel.lastPhase())) {
             binder.interruptPairing();
         }
@@ -686,6 +683,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         if (!PermissionHelper.hasConnectivityPermissions(this)) {
             PermissionHelper.requestPermissions(this);
             toast(getString(R.string.conn_need_perms));
+            // 系統權限視窗會讓 Activity onPause → nfc.disable(),NFC 派發停止;
+            // 此處解鎖安全,不會在兩機貼合時連觸。
+            if (nfc != null) nfc.resetLatched();
             return false;
         }
         PermissionHelper.Radio off = PermissionHelper.firstDisabledRadio(this);
@@ -693,8 +693,14 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         return true;
     }
 
+    /** radio 提示是否正在畫面上(避免同一次貼合連觸疊出第二個對話框)。 */
+    private boolean radioPromptShowing = false;
+
     /** 提示開啟未啟用的無線電,並提供「前往設定」直達對應系統設定頁。 */
     private void promptEnableRadio(@NonNull PermissionHelper.Radio radio) {
+        // 此 dialog 為 app 內視窗,不會讓 Activity onPause,NFC 派發/HCE 仍在運作。
+        // 若已有提示在畫面上就不再彈第二個,否則兩機貼著會被 NFC 連續觸發而疊出多個。
+        if (radioPromptShowing) return;
         final int msgRes;
         final Intent settings;
         switch (radio) {
@@ -712,13 +718,19 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 settings = new Intent(android.provider.Settings.Panel.ACTION_WIFI);
                 break;
         }
-        new androidx.appcompat.app.AlertDialog.Builder(this)
+        radioPromptShowing = true;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.conn_need_title)
                 .setMessage(msgRes)
                 .setNegativeButton(R.string.btn_cancel, null)
                 .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
                     try { startActivity(settings); }
                     catch (Exception e) { toast(getString(msgRes)); }
+                })
+                .setOnDismissListener(d -> {
+                    radioPromptShowing = false;
+                    // 關閉後才解鎖:使用者開啟無線電後可再碰一下重試。
+                    if (nfc != null) nfc.resetLatched();
                 })
                 .show();
     }
