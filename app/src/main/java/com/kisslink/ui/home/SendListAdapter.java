@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.imageview.ShapeableImageView;
@@ -82,6 +83,24 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             notifyItemChanged(highlightPos, PAYLOAD_PROGRESS);
         }
         highlightPos = newHighlight;
+    }
+
+    /**
+     * 接收方某檔收完後補上縮圖 Uri（來自 ReceivedItem → setReceivedUri），
+     * 只更新該列不觸發其他列的 notifyDataSetChanged，避免 flicker。
+     */
+    public void updateReceivedThumbnail(@NonNull String name, @Nullable Uri thumbUri, @Nullable String mime) {
+        int pos = indexOfName(name);
+        if (pos < 0) return;
+        SendRow r = rows.get(pos);
+        r.thumbUri = thumbUri;
+        if (mime != null) r.mime = mime;
+        notifyItemChanged(pos);  // 完整 rebind 該列（載入縮圖），不影響其他列
+    }
+
+    /** 依檔名查詢列位置；無匹配回 -1。 */
+    public int findPositionByName(@NonNull String name) {
+        return indexOfName(name);
     }
 
     private int indexOfName(@NonNull String name) {

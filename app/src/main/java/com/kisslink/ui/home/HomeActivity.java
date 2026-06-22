@@ -105,11 +105,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         ReceivedCardSheet.newInstance(vcard).show(getSupportFragmentManager(), "received_card");
         binder.clearIncomingCard();
     };
-    // 收完一個檔 → 把接收列表中該列補上存檔 Uri（可點開）。
+    // 收完一個檔 → 把接收列表中該列補上存檔 Uri（可點開、顯示縮圖），僅更新該列避免 flicker。
     private final androidx.lifecycle.Observer<FileTransferService.ReceivedItem> receivedItemObserver = item -> {
-        if (item == null) return;
+        if (item == null || !receiveListActive) return;
         viewModel.setReceivedUri(item.name, item.contentUri, item.mime);
-        if (receiveListActive) rebuildReceiveList();
+        Uri uri = item.contentUri != null ? Uri.parse(item.contentUri) : null;
+        transferAdapter.updateReceivedThumbnail(item.name, uri, item.mime);
     };
 
     // ── NFC ──
@@ -912,14 +913,29 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     /**
-     * 接收方列表（取代「收到 N 個」橫幅）：逐檔累積於 VM，重建顯示。接收列無縮圖→full rebind 不會閃。
-     * 樣式比照送出列表（無標題、當前列高亮、可滑）；收完整批後仍保留（持久），可點開個別檔案。
+     * 接收方列表（取代「收到 N 個」橫幅）：新檔觸發結構重建（full submit），
+     * 既有檔案只更新進度/狀態（payload → 不碰縮圖、不 flicker）。
+     * 收完整批後仍保留（持久），可點開個別檔案。
      */
     private void showReceiveList(@NonNull TransferProgress tp, boolean curFileDone) {
-        viewModel.upsertReceived(tp.batchId, tp.fileName, tp.totalBytes, tp.itemType,
-                tp.percentInt(), curFileDone);
+        boolean isNew = viewModel.upsertReceived(tp.batchId, tp.fileName, tp.totalBytes,
+                tp.itemType, tp.percentInt(), curFileDone);
         receiveListActive = true;
-        rebuildReceiveList();
+        if (isNew) {
+            rebuildReceiveList();
+        } else {
+            updateReceiveProgress(tp, curFileDone);
+        }
+    }
+
+    /** 接收方逐幀進度：payload 更新不重設縮圖，不 flicker。 */
+    private void updateReceiveProgress(@NonNull TransferProgress tp, boolean curFileDone) {
+        transferAdapter.setProgress(tp.fileName, curFileDone ? 100 : tp.percentInt(), curFileDone);
+        int idx = transferAdapter.findPositionByName(tp.fileName);
+        if (transferAutoScroll && idx >= 0 && idx != lastAutoScrollIndex) {
+            lastAutoScrollIndex = idx;
+            rvTransfer.smoothScrollToPosition(idx);
+        }
     }
 
     /** Activity 重建後（VM 仍保有接收清單）→ 重新顯示持久的接收列表。 */
@@ -934,8 +950,10 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         List<SendRow> rows = new ArrayList<>();
         int currentIndex = -1, i = 0;
         for (HomeViewModel.RecvFile f : viewModel.receivedFiles()) {
+            Uri fileUri = f.uri != null ? Uri.parse(f.uri) : null;
             SendRow r = new SendRow(f.name, TransferUiController.sizeLabel(f.size), f.type,
-                    null, f.uri != null ? Uri.parse(f.uri) : null, f.mime);
+                    f.type == TransferProtocol.ITEM_PHOTO ? fileUri : null,
+                    fileUri, f.mime);
             r.incoming = true;
             r.percent = f.percent;
             r.done = f.done;

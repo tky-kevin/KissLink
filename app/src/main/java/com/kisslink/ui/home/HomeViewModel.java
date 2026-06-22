@@ -56,16 +56,21 @@ public class HomeViewModel extends ViewModel {
     public java.util.Collection<RecvFile> receivedFiles() { return received.values(); }
     public boolean hasReceivedList() { return !received.isEmpty(); }
 
-    /** 接收到某檔的進度/完成；遇到新批次先清空。高亮設於當前傳輸中的那一檔。 */
-    public void upsertReceived(long batchId, @NonNull String name, long size, byte type,
-                               int percent, boolean done) {
+    /**
+     * 接收到某檔的進度/完成；遇到新批次先清空。高亮設於當前傳輸中的那一檔。
+     * @return true 表示此檔為新加入（以前不在清單中）
+     */
+    public boolean upsertReceived(long batchId, @NonNull String name, long size, byte type,
+                                  int percent, boolean done) {
         if (batchId != receiveListBatchId) { received.clear(); receiveListBatchId = batchId; }
         RecvFile f = received.get(name);
-        if (f == null) { f = new RecvFile(name, size, type); received.put(name, f); }
+        boolean isNew = (f == null);
+        if (isNew) { f = new RecvFile(name, size, type); received.put(name, f); }
         f.percent = done ? 100 : percent;
         f.done = done;
         for (RecvFile o : received.values()) o.highlight = false;
         if (!done) f.highlight = true;
+        return isNew;
     }
 
     /** 收完某檔 → 補上存檔 Uri/MIME，使該列可點開。 */
