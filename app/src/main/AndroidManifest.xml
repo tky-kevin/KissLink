@@ -88,6 +88,13 @@
             </intent-filter>
         </activity>
 
+        <!-- ── 頭像圓形裁切頁 ──────────────────────────────── -->
+        <activity
+            android:name=".ui.profile.AvatarCropActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.KissLink" />
+
         <!-- ══════════════════════════════════════════════════
              NFC HCE Service
         ═══════════════════════════════════════════════════ -->
