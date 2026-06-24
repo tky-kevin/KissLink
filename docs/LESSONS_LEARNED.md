@@ -219,27 +219,41 @@ GO 端 `acceptAsServer` 逾時、client 端每次 `connect` 2 秒逾時直到預
 
 ### 坑 14：BLE 掃不到對方 — 跨場次 nonce 不同源
 
-**嚴重度**：中 | **狀態**：觀察中（已加診斷 log）
+**嚴重度**：中 | **狀態**：已修復（結構性，分支 `fix/pairing-nonce-identity`）
 
 **症狀**：偶發某次配對卡在 LINKING——central 一直 `scanning…` 找不到 peripheral，最後 BLE 逾時。
-BLE/Wi-Fi 本身都正常。
+BLE/Wi-Fi 本身都正常。典型觸發：一台螢幕關久再解鎖（Service 閒置拆除後重建）、另一台 app 被回收後重開。
 
-**推定根因**：central 掃描用的 nonce 來自 NFC 當下讀到的對方 HCE token；但若對方在「碰一下」之後
-走了 dirty teardown → `createCoordinator()` 重建出**新 token / 新 nonce**（HCE 也換新），則對方
-BLE 廣播的是新 nonce，而 central 還在找舊 nonce → 永遠對不上。即「NFC 讀到的 nonce」與
-「BLE 廣播的 nonce」不同源。
+**根因**：central 掃描用的 nonce 是 NFC 當下讀到的對方 HCE token 的**一次性快照**；但若對方在「碰一下」
+之後換了 token，BLE 就廣播新 nonce，central 還在找舊的 → 永遠對不上。更深一層的結構性缺陷是
+**`PairingToken` 把「身分」與「酬載」綁在同一個可變來源上**：
 
-**目前處置（診斷）**：
-- central：`scanning for peer nonce=<X>`；逾時仍在掃描時明確警告
-  `never saw peer advertising nonce=<X> — likely stale/cross-session nonce mismatch`。
-- peripheral：`advertising nonce=<Y>`。
-- 下次重現只要比對兩台的 `<X>` 與 `<Y>` 即可確認是否同源。
+- `PairingToken.create()` 每次都重抽 `nonce` + `goIntent`；
+- `LocalPairing` 的每個 setter（`setCanHost5G` / `setDisplayName`）都走 `create()`——
+  於是「刷新一個酬載欄位」會連帶換掉整份身分（nonce/goIntent）；
+- `FileTransferService.createCoordinator()` 在 dirty 重建（配對進行中）時又呼叫 `setCanHost5G(...)`，
+  正好在對方已讀走快照之後重生 nonce → 不同源。
 
-**待辦（若確認）**：讓 NFC HCE token 與該場次 BLE 廣播 token 的生命週期一致，
-或 central 在掃不到時改用對方「當前」HCE token 重新掃描。
+即「NFC 讀到的 nonce」≠「BLE 廣播的 nonce」。本質是 **TOCTOU + 身分生命週期綁錯物件**：身分需要在一場
+配對內凍結，卻被綁在壽命更短、更易變動的 token/coordinator 上。
+
+**修復（結構性，非補丁）**：把**身分（nonce + goIntent）**與**酬載（canHost5G + deviceName）**分離。
+- `LocalPairing` 改持「身分生成一次、永不更動」+「酬載可刷新」；`current()` 永遠用穩定身分 + 最新酬載
+  組裝 token（`PairingToken.withPayload`），任何 setter 都不再動到 nonce/goIntent。→ rendezvous 不變量
+  （讀取端看到的 = 廣播端正在用的）由結構保證。
+- canHost5G 也是選舉關鍵值（曝光後須凍結）：把 `setCanHost5G(...)` 從 `createCoordinator()`（dirty 重建會
+  在配對中途呼叫）移到只在**閒置邊界**（`onCreate` / 使用者主動斷線）刷新。→ 選舉不變量（雙方以同一份快照
+  算 GO，結果反對稱）亦由結構保證。
+
+**診斷 log（保留，便於日後驗證）**：
+- central：`scanning for peer nonce=<X>`；逾時仍在掃描時警告 `never saw peer advertising nonce=<X>`。
+- peripheral：`advertising nonce=<Y>`。修復後 `<X>` 應恆等於 `<Y>`。
 
 **教訓**：
 - 跨裝置的識別鍵（nonce）必須保證「讀取端看到的」=「廣播端正在用的」同一份。
+- **識別（identity）與酬載（payload）的生命週期需求相反時，務必拆開**：身分曝光後凍結、酬載可刷新；
+  別讓「刷新酬載」連帶重生身分。把不變量做成結構保證，勝過靠各處紀律維持。
+- 識別鍵的生命週期應對齊「它所識別的東西」（一場配對），而非綁在某個壽命不一致的物件（coordinator/process）。
 - 偶發性連線問題優先把雙方的關鍵識別值印出來對比,比猜測快得多。
 
 ---

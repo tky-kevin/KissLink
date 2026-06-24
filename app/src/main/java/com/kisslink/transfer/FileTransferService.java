@@ -107,6 +107,7 @@ public class FileTransferService extends Service {
             mainHandler.post(() -> {
                 if (sessionMgr.isPendingReset()) return;
                 teardownSession();
+                refreshLocalCapabilities(); // 閒置邊界:已回待機,為下一場抓最新 5GHz 能力
                 createCoordinator();
                 sessionMgr.transitionTo(SessionState.idle());
                 Log.i(TAG, "User disconnect → full teardown");
@@ -177,6 +178,7 @@ public class FileTransferService extends Service {
         wifi = new WifiDirectManager(this);
         wifi.registerReceiver(this);
         wifi.removeGroup();
+        refreshLocalCapabilities(); // 閒置邊界:服務初建,抓一份最新 5GHz 能力供本場曝光
         createCoordinator();
     }
 
@@ -211,11 +213,19 @@ public class FileTransferService extends Service {
     //  配對協調
     // ══════════════════════════════════════════════════════════
 
+    /**
+     * 刷新本機酬載(5GHz 開群組能力)——<b>只在閒置邊界呼叫</b>(onCreate / 使用者主動斷線),
+     * 使下一場曝光的 canHost5G 反映最新 Wi-Fi 狀態。
+     * <p>刻意<b>不</b>放進 {@link #createCoordinator()}:dirty 重建會在「碰一下之後、配對進行中」
+     * 呼叫 createCoordinator,此時若刷新,canHost5G 可能與對方剛經 NFC 讀到的快照不同 →
+     * GO 選舉不反對稱。只換酬載已不影響 nonce/goIntent(身分恆定,見 {@link LocalPairing})。
+     */
+    private void refreshLocalCapabilities() {
+        LocalPairing.setCanHost5G(WifiDirectManager.canHostFastGroup(this));
+    }
+
     private void createCoordinator() {
         final int gen = sessionMgr.nextSessionGen();
-        // 在建 coordinator（讀 LocalPairing.current()）與設 HCE token 前，刷新本機 5GHz
-        // 開群組能力旗標，讓對方碰一下讀到的 token 反映最新 Wi-Fi 狀態，GO 選舉才準。
-        LocalPairing.setCanHost5G(WifiDirectManager.canHostFastGroup(this));
         coordinator = new PairingCoordinator(this, wifi, new PairingCoordinator.Listener() {
             @Override public void onPhase(@NonNull PairingCoordinator.Phase phase) {
                 sessionMgr.onPhase(phase, gen);
