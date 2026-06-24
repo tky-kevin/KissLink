@@ -11,8 +11,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.text.method.LinkMovementMethod;
-import android.text.util.Linkify;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,7 +25,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.IntentCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -133,7 +130,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     } catch (SecurityException ignored) {}
                     // 由 MIME 判定型別:圖片/影片走 ITEM_PHOTO 才會顯示縮圖(否則一律檔案圖示)。
-                    byte type = itemTypeForMime(getContentResolver().getType(uri));
+                    byte type = TransferProtocol.itemTypeForMime(getContentResolver().getType(uri));
                     picked.add(SendItem.fromUri(getContentResolver(), uri, type));
                 }
                 viewModel.addAllToSelection(picked);
@@ -179,7 +176,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         renderReady();
 
         // 從其他 app 分享檔案進來 → 加入待傳清單。
-        handleShareIntent(getIntent());
+        ShareIntentReceiver.ingest(this, viewModel, getIntent());
     }
 
     private void bindViews() {
@@ -338,108 +335,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         super.onNewIntent(intent);
         setIntent(intent);
         if (nfc != null) nfc.handleIntent(intent);
-        handleShareIntent(intent);
+        ShareIntentReceiver.ingest(this, viewModel, intent);
     }
 
-    /**
-     * 接收「分享選單」送進來的檔案/相片(ACTION_SEND / ACTION_SEND_MULTIPLE)→ 併入待傳清單。
-     * 分享的 URI 帶臨時讀取授權,於本 Activity 期間有效(碰一下連線 → 傳送 皆在同一畫面內完成)。
-     */
-    private void handleShareIntent(@Nullable Intent intent) {
-        if (intent == null) return;
-        String action = intent.getAction();
-        boolean single = Intent.ACTION_SEND.equals(action);
-        boolean multi  = Intent.ACTION_SEND_MULTIPLE.equals(action);
-        if (!single && !multi) return;
-
-        List<Uri> uris = new ArrayList<>();
-        if (single) {
-            Uri u = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri.class);
-            if (u != null) {
-                uris.add(u);
-            } else {
-                // 沒有檔案串流 → 分享的是純文字/連結：加入待傳清單。
-                CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-                if (text != null && text.toString().trim().length() > 0) {
-                    String content = text.toString().trim();
-                    CharSequence subj = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT);
-                    if (subj != null && subj.toString().trim().length() > 0)
-                        content = subj.toString().trim() + "\n\n" + content;
-                    List<SendItem> picked = new ArrayList<>();
-                    picked.add(SendItem.text(content));
-                    viewModel.addAllToSelection(picked);
-                    toast(getString(R.string.share_added_text));
-                    clearShareIntent();
-                    return;
-                }
-            }
-        } else {
-            ArrayList<Uri> list =
-                    IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri.class);
-            if (list != null) uris.addAll(list);
-        }
-        if (uris.isEmpty()) { toast(getString(R.string.share_unsupported)); clearShareIntent(); return; }
-
-        List<SendItem> picked = new ArrayList<>();
-        for (Uri uri : uris) {
-            String mt = getContentResolver().getType(uri);
-            if (mt == null) mt = intent.getType();
-            picked.add(SendItem.fromUri(getContentResolver(), uri, itemTypeForMime(mt)));
-        }
-        viewModel.addAllToSelection(picked);
-        toast(getString(R.string.share_added, uris.size()));
-        clearShareIntent(); // 避免旋轉/重綁時重複加入
-    }
-
-    /** 圖片/影片 → ITEM_PHOTO(可顯示縮圖);其餘 → ITEM_FILE。供檔案選擇器與分享接收共用。 */
-    private static byte itemTypeForMime(@Nullable String mime) {
-        if (mime != null && (mime.startsWith("image/") || mime.startsWith("video/"))) {
-            return TransferProtocol.ITEM_PHOTO;
-        }
-        return TransferProtocol.ITEM_FILE;
-    }
-
-    /** 消費掉分享 intent,換成普通 intent,避免後續生命週期重複處理。 */
-    private void clearShareIntent() {
-        setIntent(new Intent(this, HomeActivity.class));
-    }
-
-    private void copyToClipboard(@NonNull String text) {
-        android.content.ClipboardManager cm =
-                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        if (cm != null) {
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("KissLink", text));
-            toast(getString(R.string.share_copied));
-        }
-    }
-
-    /** 點擊收到的文字/連結：彈出對話框顯示全文（連結可點擊），可複製；連結可開啟。 */
-    private void showReceivedTextDialog(@NonNull String text, @Nullable Uri fileUri) {
-        boolean isLink = android.util.Patterns.WEB_URL.matcher(text).matches();
-        com.google.android.material.dialog.MaterialAlertDialogBuilder b =
-                new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                        .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
-                        .setMessage(text)
-                        .setPositiveButton(R.string.action_copy, (d, w) -> copyToClipboard(text))
-                        .setNegativeButton(R.string.btn_cancel, null);
-        if (isLink) {
-            b.setNeutralButton(R.string.action_open, (d, w) -> {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(text))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } catch (Exception e) {
-                    toast(getString(R.string.share_open_failed));
-                }
-            });
-        }
-        androidx.appcompat.app.AlertDialog dialog = b.show();
-        TextView msgTv = dialog.findViewById(android.R.id.message);
-        if (msgTv != null) {
-            msgTv.setAutoLinkMask(Linkify.WEB_URLS);
-            msgTv.setMovementMethod(LinkMovementMethod.getInstance());
-            msgTv.setTextIsSelectable(true);
-        }
-    }
 
     @Override protected void onDestroy() {
         super.onDestroy();
@@ -1025,7 +923,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
     private void openFile(@androidx.annotation.NonNull SendRow row) {
         if (row.itemType == TransferProtocol.ITEM_TEXT) {
-            showReceivedTextDialog(row.name, row.fileUri);
+            ReceivedTextDialog.show(this, row.name);
             return;
         }
         if (row.fileUri == null) return;
