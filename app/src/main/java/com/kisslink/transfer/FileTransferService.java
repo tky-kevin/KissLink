@@ -17,6 +17,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.kisslink.data.repository.TransferRepository;
+import com.kisslink.diag.FlightRecorder;
 import com.kisslink.nfc.KissLinkHCEService;
 import com.kisslink.pairing.LocalPairing;
 import com.kisslink.pairing.PairingCoordinator;
@@ -308,6 +309,7 @@ public class FileTransferService extends Service {
     private void establishPeer(boolean groupOwner) {
         if (peerStarting || peer != null) return;
         peerStarting = true;
+        FlightRecorder.seq(TAG, "establishing peer socket (groupOwner=" + groupOwner + ")");
         PeerConnector.Callback cb = new PeerConnector.Callback() {
             @Override public void onSocketReady(Socket socket) {
                 if (peer != null) {
@@ -320,6 +322,8 @@ public class FileTransferService extends Service {
             }
             @Override public void onError(String message) {
                 peerStarting = false;
+                FlightRecorder.event(TAG, "socket establish failed: " + message);
+                FlightRecorder.dump(FileTransferService.this, "socket establish failed");
                 sessionMgr.toError(message);
             }
         };
@@ -360,6 +364,7 @@ public class FileTransferService extends Service {
                 }
             }
             @Override public void onDisconnected() {
+                FlightRecorder.seq(TAG, "peer disconnected");
                 Log.i(TAG, "Peer disconnected");
                 mainHandler.post(() -> {
                     sessionMgr.clearPeerIdentity();
@@ -386,6 +391,7 @@ public class FileTransferService extends Service {
         idleManager.setTransferring(true);
         notificationHelper.update("已連線", 0);
         sessionMgr.toConnected();
+        FlightRecorder.seq(TAG, "peer connection established (groupOwner=" + isGroupOwner + ")");
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
     }
 

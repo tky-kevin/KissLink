@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.lifecycle.Observer;
 
+import com.kisslink.diag.FlightRecorder;
 import com.kisslink.model.GroupCredential;
 import com.kisslink.pairing.ble.BleCredentialClient;
 import com.kisslink.pairing.ble.BleCredentialServer;
@@ -50,7 +51,7 @@ public class PairingCoordinator {
      * {@code adb shell setprop log.tag.PairingCoordinator DEBUG} 即可叫出，免重編譯。
      */
     private static void seq(String msg) {
-        PairingFlightRecorder.seq(TAG, msg);
+        FlightRecorder.seq(TAG, msg);
     }
 
     public enum Phase { IDLE, LATCHED, LINKING, ELECTING, CONNECTING, CONNECTED }
@@ -254,8 +255,8 @@ public class PairingCoordinator {
         if (finished) return;
         finished = true;
         cancelWatchdog();
-        PairingFlightRecorder.event(TAG, "Pairing failed: " + msg);
-        PairingFlightRecorder.dump(context, msg); // 落檔前 buffer 尚含本場完整序列，先 dump 再 stopBle
+        FlightRecorder.event(TAG, "Pairing failed: " + msg);
+        FlightRecorder.dump(context, msg); // 落檔前 buffer 尚含本場完整序列，先 dump 再 stopBle
         stopBle();
         listener.onError(msg);
     }
@@ -319,7 +320,7 @@ public class PairingCoordinator {
         }
         watchdogRunnable = () -> {
             watchdogRunnable = null;
-            PairingFlightRecorder.event(TAG, "watchdog FIRED at phase " + phase
+            FlightRecorder.event(TAG, "watchdog FIRED at phase " + phase
                     + " (budget " + budgetMs + "ms) → fail");
             fail(msg);
         };
