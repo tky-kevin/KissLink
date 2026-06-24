@@ -18,7 +18,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.IntentCompat;
 
 import com.kisslink.nfc.KissLinkHCEService;
-import com.kisslink.nfc.NfcForegroundHelper;
+import com.kisslink.nfc.NfcTokenReader;
 
 /**
  * 碰觸配對的 NFC 主控——<b>前景派發(foreground dispatch)+ 常駐 HCE</b>。
@@ -151,7 +151,7 @@ public class NfcPairingController {
 
     private void readTagAsync(@NonNull Tag tag) {
         new Thread(() -> {
-            PairingToken peer = NfcForegroundHelper.readToken(tag);
+            PairingToken peer = NfcTokenReader.readToken(tag);
             if (peer != null) handler.post(() -> deliverPeer(peer));
         }, "nfc-read").start();
     }
