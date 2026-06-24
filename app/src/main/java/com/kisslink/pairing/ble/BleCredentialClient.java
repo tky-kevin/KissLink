@@ -89,6 +89,21 @@ public class BleCredentialClient {
     private static final long HANDSHAKE_TIMEOUT_MS = 7000L;
     private final Runnable handshakeTimeout = this::onHandshakeStall;
 
+    // 連線階段逾時：connectGatt 後若遲遲沒有 STATE_CONNECTED 回呼——Android BLE 已知病灶:密集重連時
+    // connectGatt 可能「完全不回呼」(peripheral 端甚至已見 central connected),或舊連線殘留卡住。
+    // 此時 handshakeTimeout 與 133 重試都尚未武裝(兩者都在回呼內才設),只能乾等 coordinator 的 15s。
+    // 故在 connectGatt 後立即武裝此逾時,在預算內 close+重連,把「靜默卡死」轉成「快速重連」。
+    private static final long CONNECT_TIMEOUT_MS = 4000L;
+    private final Runnable connectTimeout = this::onConnectStall;
+
+    // 掃描階段重啟：偶發掃不到對方廣播(系統掃描節流/丟包)→ 停掉重掃一兩次,常能救回。
+    private static final long SCAN_RESTART_MS = 5000L;
+    private static final int  MAX_SCAN_RESTARTS = 2;
+    private int scanRestarts = 0;
+    @Nullable private java.util.List<ScanFilter> scanFilters;
+    @Nullable private ScanSettings scanSettings;
+    private final Runnable scanRestart = this::onScanRestart;
+
     public BleCredentialClient(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
@@ -119,17 +134,18 @@ public class BleCredentialClient {
         scanner = bm.getAdapter().getBluetoothLeScanner();
         if (scanner == null) { callback.onError("此裝置不支援 BLE 掃描"); return; }
 
-        ScanFilter filter = new ScanFilter.Builder()
+        scanFilters = Collections.singletonList(new ScanFilter.Builder()
                 .setManufacturerData(BleConstants.MANUFACTURER_ID, peerNonce)
-                .build();
-        ScanSettings settings = new ScanSettings.Builder()
+                .build());
+        scanSettings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
 
         scanning = true;
         scanNonceB64 = b64(peerNonce);
-        scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
+        scanner.startScan(scanFilters, scanSettings, scanCallback);
         seq("scanning for peer nonce=" + scanNonceB64);
+        main.postDelayed(scanRestart, SCAN_RESTART_MS);
         main.postDelayed(timeoutRunnable, 15000);
     }
 
@@ -173,6 +189,8 @@ public class BleCredentialClient {
         stopped = true;
         main.removeCallbacks(timeoutRunnable);
         main.removeCallbacks(handshakeTimeout);
+        main.removeCallbacks(connectTimeout);
+        main.removeCallbacks(scanRestart);
         if (credentialReadPoll != null) { main.removeCallbacks(credentialReadPoll); credentialReadPoll = null; }
         try { if (scanning && scanner != null) scanner.stopScan(scanCallback); } catch (Exception ignored) {}
         try { if (gatt != null) { gatt.disconnect(); gatt.close(); } } catch (Exception ignored) {}
@@ -193,6 +211,7 @@ public class BleCredentialClient {
         @Override public void onScanResult(int callbackType, ScanResult result) {
             if (!scanning) return;
             scanning = false;
+            main.removeCallbacks(scanRestart);
             try { if (scanner != null) scanner.stopScan(this); } catch (Exception ignored) {}
             peerDevice = result.getDevice();
             connectGatt();
@@ -211,6 +230,9 @@ public class BleCredentialClient {
         gattAttempts++;
         seq("peer found, connecting GATT (attempt " + gattAttempts + ")…");
         gatt = peerDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+        // connectGatt 可能完全不回呼 → 武裝連線階段逾時,逾時即 close+重連(見 onConnectStall)。
+        main.removeCallbacks(connectTimeout);
+        main.postDelayed(connectTimeout, CONNECT_TIMEOUT_MS);
     }
 
     /**
@@ -218,11 +240,26 @@ public class BleCredentialClient {
      * 主動斷掉目前 gatt（其 DISCONNECTED 因 g!=gatt 會被忽略），在重試額度內換一條新連線重來；
      * 用盡才回報錯誤。把「靜默卡住」轉成「快速重連」，多數暫時性 BLE 卡頓可自癒。
      */
-    @SuppressLint("MissingPermission")
     private void onHandshakeStall() {
+        abortGattAndRetry("handshake stalled", "BLE 交握逾時，請再碰一下重試");
+    }
+
+    /** 連線階段逾時：connectGatt 後遲遲沒有 STATE_CONNECTED 回呼 → close+重連（同交握逾時的自癒路徑）。 */
+    private void onConnectStall() {
+        abortGattAndRetry("connect stalled (no STATE_CONNECTED callback)", "BLE 連線逾時，請再碰一下重試");
+    }
+
+    /**
+     * 統一的「close 目前 gatt + 在預算內重連」：connect / handshake 兩種卡死共用。
+     * 把「靜默卡死」轉成「快速重連」，多數暫時性 BLE 卡頓可自癒；用盡額度才回報錯誤。
+     */
+    @SuppressLint("MissingPermission")
+    private void abortGattAndRetry(@NonNull String why, @NonNull String exhaustMsg) {
         if (stopped || ready || credentialDelivered) return;
-        FlightRecorder.event(TAG, "handshake stalled (servicesDiscovered=" + servicesDiscovered
+        FlightRecorder.event(TAG, why + " (servicesDiscovered=" + servicesDiscovered
                 + ", attempt=" + gattAttempts + ") → reconnect/abort");
+        main.removeCallbacks(connectTimeout);
+        main.removeCallbacks(handshakeTimeout);
         BluetoothGatt old = gatt;
         gatt = null;                       // 先脫鉤 → 舊 gatt 的 DISCONNECTED 會被 g!=gatt 忽略
         try { if (old != null) { old.disconnect(); old.close(); } } catch (Exception ignored) {}
@@ -232,8 +269,22 @@ public class BleCredentialClient {
         if (gattAttempts < MAX_GATT_ATTEMPTS) {
             main.postDelayed(this::connectGatt, GATT_RETRY_BACKOFF_MS);
         } else {
-            main.post(() -> callback.onError("BLE 交握逾時，請再碰一下重試"));
+            main.post(() -> callback.onError(exhaustMsg));
         }
+    }
+
+    /** 掃描階段重啟：仍在掃且尚未見到對方廣播 → 停掉重掃,吸收系統掃描節流/丟包。 */
+    @SuppressLint("MissingPermission")
+    private void onScanRestart() {
+        if (stopped || !scanning || scanner == null
+                || scanFilters == null || scanSettings == null) return;
+        if (scanRestarts >= MAX_SCAN_RESTARTS) return; // 餘下交給 15s overall timeout 收尾
+        scanRestarts++;
+        FlightRecorder.event(TAG, "scan restart #" + scanRestarts
+                + " (no advert seen yet for nonce=" + scanNonceB64 + ")");
+        try { scanner.stopScan(scanCallback); } catch (Exception ignored) {}
+        try { scanner.startScan(scanFilters, scanSettings, scanCallback); } catch (Exception ignored) {}
+        main.postDelayed(scanRestart, SCAN_RESTART_MS);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -247,6 +298,7 @@ public class BleCredentialClient {
                 // BLE 已連上 → 取消逾時。後續 token/憑證走 live link(快),
                 // Wi-Fi 建群有 WifiDirectManager 自己的逾時保護,不該再算進 BLE 額度。
                 main.removeCallbacks(timeoutRunnable);
+                main.removeCallbacks(connectTimeout); // 連上 → 連線階段逾時解除
                 // 連上後改由「交握逾時」看門狗保護後續步驟（見 onHandshakeStall）。
                 main.removeCallbacks(handshakeTimeout);
                 main.postDelayed(handshakeTimeout, HANDSHAKE_TIMEOUT_MS);
@@ -260,6 +312,7 @@ public class BleCredentialClient {
                 if (g != gatt) return;
                 FlightRecorder.event(TAG, "GATT disconnected (status=" + status
                         + ", servicesDiscovered=" + servicesDiscovered + ", attempts=" + gattAttempts + ")");
+                main.removeCallbacks(connectTimeout);
                 main.removeCallbacks(handshakeTimeout);
                 gatt = null;
                 if (ready || credentialDelivered) return;          // 交握已過,正常收尾,不介入
