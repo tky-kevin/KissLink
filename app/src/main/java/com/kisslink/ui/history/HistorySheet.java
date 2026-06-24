@@ -49,6 +49,9 @@ public class HistorySheet extends BottomSheetDialogFragment {
     private static final long GROUP_GAP_MS = 90_000;
     private static final String ARG_BATCH = "batch_id";
 
+    /** Fragment Result key：批次紀錄已被清除 → host 可據此清掉「本次接收」live 橫幅（解耦，不直接碰 ViewModel）。 */
+    public static final String RESULT_BATCH_CLEARED = "history.batch_cleared";
+
     private RecyclerView rv;
     private TextView tvEmpty;
     private final Adapter adapter = new Adapter();
@@ -82,7 +85,13 @@ public class HistorySheet extends BottomSheetDialogFragment {
         android.widget.ImageButton btnClearAll = v.findViewById(R.id.btnClearAll);
         btnClearAll.setOnClickListener(x -> {
             TransferRepository repo = TransferRepository.getInstance(requireContext());
-            repo.clearAll();
+            if (batchId != 0) {
+                // 「本次接收/傳送」垃圾桶：只清這一批，不波及其他歷史；並通知 host 清掉 live 橫幅。
+                repo.deleteByBatch(batchId);
+                getParentFragmentManager().setFragmentResult(RESULT_BATCH_CLEARED, Bundle.EMPTY);
+            } else {
+                repo.clearAll();
+            }
             dismiss();
         });
 

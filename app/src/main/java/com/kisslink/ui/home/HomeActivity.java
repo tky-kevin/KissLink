@@ -291,6 +291,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             if (count != null && count > 0) showReceivedBanner(count);
             else hideReceivedBanner();
         });
+        // 「本次接收」sheet 垃圾桶清掉該批次 → 同步清掉 live 接收清單/橫幅（count→0 會自動隱藏橫幅）。
+        getSupportFragmentManager().setFragmentResultListener(
+                HistorySheet.RESULT_BATCH_CLEARED, this, (key, bundle) -> viewModel.clearReceivedList());
     }
 
     @Override protected void onStart() {

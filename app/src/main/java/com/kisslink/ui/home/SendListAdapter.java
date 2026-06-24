@@ -145,9 +145,10 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
         });
 
-        // 項目點擊（開啟檔案）
+        // 項目點擊（開啟檔案；文字/連結項無 fileUri，但仍要能點開預覽 → openFile 內以 ITEM_TEXT 分支處理）
         h.itemView.setOnClickListener(v -> {
-            if (onItemClickListener != null && r.fileUri != null) {
+            if (onItemClickListener != null
+                    && (r.fileUri != null || r.itemType == TransferProtocol.ITEM_TEXT)) {
                 onItemClickListener.onItemClick(r);
             }
         });

@@ -32,6 +32,9 @@ public interface TransferDao {
     @Query("DELETE FROM transfer_records WHERE id = :id")
     void deleteById(long id);
 
+    @Query("DELETE FROM transfer_records WHERE batchId = :batchId")
+    void deleteByBatch(long batchId);
+
     @Query("DELETE FROM transfer_records")
     void deleteAll();
 
