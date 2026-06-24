@@ -534,8 +534,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case PAIRING_LATCHED:
             case PAIRING_LINKING:
             case PAIRING_ELECTING:
-            case CREATING_GROUP:
-            case HOSTING:
             case CONNECTING:
             case SOCKETING:
                 beam.setPhase(BeamStageView.CONNECTING);
@@ -838,8 +836,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case PAIRING_LATCHED:
             case PAIRING_LINKING:
             case PAIRING_ELECTING:
-            case CREATING_GROUP:
-            case HOSTING:
             case CONNECTING:
             case SOCKETING:
             case ERROR:

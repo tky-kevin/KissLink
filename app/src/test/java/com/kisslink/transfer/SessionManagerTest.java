@@ -97,6 +97,20 @@ public class SessionManagerTest {
     }
 
     @Test
+    public void mapTransfer_transferring() {
+        TransferProgress tp = new TransferProgress.Builder()
+                .phase(TransferProgress.Phase.TRANSFERRING)
+                .fileName("test.txt")
+                .build();
+        assertEquals(SessionState.Phase.TRANSFERRING, SessionManager.mapTransfer(tp).phase);
+    }
+
+    @Test
+    public void mapTransfer_nullReturnsIdle() {
+        assertEquals(SessionState.Phase.IDLE, SessionManager.mapTransfer(null).phase);
+    }
+
+    @Test
     public void latchResult_enumHasAllValues() {
         assertEquals(4, SessionManager.LatchResult.values().length);
     }

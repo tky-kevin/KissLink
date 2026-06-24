@@ -109,7 +109,7 @@ public class FileTransferService extends Service {
                 teardownSession();
                 refreshLocalCapabilities(); // 閒置邊界:已回待機,為下一場抓最新 5GHz 能力
                 createCoordinator();
-                sessionMgr.transitionTo(SessionState.idle());
+                sessionMgr.toIdle();
                 Log.i(TAG, "User disconnect → full teardown");
             });
         }
@@ -121,7 +121,7 @@ public class FileTransferService extends Service {
                 peerStarting = false;
                 teardownPeer();
                 if (coordinator != null) coordinator.cancelLightweight();
-                sessionMgr.transitionTo(SessionState.idle());
+                sessionMgr.toIdle();
                 Log.i(TAG, "Pairing interrupted → IDLE");
             });
         }
@@ -282,12 +282,12 @@ public class FileTransferService extends Service {
             return;
         }
 
-        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.RESETTING));
+        sessionMgr.toResetting();
         teardownSession();
         Log.i(TAG, "Dirty state → teardown + settle before re-pair");
         mainHandler.postDelayed(() -> {
             createCoordinator();
-            sessionMgr.transitionTo(SessionState.idle());
+            sessionMgr.toIdle();
             deliver.run();
         }, RESET_SETTLE_MS);
     }
@@ -320,7 +320,7 @@ public class FileTransferService extends Service {
             }
             @Override public void onError(String message) {
                 peerStarting = false;
-                sessionMgr.transitionTo(SessionState.error(message));
+                sessionMgr.toError(message);
             }
         };
         if (groupOwner) {
@@ -364,14 +364,14 @@ public class FileTransferService extends Service {
                 mainHandler.post(() -> {
                     sessionMgr.clearPeerIdentity();
                     teardownPeer();
-                    sessionMgr.transitionTo(SessionState.idle());
+                    sessionMgr.toIdle();
                 });
             }
             @Override public void onPeerProfile(@Nullable String name, @Nullable byte[] avatarThumb) {
                 sessionMgr.setPeerProfile(name, avatarThumb);
                 mainHandler.post(() -> {
                     if (peer != null && peer.isAlive())
-                        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.CONNECTED));
+                        sessionMgr.toConnected();
                 });
             }
             @Override public void onCardReceived(@Nullable byte[] vcard, String name) {
@@ -385,7 +385,7 @@ public class FileTransferService extends Service {
         wakeLockManager.acquire();
         idleManager.setTransferring(true);
         notificationHelper.update("已連線", 0);
-        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.CONNECTED));
+        sessionMgr.toConnected();
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
     }
 

@@ -302,7 +302,7 @@ final class TransferUiController {
             case PAIRING_LINKING:  return 1;
             case PAIRING_ELECTING: return 2;
             case SOCKETING:        return 4;
-            default:               return 3;   // CREATING_GROUP / HOSTING / CONNECTING
+            default:               return 3;   // CONNECTING（Wi-Fi Direct 建群/連線）
         }
     }
 

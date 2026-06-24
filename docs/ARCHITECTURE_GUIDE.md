@@ -520,26 +520,29 @@ allow_deletions: false
 
 **核心問題**：NFC 碰觸決策、Session 重建設定、TCP 連接建立這三塊邏輯深度交織，改任何一塊都可能影響其他兩塊。
 
-#### 三套重疊的狀態機
+#### 狀態機：已收斂為單一擁有者（branch `audit/architecture-cleanup`）
 
-| 狀態機 | Enum 值數量 | 位置 |
-|--------|-----------|------|
-| `SessionState.Phase` | 14 | `transfer/SessionState.java` |
-| `PairingCoordinator.Phase` | 6 | `pairing/PairingCoordinator.java` |
-| `ConnectionState` | 7 | `wifidirect/ConnectionState.java` |
+子系統各保有其內部 FSM（合理）：
 
-**映射關係**：
+| 狀態機 | 角色 | 位置 |
+|--------|------|------|
+| `SessionState.Phase` | UI 面向的聚合狀態（純值物件） | `transfer/SessionState.java` |
+| `PairingCoordinator.Phase` | 配對握手內部相位 | `pairing/PairingCoordinator.java` |
+| `ConnectionState` | Wi-Fi Direct 內部生命週期 | `wifidirect/ConnectionState.java` |
+| `TransferProgress.Phase` | 傳輸進度 | `transfer/TransferProgress.java` |
+
+**收斂後的映射**：所有跨 enum 轉譯政策集中在 `SessionManager`（單一擁有者），`SessionState` 不再
+含映射、只是純值；外部不再自行 `new SessionState(...)`，改呼叫 `SessionManager` 的語意化方法
+（`toIdle/toResetting/toConnected/toError`）——單一真相、單一寫入者。
 ```
-PairingCoordinator.Phase ──mapPhase()──→ SessionState.Phase
-ConnectionState ──fromConnection()──→ SessionState.Phase
-TransferProgress.Phase ──fromTransfer()──→ SessionState.Phase
+PairingCoordinator.Phase ─SessionManager.mapPhase()──→ SessionState.Phase
+TransferProgress.Phase   ─SessionManager.mapTransfer()─→ SessionState.Phase
 ```
 
-**問題**：
-- `CREATING_GROUP`、`HOSTING` 只能透過 `fromConnection()` 產生，`mapPhase()` 永遠不會產生它們
-- `RESETTING` 只在 `FileTransferService.proceedWithLatch()` 中產生
-- 三個映射點分散在三個不同類別，狀態來源難以追蹤
-- 加新狀態需同步改三處，映射層容易漂移
+**已修正的舊問題**：
+- 移除死掉的 `SessionState.fromConnection()` 與只由它產生的聚合 phase `CREATING_GROUP`/`HOSTING`
+  （`ConnectionState` 自己的同名值仍是活的內部狀態，未受影響）。
+- 映射不再分散於值物件 + 多個呼叫端；新增狀態只需改 `SessionManager` 一處。
 
 #### 狀態/生命週期歸屬模糊
 
