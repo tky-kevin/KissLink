@@ -50,7 +50,7 @@ public class PairingCoordinator {
      * {@code adb shell setprop log.tag.PairingCoordinator DEBUG} 即可叫出，免重編譯。
      */
     private static void seq(String msg) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+        PairingFlightRecorder.seq(TAG, msg);
     }
 
     public enum Phase { IDLE, LATCHED, LINKING, ELECTING, CONNECTING, CONNECTED }
@@ -254,7 +254,8 @@ public class PairingCoordinator {
         if (finished) return;
         finished = true;
         cancelWatchdog();
-        Log.w(TAG, "Pairing failed: " + msg);
+        PairingFlightRecorder.event(TAG, "Pairing failed: " + msg);
+        PairingFlightRecorder.dump(context, msg); // 落檔前 buffer 尚含本場完整序列，先 dump 再 stopBle
         stopBle();
         listener.onError(msg);
     }
@@ -318,7 +319,8 @@ public class PairingCoordinator {
         }
         watchdogRunnable = () -> {
             watchdogRunnable = null;
-            Log.w(TAG, "PAIRSEQ watchdog FIRED at phase " + phase + " (budget " + budgetMs + "ms) → fail");
+            PairingFlightRecorder.event(TAG, "watchdog FIRED at phase " + phase
+                    + " (budget " + budgetMs + "ms) → fail");
             fail(msg);
         };
         watchdog.postDelayed(watchdogRunnable, budgetMs);

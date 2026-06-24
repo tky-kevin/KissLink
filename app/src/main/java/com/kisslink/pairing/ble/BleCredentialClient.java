@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 
 import com.kisslink.model.GroupCredential;
 import com.kisslink.nfc.NFCCredential;
+import com.kisslink.pairing.PairingFlightRecorder;
 import com.kisslink.pairing.PairingToken;
 
 import java.nio.charset.StandardCharsets;
@@ -45,7 +46,7 @@ public class BleCredentialClient {
 
     /** PAIRSEQ 診斷：預設靜默，{@code adb shell setprop log.tag.BleCredentialClient DEBUG} 可叫出。 */
     private static void seq(String msg) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+        PairingFlightRecorder.seq(TAG, msg);
     }
 
     public interface Callback {
@@ -95,8 +96,8 @@ public class BleCredentialClient {
             // 仍在掃描卻逾時 = 整段都沒看到對方的 nonce 廣播。最常見成因是「不同源 nonce」:
             // NFC 讀到的是對方舊場次 token,但對方已重建 coordinator 改廣播新 nonce(見 LESSONS 坑14)。
             if (scanning) {
-                Log.w(TAG, "BLE timeout: never saw peer advertising nonce=" + scanNonceB64
-                        + " — peer not advertising it (likely stale/cross-session nonce mismatch)");
+                PairingFlightRecorder.event(TAG, "BLE timeout: never saw peer advertising nonce="
+                        + scanNonceB64 + " — peer not advertising it (likely stale/cross-session nonce mismatch)");
             }
             callback.onError("BLE 連線逾時，請重試");
         };
@@ -198,7 +199,7 @@ public class BleCredentialClient {
         }
 
         @Override public void onScanFailed(int errorCode) {
-            Log.e(TAG, "Scan failed: " + errorCode);
+            PairingFlightRecorder.event(TAG, "Scan failed: " + errorCode);
             main.post(() -> callback.onError("BLE 掃描失敗 (" + errorCode + ")"));
         }
     };
@@ -220,7 +221,7 @@ public class BleCredentialClient {
     @SuppressLint("MissingPermission")
     private void onHandshakeStall() {
         if (stopped || ready || credentialDelivered) return;
-        Log.w(TAG, "PAIRSEQ handshake stalled (servicesDiscovered=" + servicesDiscovered
+        PairingFlightRecorder.event(TAG, "handshake stalled (servicesDiscovered=" + servicesDiscovered
                 + ", attempt=" + gattAttempts + ") → reconnect/abort");
         BluetoothGatt old = gatt;
         gatt = null;                       // 先脫鉤 → 舊 gatt 的 DISCONNECTED 會被 g!=gatt 忽略
@@ -257,8 +258,8 @@ public class BleCredentialClient {
                 try { g.close(); } catch (Exception ignored) {}
                 // 來自「已被手動換掉的舊 gatt」的回呼 → 忽略，避免與交握逾時重連互相打架（重複重試/誤判失敗）。
                 if (g != gatt) return;
-                Log.w(TAG, "PAIRSEQ GATT disconnected (status=" + status + ", servicesDiscovered="
-                        + servicesDiscovered + ", attempts=" + gattAttempts + ")");
+                PairingFlightRecorder.event(TAG, "GATT disconnected (status=" + status
+                        + ", servicesDiscovered=" + servicesDiscovered + ", attempts=" + gattAttempts + ")");
                 main.removeCallbacks(handshakeTimeout);
                 gatt = null;
                 if (ready || credentialDelivered) return;          // 交握已過,正常收尾,不介入
@@ -361,7 +362,7 @@ public class BleCredentialClient {
         try { return NFCCredential.fromBytes(value); }
         catch (Exception e) {
             // 解析失敗不該靜默：留下診斷，否則只會表現為「卡在連線逾時」難以定位。
-            Log.w(TAG, "parseCredential failed (" + value.length + "B): " + e.getMessage());
+            PairingFlightRecorder.event(TAG, "parseCredential failed (" + value.length + "B): " + e.getMessage());
             return null;
         }
     }
