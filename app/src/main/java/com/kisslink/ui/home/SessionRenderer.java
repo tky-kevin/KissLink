@@ -174,7 +174,11 @@ final class SessionRenderer {
 
     // ── beam 的其他入口（供 Activity 在非 SessionState 路徑呼叫）────
     void haptic() {
-        beam.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
+        // CONFIRM 是 API 30 才有的觸覺常數；minSdk 29 上退回 VIRTUAL_KEY，避免 InlinedApi。
+        int feedback = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
+                ? HapticFeedbackConstants.CONFIRM
+                : HapticFeedbackConstants.VIRTUAL_KEY;
+        beam.performHapticFeedback(feedback);
     }
 
     void updateSelfIdentity(@Nullable String name, @Nullable android.graphics.Bitmap avatar) {

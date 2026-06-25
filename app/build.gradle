@@ -55,7 +55,9 @@ android {
 		abortOnError = true
 		warningsAsErrors = true
 		baseline = file("lint-baseline.xml")
-		disable 'AndroidGradlePluginVersion'
+		// 版本時效性不該讓建置失敗：GradleDependency/AGP 版本檢查會隨上游釋出新版而「自己變紅」，
+		// 與本次提交無關。依賴升級交給人工/Dependabot 評估，不綁進 CI 紅燈。
+		disable 'AndroidGradlePluginVersion', 'GradleDependency'
 	}
 
 	// 讓 Room annotation processor 在 debug build 輸出 schema（方便偵錯）
