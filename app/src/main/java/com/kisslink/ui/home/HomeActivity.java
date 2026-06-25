@@ -12,7 +12,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -67,19 +66,18 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
     // ── Views ──
     private BeamStageView beam;
-    private TextView   tvHeadline, tvSub, tvPercent, tvPercentUnit, tvReceived, tvStackLabel;
+    private TextView   tvHeadline, tvSub, tvPercent, tvPercentUnit, tvReceived;
     private LinearLayout percentRow, receivedBanner;
-    private View sendStackRow, pickRow;
-    private android.widget.FrameLayout stackThumbs;
-    private MaterialButton btnPickFiles, btnPickMedia, btnSend;
+    private View pickRow;
+    private MaterialButton btnPickFiles, btnPickMedia;
     private ImageButton ibHistory, ibSettings;
     private ShapeableImageView ivAvatar;
 
-    private SendListAdapter itemsAdapter;
     // 傳輸/接收清單方塊（rvTransfer）的單一擁有者：呈現狀態（是否在傳輸版面/接收清單顯示中/
     // 自動捲動）+ 清單渲染全在此（C3，取代原本散落於本 Activity 的四個旗標與十餘個 render 方法）。
     private TransferListPresenter transferList;
-    private final SendSheetManager sendSheetManager = new SendSheetManager();
+    // 底部待傳區（疊圖摘要 + 送出鈕 + 彈出清單）的單一擁有者（C3）。
+    private SendStackPresenter sendStack;
 
     // 選取／傳輸／接收等狀態與其衍生判斷集中於此（MVVM）；本 Activity 僅渲染與轉發意圖。
     private HomeViewModel viewModel;
@@ -178,13 +176,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         tvPercent   = findViewById(R.id.tvPercent);
         tvPercentUnit= findViewById(R.id.tvPercentUnit);
         percentRow  = findViewById(R.id.percentRow);
-        sendStackRow= findViewById(R.id.sendStackRow);
-        stackThumbs = findViewById(R.id.stackThumbs);
-        tvStackLabel= findViewById(R.id.tvStackLabel);
         pickRow     = findViewById(R.id.pickRow);
         btnPickFiles= findViewById(R.id.btnPickFiles);
         btnPickMedia= findViewById(R.id.btnPickMedia);
-        btnSend     = findViewById(R.id.btnSend);
         ibHistory   = findViewById(R.id.ibHistory);
         ibSettings  = findViewById(R.id.ibSettings);
         ivAvatar    = findViewById(R.id.ivAvatar);
@@ -193,13 +187,12 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         ui = new TransferUiController(this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
 
-        itemsAdapter = new SendListAdapter();
-        itemsAdapter.setOnRemove(viewModel::removeSelection);
-        itemsAdapter.setOnItemClickListener(this::openFile);
-        sendStackRow.setOnClickListener(v -> showSendSheet());
-
         // 傳輸/接收清單方塊（rvTransfer）→ 交給單一擁有者（呈現狀態 + 渲染都在內）。
         transferList = new TransferListPresenter(findViewById(R.id.rvTransfer), viewModel, this::openFile);
+        // 底部待傳區（疊圖 + 送出鈕 + 彈出清單）→ 單一擁有者，意圖（點列/點送出）以 callback 轉回本 Activity。
+        sendStack = new SendStackPresenter(this, findViewById(R.id.sendStackRow),
+                findViewById(R.id.stackThumbs), findViewById(R.id.tvStackLabel),
+                findViewById(R.id.btnSend), viewModel, this::openFile, this::doSend);
 
         // #9：點「已連線至 xxx」可手動斷線
         tvHeadline.setOnClickListener(v -> onHeadlineTapped());
@@ -221,7 +214,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                     .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
                     .build());
         });
-        btnSend.setOnClickListener(v -> doSend());
 
         ibHistory.setOnClickListener(v ->
                 new HistorySheet().show(getSupportFragmentManager(), "history"));
@@ -246,8 +238,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private void observeViewModel() {
         viewModel.getSelection().observe(this, items -> {
             transferList.collapseIfSendPending();
-            rebuildSendStack();
-            updateSendButton();
+            sendStack.rebuild();
+            sendStack.updateButton();
         });
         viewModel.getReceivedCount().observe(this, count -> {
             if (count != null && count > 0) showReceivedBanner(count);
@@ -417,8 +409,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                     exitTransferUi();
                     transferList.restoreIfAny();
                     viewModel.setSending(false);
-                    updateSendButton();
-                    rebuildSendStack();
+                    sendStack.updateButton();
+                    sendStack.rebuild();
                     if (viewModel.isPendingCardSend()) {
                         viewModel.setPendingCardSend(false);
                         main.post(this::sendMyProfileCard);
@@ -466,8 +458,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         transferList.reset();
         pickRow.setVisibility(View.VISIBLE);
         hideReceivedBanner();
-        updateSendButton();
-        rebuildSendStack();
+        sendStack.updateButton();
+        sendStack.rebuild();
     }
 
     /** 真正回到閒置：清空接收清單/慶祝旗標/送出中等 ViewModel 持久狀態（與單純的畫面重建區隔）。 */
@@ -548,8 +540,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             }
             exitTransferUi();
             transferList.restoreIfAny();   // 重建後（如切換深淺色）把 VM 中的接收列表重新顯示
-            updateSendButton();
-            rebuildSendStack();
+            sendStack.updateButton();
+            sendStack.rebuild();
             return;
         }
 
@@ -568,8 +560,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         } else if (outgoing) {
             // 整批傳完 → 清空待傳清單與送出狀態（會透過 selection LiveData 重建 UI）
             viewModel.onBatchSent();
-            rebuildSendStack();
-            if (sendSheetManager.isShowing()) sendSheetManager.dismiss();
+            sendStack.rebuild();
+            sendStack.dismissSheet();
         } else if (tp != null) {
             transferList.showReceiveList(tp, true);
             transferList.collapseIfSendPending(); // 有待傳項目 → 直接收合為橫幅，不讓整張清單擠壓 NFC
@@ -583,7 +575,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 beam.setPhase(BeamStageView.CONNECTED);
             }
         }, 1400);
-        updateSendButton();
+        sendStack.updateButton();
     }
 
     private void showReceivedBanner(int count) {
@@ -600,75 +592,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         if (binder == null || !viewModel.isConnected() || viewModel.isSelectionEmpty()) return;
         viewModel.markSendingStarted();   // 記錄本批 + 標記送出中（送出鈕暫時隱藏）
         binder.sendItems(new ArrayList<>(viewModel.currentSelection()));
-        updateSendButton();
+        sendStack.updateButton();
         haptic();
-    }
-
-    /**
-     * 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。
-     * 不再用 lastPhase 判斷——否則「接收對方一包檔」期間/結束時會誤把送出鈕藏掉。
-     */
-    private void updateSendButton() {
-        if (viewModel.shouldShowSendButton()) {
-            btnSend.setText(getString(R.string.btn_send_n, viewModel.selectionCount()));
-            Anim.revealFadeUp(btnSend);
-        } else {
-            btnSend.setVisibility(View.GONE);
-        }
-    }
-
-    // ── 待傳清單（疊起來 + 彈出）#2 ──
-    private void rebuildSendStack() {
-        // adapter 內容（供彈出清單）
-        List<SendRow> rows = new ArrayList<>();
-        for (SendItem it : viewModel.currentSelection()) {
-            SendRow r = new SendRow(it.name, TransferUiController.sizeLabel(it.size), it.itemType,
-                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
-                    it.uri, it.mime);
-            r.removable = true;
-            rows.add(r);
-        }
-        itemsAdapter.submit(rows);
-
-        // 底部疊起來的摘要
-        if (viewModel.isSelectionEmpty()) {
-            sendStackRow.setVisibility(View.GONE);
-            if (sendSheetManager.isShowing()) sendSheetManager.dismiss();
-            return;
-        }
-        tvStackLabel.setText(getString(R.string.send_stack_label, viewModel.selectionCount()));
-        buildStackThumbs();
-        // 與「已接收方塊」一致：變為可見時才播淡入上滑（point 7 統一入場動畫）。
-        Anim.revealFadeUp(sendStackRow);
-    }
-
-    /** 疊起來的縮圖（最多 3 個，往右錯開重疊）。 */
-    private void buildStackThumbs() {
-        stackThumbs.removeAllViews();
-        List<SendItem> selection = viewModel.currentSelection();
-        float d = getResources().getDisplayMetrics().density;
-        int sizePx = Math.round(40 * d);
-        int stepPx = Math.round(22 * d);
-        int pad = Math.round(9 * d);
-        int max = Math.min(3, selection.size());
-        for (int i = 0; i < max; i++) {
-            SendItem it = selection.get(i);
-            ShapeableImageView iv = new ShapeableImageView(this);
-            android.widget.FrameLayout.LayoutParams lp =
-                    new android.widget.FrameLayout.LayoutParams(sizePx, sizePx);
-            lp.leftMargin = i * stepPx;
-            iv.setLayoutParams(lp);
-            iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
-            iv.setPadding(pad, pad, pad, pad);
-            iv.setImageResource(TransferUiController.iconForItem(it));
-            stackThumbs.addView(iv);
-        }
-    }
-
-    /** 點擊摘要 → 彈出完整可移除清單。 */
-    private void showSendSheet() {
-        if (viewModel.isSelectionEmpty()) return;
-        sendSheetManager.showIfNotEmpty(this, itemsAdapter, viewModel::clearSelection);
     }
 
     /**
@@ -772,8 +697,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 進入「傳輸中」版面：只留速度＋列表方塊，收起挑檔/送出/待傳與（已停用的）接收橫幅。 */
     private void enterTransferUi(boolean outgoing) {
         pickRow.setVisibility(View.GONE);
-        btnSend.setVisibility(View.GONE);
-        sendStackRow.setVisibility(View.GONE);
+        sendStack.hideForTransfer();
         receivedBanner.setVisibility(View.GONE);
     }
 
@@ -784,8 +708,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private void exitTransferUi() {
         transferList.exitTransfer();   // 送出列表收合；接收列表持久 → 不收合（由 presenter 判斷）
         pickRow.setVisibility(View.VISIBLE);
-        rebuildSendStack();
-        updateSendButton();
+        sendStack.rebuild();
+        sendStack.updateButton();
     }
 
     private void openFile(@androidx.annotation.NonNull SendRow row) {
