@@ -13,7 +13,7 @@
 |------|------|------|
 | JDK | 21 | Android Studio 內建 JBR |
 | Android Studio | 2024.1+ | 最新穩定版 |
-| Gradle | 8.13 | 透過 wrapper 自動安裝 |
+| Gradle | 9.5.1 | 透過 wrapper 自動安裝 |
 | Git | 2.40+ | 版本控制 |
 
 ### 建置專案
@@ -25,8 +25,8 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 # 建置 debug APK
 ./gradlew :app:assembleDebug
 
-# 執行所有 linter
-./gradlew ktlintCheck spotlessCheck detekt :app:lintDebug
+# 執行所有 linter（detekt 暫停用：detekt 1.23 尚未支援 Kotlin 2.2）
+./gradlew ktlintCheck spotlessCheck :app:lintDebug
 
 # 自動修正 linter 問題
 ./gradlew ktlintFormat spotlessApply

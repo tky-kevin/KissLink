@@ -51,14 +51,14 @@ NFC tap (HCE / reader)
 
 - Language: **Java** (core + UI) + **Kotlin / Jetpack Compose** (central animation module)
 - minSdk 29, targetSdk / compileSdk 34
-- Android Gradle Plugin 8.13.2, Gradle 8.13, Kotlin 2.2.10, Compose 1.7.5
+- Android Gradle Plugin 9.2.1, Gradle 9.5.1, Kotlin 2.2.10, Compose 1.7.5
 - Room (transfer history), AndroidX, Material Components
 
 ## Building
 
-The repository ships a **Gradle wrapper** (Gradle 8.13). Use a **JDK 21** — a newer system JDK
-(e.g. JDK 25) is incompatible with AGP 8.x, so point `JAVA_HOME` at one (Android Studio's bundled
-JBR works):
+The repository ships a **Gradle wrapper** (Gradle 9.5.1). Use a **JDK 21** — a newer system JDK
+(e.g. JDK 25) is incompatible with the Android Gradle Plugin, so point `JAVA_HOME` at one
+(Android Studio's bundled JBR works):
 
 ```bash
 export JAVA_HOME="/path/to/jdk-21"   # e.g. Android Studio's JBR
