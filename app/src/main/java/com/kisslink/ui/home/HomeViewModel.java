@@ -32,9 +32,9 @@ public class HomeViewModel extends ViewModel {
     private final Set<String> outgoingNames = new HashSet<>();
     private int outgoingRemaining = 0; // 本批還沒傳完的件數，歸零即清空待傳清單
 
-    // ── 接收橫幅 ────────────────────────────────────────────────
-    private long recvBatchId = 0; // 目前接收批次
-    private int recvCount = 0; // 目前接收批次已完成件數
+    // ── 接收橫幅（投影，非第二份權威狀態）──────────────────────────
+    // 「收到 N 個」橫幅計數是 received map 的純投影；不再另存 recvCount/recvBatchId
+    // 第二份權威值——那會與接收清單漂移（先前坑點）。批次 id 一律讀 receiveListBatchId。
     private final MutableLiveData<Integer> receivedCountLd = new MutableLiveData<>(0);
 
     // ── 接收清單（接收方列表，取代「收到 N 個」橫幅）──────────────
@@ -90,15 +90,13 @@ public class HomeViewModel extends ViewModel {
         resetReceived();
     }
 
-    /** 把接收列表收合為橫幅：統計已完成件數，餵入 receivedCountLd 讓 banner 顯示。 */
+    /** 把接收列表收合為橫幅：統計已完成件數（received 的投影），餵入 receivedCountLd 讓 banner 顯示。 */
     public void collapseReceiveListToBanner() {
         int done = 0;
         for (RecvFile f : received.values()) {
             if (f.done) done++;
         }
-        recvBatchId = receiveListBatchId;
-        recvCount = done;
-        receivedCountLd.setValue(recvCount);
+        receivedCountLd.setValue(done);
     }
 
     // ── 旗標 ────────────────────────────────────────────────────
@@ -266,33 +264,12 @@ public class HomeViewModel extends ViewModel {
     }
 
     public long receivedBatchId() {
-        return recvBatchId;
+        return receiveListBatchId;
     }
 
-    /** 回到就緒畫面：重置接收批次計數並隱藏橫幅。 */
+    /** 隱藏橫幅（只重置投影；接收清單資料的清空由 {@link #clearReceivedList()} 負責）。 */
     public void resetReceived() {
-        recvBatchId = 0;
-        recvCount = 0;
         receivedCountLd.setValue(0);
-    }
-
-    /** 接收到新批次的「傳輸中」事件 → 重置計數並隱藏橫幅。 */
-    public void onIncomingBatch(long batchId) {
-        if (batchId != recvBatchId) {
-            recvBatchId = batchId;
-            recvCount = 0;
-            receivedCountLd.setValue(0);
-        }
-    }
-
-    /** 接收方：累計本批收到的項目數並更新橫幅。 */
-    public void countReceived(@NonNull TransferProgress tp) {
-        if (tp.batchId != recvBatchId) {
-            recvBatchId = tp.batchId;
-            recvCount = 0;
-        }
-        recvCount++;
-        receivedCountLd.setValue(recvCount);
     }
 
     // ══════════════════════════════════════════════════════════
