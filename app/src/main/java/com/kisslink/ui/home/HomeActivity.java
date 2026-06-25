@@ -10,7 +10,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -39,7 +38,6 @@ import com.kisslink.profile.ProfileStore;
 import com.kisslink.transfer.FileTransferService;
 import com.kisslink.transfer.SendItem;
 import com.kisslink.transfer.SessionState;
-import com.kisslink.transfer.TransferProgress;
 import com.kisslink.transfer.TransferProtocol;
 import com.kisslink.ui.history.HistorySheet;
 import com.kisslink.ui.profile.ProfileCardSheet;
@@ -60,15 +58,12 @@ import java.util.List;
  * 只負責生命週期、權限、view binding、觀察 ViewModel 與轉發使用者意圖。
  */
 @RequiresApi(api = Build.VERSION_CODES.Q)
-public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.Host {
+public class HomeActivity extends AppCompatActivity
+        implements ProfileCardSheet.Host, SessionRenderer.Host {
 
     private static final String TAG = "HomeActivity";
 
-    // ── Views ──
-    private BeamStageView beam;
-    private TextView   tvHeadline, tvSub, tvPercent, tvPercentUnit, tvReceived;
-    private LinearLayout percentRow, receivedBanner;
-    private View pickRow;
+    // ── Views（只保留 Activity 自身仍需引用的；其餘交由各 presenter 持有）──
     private MaterialButton btnPickFiles, btnPickMedia;
     private ImageButton ibHistory, ibSettings;
     private ShapeableImageView ivAvatar;
@@ -78,11 +73,11 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     private TransferListPresenter transferList;
     // 底部待傳區（疊圖摘要 + 送出鈕 + 彈出清單）的單一擁有者（C3）。
     private SendStackPresenter sendStack;
+    // 狀態 → UI 的渲染層（onSession 大 switch + beam/標題/速度/橫幅），beam 完全封裝其中（C3）。
+    private SessionRenderer sessionRenderer;
 
-    // 選取／傳輸／接收等狀態與其衍生判斷集中於此（MVVM）；本 Activity 僅渲染與轉發意圖。
+    // 選取／傳輸／接收等狀態與其衍生判斷集中於此（MVVM）；本 Activity 僅綁定/權限/生命週期與轉發意圖。
     private HomeViewModel viewModel;
-    // 傳輸 UI 渲染邏輯（連線階段/進度/速度顯示），從本 Activity 拆出。
-    private TransferUiController ui;
 
     // ── Service ──
     @Nullable private FileTransferService.TransferBinder binder;
@@ -163,29 +158,30 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
 
         // Service 的啟動/綁定移到 onStart（解綁在 onStop）：離開 App（背景）即解綁，
         // 觸發 Service 的閒置自動拆除，不再讓 Wi-Fi Direct 在背景常駐。
-        renderReady();
+        sessionRenderer.renderReady();
 
         // 從其他 app 分享檔案進來 → 加入待傳清單。
         ShareIntentReceiver.ingest(this, viewModel, getIntent());
     }
 
     private void bindViews() {
-        beam        = findViewById(R.id.beam);
-        tvHeadline  = findViewById(R.id.tvHeadline);
-        tvSub       = findViewById(R.id.tvSub);
-        tvPercent   = findViewById(R.id.tvPercent);
-        tvPercentUnit= findViewById(R.id.tvPercentUnit);
-        percentRow  = findViewById(R.id.percentRow);
-        pickRow     = findViewById(R.id.pickRow);
+        BeamStageView beam = findViewById(R.id.beam);
+        TextView tvHeadline = findViewById(R.id.tvHeadline);
+        TextView tvSub      = findViewById(R.id.tvSub);
+        TextView tvPercent  = findViewById(R.id.tvPercent);
+        TextView tvPercentUnit = findViewById(R.id.tvPercentUnit);
+        LinearLayout percentRow = findViewById(R.id.percentRow);
+        View pickRow        = findViewById(R.id.pickRow);
+        LinearLayout receivedBanner = findViewById(R.id.receivedBanner);
+        TextView tvReceived = findViewById(R.id.tvReceived);
         btnPickFiles= findViewById(R.id.btnPickFiles);
         btnPickMedia= findViewById(R.id.btnPickMedia);
         ibHistory   = findViewById(R.id.ibHistory);
         ibSettings  = findViewById(R.id.ibSettings);
         ivAvatar    = findViewById(R.id.ivAvatar);
-        tvReceived     = findViewById(R.id.tvReceived);
-        receivedBanner = findViewById(R.id.receivedBanner);
 
-        ui = new TransferUiController(this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
+        TransferUiController ui = new TransferUiController(
+                this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
 
         // 傳輸/接收清單方塊（rvTransfer）→ 交給單一擁有者（呈現狀態 + 渲染都在內）。
         transferList = new TransferListPresenter(findViewById(R.id.rvTransfer), viewModel, this::openFile);
@@ -193,6 +189,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         sendStack = new SendStackPresenter(this, findViewById(R.id.sendStackRow),
                 findViewById(R.id.stackThumbs), findViewById(R.id.tvStackLabel),
                 findViewById(R.id.btnSend), viewModel, this::openFile, this::doSend);
+        // 狀態 → UI 渲染層；beam 封裝其中，少數 Activity-only 動作經 Host（即本 Activity）回呼。
+        sessionRenderer = new SessionRenderer(this, main, beam, ui, transferList, sendStack,
+                viewModel, pickRow, receivedBanner, tvReceived, this);
 
         // #9：點「已連線至 xxx」可手動斷線
         tvHeadline.setOnClickListener(v -> onHeadlineTapped());
@@ -242,8 +241,8 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             sendStack.updateButton();
         });
         viewModel.getReceivedCount().observe(this, count -> {
-            if (count != null && count > 0) showReceivedBanner(count);
-            else hideReceivedBanner();
+            if (count != null && count > 0) sessionRenderer.showReceivedBanner(count);
+            else sessionRenderer.hideReceivedBanner();
         });
         // 「本次接收」sheet 垃圾桶清掉該批次 → 同步清掉 live 接收清單/橫幅（count→0 會自動隱藏橫幅）。
         getSupportFragmentManager().setFragmentResultListener(
@@ -369,222 +368,9 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     //  狀態 → UI
     // ══════════════════════════════════════════════════════════
 
+    /** SessionState → 畫面：委派給渲染層。observer 仍指向本方法，故保留此薄殼。 */
     private void onSession(SessionState st) {
-        SessionState.Phase p = st.phase;
-
-        switch (p) {
-            case IDLE:
-            case CANCELLED:
-                ui.stopStageTicker();
-                resetSessionState();   // 真正回到閒置 → 清空 VM 持久狀態（重建走的是 onCreate→renderReady，不清）
-                renderReady();
-                if (nfc != null && viewModel.lastPhase() != SessionState.Phase.IDLE) nfc.resetLatched();
-                break;
-
-            case RESETTING:
-                ui.stopStageTicker();
-                beam.setPhase(BeamStageView.CONNECTING);
-                ui.showLoadingHeadline(getString(R.string.home_resetting_title), "");
-                break;
-
-            case PAIRING_LATCHED:
-            case PAIRING_LINKING:
-            case PAIRING_ELECTING:
-            case CONNECTING:
-            case SOCKETING:
-                beam.setPhase(BeamStageView.CONNECTING);
-                ui.runStageTicker(TransferUiController.stageTargetFor(p));
-                break;
-
-            case CONNECTED:
-                // 不立刻切「已連線」:讓階段 ticker 把最後的「建立 TCP 通道」走完並停留一拍再切,
-                // 避免 socket 太快時 TCP 階段只閃一下。ticker 未在跑時會立即執行。
-                ui.completeStagesThen(() -> {
-                    beam.setPhase(BeamStageView.CONNECTED);
-                    ui.showPeerIdentity(beam, connectedPeerName(), connectedPeerAvatar(),
-                            ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
-                    ui.showHeadlineText(getString(R.string.home_connected_title),
-                            connectedSub());
-                    if (nfc != null) nfc.resetLatched();
-                    exitTransferUi();
-                    transferList.restoreIfAny();
-                    viewModel.setSending(false);
-                    sendStack.updateButton();
-                    sendStack.rebuild();
-                    if (viewModel.isPendingCardSend()) {
-                        viewModel.setPendingCardSend(false);
-                        main.post(this::sendMyProfileCard);
-                    }
-                    if (!viewModel.isSelectionEmpty()) {
-                        main.post(this::doSend);
-                    }
-                });
-                break;
-
-            case TRANSFERRING:
-                ui.stopStageTicker();
-                onTransferring(st.progress);
-                break;
-
-            case FILE_DONE:
-            case ALL_DONE:
-                onTransferDone(st.progress, p == SessionState.Phase.ALL_DONE);
-                break;
-
-            case ERROR:
-                ui.stopStageTicker();
-                beam.setPhase(BeamStageView.ERROR);
-                ui.showHeadlineText(getString(R.string.home_error_title),
-                        st.error != null ? st.error : getString(R.string.home_error_retry));
-                if (nfc != null) nfc.resetLatched();
-                break;
-
-            default: break;
-        }
-        viewModel.onSession(st);
-    }
-
-    // ── READY ──
-    // 純視覺化、可重入：onCreate（含切換深淺色/背景返回的 Activity 重建）也會呼叫，故「不」清空
-    // ViewModel 的持久狀態（接收清單/慶祝旗標/送出中）——那屬於真正回到 IDLE 的語意，於 onSession
-    // 的 IDLE/CANCELLED 處理。否則重建時這裡會把待還原的接收清單清掉，replay 只補回最後一檔 → 剩 1 項。
-    private void renderReady() {
-        beam.setPhase(BeamStageView.READY);
-        ui.showPeerIdentity(beam, null, null,
-                ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
-        ui.showHeadlineText(getString(R.string.home_ready_title),
-                getString(R.string.home_ready_sub));
-        // 收合傳輸中列表方塊、顯示挑檔列（接收清單若仍有資料，連線 replay 後由 restoreIfAny 還原）。
-        transferList.reset();
-        pickRow.setVisibility(View.VISIBLE);
-        hideReceivedBanner();
-        sendStack.updateButton();
-        sendStack.rebuild();
-    }
-
-    /** 真正回到閒置：清空接收清單/慶祝旗標/送出中等 ViewModel 持久狀態（與單純的畫面重建區隔）。 */
-    private void resetSessionState() {
-        viewModel.clearReceivedList();   // 內含 resetReceived（橫幅計數歸零）
-        viewModel.resetCelebration();
-        viewModel.setSending(false);
-    }
-
-    // ── 連線對象身份 ──
-    @Nullable private String connectedPeerName() {
-        return binder != null ? binder.connectedPeerName() : null;
-    }
-
-    @Nullable private byte[] connectedPeerAvatar() {
-        return binder != null ? binder.connectedPeerAvatar() : null;
-    }
-
-    /** 已連線副標：「已連線至 ◯◯」；無對方名稱時回退「對方」。 */
-    private String connectedSub() {
-        String peer = connectedPeerName();
-        return getString(R.string.home_connected_sub,
-                peer != null ? peer : getString(R.string.peer_fallback));
-    }
-
-    // ── 傳輸中 ──
-    // 畫面只留兩件事：速度（大字英雄）＋ 一個檔案列表方塊（沿用待傳列設計、無標題、當前列高亮）。
-    // 進度收斂到中央光環、不顯示百分比文字；不顯示「傳送中 · 檔名」小灰字。
-    private void onTransferring(@Nullable TransferProgress tp) {
-        if (tp == null) return;
-        boolean outgoing = tp.outgoing;
-        beam.setDirection(outgoing ? BeamStageView.SEND : BeamStageView.RECEIVE);
-        beam.setPhase(BeamStageView.TRANSFERRING);
-        beam.setProgress(viewModel.batchProgress(tp));   // #3：整包進度
-        // 速度作為主角：大字 + tabular 數字（取代「已連線」與小灰字）
-        ui.showSpeedHero(TransferUiController.speedNumber(tp.speedBps),
-                TransferUiController.speedUnit(tp.speedBps));
-        // 進入傳輸版面的第一幀重置自動捲動（之後每幀都會走到這，但只重置一次）。
-        transferList.beginTransferFrame();
-        enterTransferUi(outgoing);
-        if (outgoing) {
-            // 送出方：把待傳清單展開成傳輸中的列表方塊（只建一次），逐幀只更新當前列進度/高亮。
-            if (tp.itemType != TransferProtocol.ITEM_VCARD) {
-                if (!transferList.isListVisible()) transferList.buildSendList();
-                transferList.updateOutgoingProgress(tp, false);
-            }
-        } else {
-            // 接收方：逐檔累積成接收列表（取代「收到 N 個」橫幅），樣式比照送出列表。
-            transferList.showReceiveList(tp, false);
-        }
-    }
-
-    private void onTransferDone(@Nullable TransferProgress tp, boolean all) {
-        boolean outgoing = tp != null && tp.outgoing;
-        boolean isVcard = tp != null && tp.itemType == TransferProtocol.ITEM_VCARD;
-
-        // #3：多檔的「中間檔」（FILE_DONE，尚未到最後一筆）→ 維持傳輸視覺，只推進整包進度（雙向皆同）
-        if (!isVcard && !all && tp != null && tp.fileCount > 1) {
-            beam.setPhase(BeamStageView.TRANSFERRING);
-            beam.setProgress(viewModel.batchProgress(tp));
-            if (outgoing) transferList.updateOutgoingProgress(tp, true);
-            else transferList.showReceiveList(tp, true);
-            return;
-        }
-
-        // #2：完成是「一次性事件」。切換深淺色會重建 Activity，重綁時 sessionLd 會把黏著的
-        // ALL_DONE 補送給新訂閱者；若每次都重跑 DONE，會重播打勾/彩帶。對同一批次只慶祝一次，
-        // 補送的同批完成事件 → 不重播，直接呈現「已連線」穩態（與真實完成 1.4 秒後回到的畫面一致）。
-        long batchId = tp != null ? tp.batchId : 0L;
-        if (!viewModel.shouldCelebrate(batchId)) {
-            if (viewModel.isConnected()) {
-                beam.setPhase(BeamStageView.CONNECTED);
-                beam.setProgress(1f);
-                ui.hidePercent();
-                ui.showPeerIdentity(beam, connectedPeerName(), connectedPeerAvatar(),
-                        ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
-                ui.showHeadlineText(getString(R.string.home_connected_title), connectedSub());
-            }
-            exitTransferUi();
-            transferList.restoreIfAny();   // 重建後（如切換深淺色）把 VM 中的接收列表重新顯示
-            sendStack.updateButton();
-            sendStack.rebuild();
-            return;
-        }
-
-        // 其餘 → 顯示完成（最後一筆 ALL_DONE / 名片 / 單檔）：列表方塊收合、打勾＋彩帶、速度換成完成文案
-        beam.setPhase(BeamStageView.DONE);
-        beam.setProgress(1f);
-        ui.hidePercent();
-        exitTransferUi();
-        String peer = binder != null ? binder.connectedPeerName() : null;
-        String who = peer != null ? peer : getString(R.string.peer_fallback);
-        ui.showHeadlineText(getString(R.string.transfer_done),
-                outgoing ? getString(R.string.sent_to, who) : getString(R.string.received_from, who));
-
-        if (isVcard) {
-            // 名片獨立傳送，不影響待傳清單
-        } else if (outgoing) {
-            // 整批傳完 → 清空待傳清單與送出狀態（會透過 selection LiveData 重建 UI）
-            viewModel.onBatchSent();
-            sendStack.rebuild();
-            sendStack.dismissSheet();
-        } else if (tp != null) {
-            transferList.showReceiveList(tp, true);
-            transferList.collapseIfSendPending(); // 有待傳項目 → 直接收合為橫幅，不讓整張清單擠壓 NFC
-        }
-
-        // 短暫顯示完成後回到「已連線」可再選
-        main.postDelayed(() -> {
-            SessionState.Phase last = viewModel.lastPhase();
-            if ((last == SessionState.Phase.ALL_DONE || last == SessionState.Phase.FILE_DONE)
-                    && viewModel.isConnected()) {
-                beam.setPhase(BeamStageView.CONNECTED);
-            }
-        }, 1400);
-        sendStack.updateButton();
-    }
-
-    private void showReceivedBanner(int count) {
-        tvReceived.setText(getString(R.string.received_batch, count));
-        Anim.revealFadeUp(receivedBanner);
-    }
-
-    private void hideReceivedBanner() {
-        receivedBanner.setVisibility(View.GONE);
+        sessionRenderer.render(st);
     }
 
     // ── 內容選擇 / 傳送 ──
@@ -694,24 +480,6 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
                 .show();
     }
 
-    /** 進入「傳輸中」版面：只留速度＋列表方塊，收起挑檔/送出/待傳與（已停用的）接收橫幅。 */
-    private void enterTransferUi(boolean outgoing) {
-        pickRow.setVisibility(View.GONE);
-        sendStack.hideForTransfer();
-        receivedBanner.setVisibility(View.GONE);
-    }
-
-    /**
-     * 離開「傳輸中」版面（回到已連線/完成/就緒）：還原挑檔列與待傳/送出。
-     * 送出列表收合；接收列表為持久顯示（收完仍保留，供檢視/點開）→ 不收合。
-     */
-    private void exitTransferUi() {
-        transferList.exitTransfer();   // 送出列表收合；接收列表持久 → 不收合（由 presenter 判斷）
-        pickRow.setVisibility(View.VISIBLE);
-        sendStack.rebuild();
-        sendStack.updateButton();
-    }
-
     private void openFile(@androidx.annotation.NonNull SendRow row) {
         if (row.itemType == TransferProtocol.ITEM_TEXT) {
             ReceivedTextDialog.show(this, row.name);
@@ -747,7 +515,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     private void haptic() {
-        if (beam != null) beam.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
+        sessionRenderer.haptic();
     }
 
     private void toast(String msg) {
@@ -759,6 +527,30 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     // ══════════════════════════════════════════════════════════
+    //  SessionRenderer.Host（渲染層需 Activity 代為執行的少數動作：binder / NFC）
+    // ══════════════════════════════════════════════════════════
+
+    @Override @Nullable public String peerName() {
+        return binder != null ? binder.connectedPeerName() : null;
+    }
+
+    @Override @Nullable public byte[] peerAvatar() {
+        return binder != null ? binder.connectedPeerAvatar() : null;
+    }
+
+    @Override public void resetLatchedNfc() {
+        if (nfc != null) nfc.resetLatched();
+    }
+
+    @Override public void requestSend() {
+        doSend();
+    }
+
+    @Override public void requestSendProfileCard() {
+        sendMyProfileCard();
+    }
+
+    // ══════════════════════════════════════════════════════════
     //  ProfileCardSheet.Host
     // ══════════════════════════════════════════════════════════
 
@@ -767,8 +559,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         refreshAvatar();
         ProfileStore ps = ProfileStore.get(this);
         LocalPairing.setDisplayName(ps.name());
-        beam.setSelfIdentity(ps.name());
-        beam.setSelfAvatar(ps.loadAvatar());
+        sessionRenderer.updateSelfIdentity(ps.name(), ps.loadAvatar());
         if (nfc != null && binder != null) nfc.setLocalToken(binder.localToken());
     }
 
@@ -790,7 +581,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         one.add(card);
         // 名片獨立傳送，不動待傳清單
         binder.sendItems(one);
-        beam.playCardFly();   // #14：名片縮入對方頭像的 genie 動畫
+        sessionRenderer.playCardFly();   // #14：名片縮入對方頭像的 genie 動畫
         haptic();
     }
 }
