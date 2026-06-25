@@ -80,7 +80,15 @@ public class HomeViewModel extends ViewModel {
         if (f != null) { f.uri = uri; f.mime = mime; }
     }
 
-    public void clearReceivedList() { received.clear(); receiveListBatchId = 0; }
+    /**
+     * 清空接收清單。<b>同步</b>歸零橫幅計數（{@link #resetReceived()}）：清單與「收到 N 個」橫幅
+     * 是同一份接收狀態的兩種呈現，清單清掉橫幅就該跟著消失——否則兩個表示漂移（橫幅卡著舊值）。
+     */
+    public void clearReceivedList() {
+        received.clear();
+        receiveListBatchId = 0;
+        resetReceived();
+    }
 
     /** 把接收列表收合為橫幅：統計已完成件數，餵入 receivedCountLd 讓 banner 顯示。 */
     public void collapseReceiveListToBanner() {

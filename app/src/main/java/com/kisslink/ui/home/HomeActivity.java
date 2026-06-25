@@ -278,12 +278,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     /** 把 ViewModel 的狀態接到 UI 渲染：待傳清單 → 疊圖/送出鈕；接收件數 → 橫幅。 */
     private void observeViewModel() {
         viewModel.getSelection().observe(this, items -> {
-            // 接收方：若接收列表顯示中且使用者新增待傳項目 → 收合為橫幅
-            if (receiveListActive && !inTransferUi && !viewModel.isSelectionEmpty()) {
-                receiveListActive = false;
-                rvTransfer.setVisibility(View.GONE);
-                viewModel.collapseReceiveListToBanner();
-            }
+            collapseReceiveListIfSendPending();
             rebuildSendStack();
             updateSendButton();
         });
@@ -610,6 +605,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             if (sendSheetManager.isShowing()) sendSheetManager.dismiss();
         } else if (tp != null) {
             showReceiveList(tp, true);
+            collapseReceiveListIfSendPending(); // 有待傳項目 → 直接收合為橫幅，不讓整張清單擠壓 NFC
         }
 
         // 短暫顯示完成後回到「已連線」可再選
@@ -850,12 +846,26 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
         }
     }
 
+    /**
+     * 接收清單顯示中、非傳輸中、且有待傳項目 → 收合為「收到 N 個」橫幅，讓出空間給待傳清單/NFC 波紋。
+     * <p>由「接收完成」與「待傳清單變動」兩條路徑共用：收合是狀態(有清單+有待傳)的函數，
+     * 不該只綁在 selection 改變這單一事件上（否則「本來就有待傳項目」時收檔完不會收合）。
+     */
+    private void collapseReceiveListIfSendPending() {
+        if (receiveListActive && !inTransferUi && !viewModel.isSelectionEmpty()) {
+            receiveListActive = false;
+            rvTransfer.setVisibility(View.GONE);
+            viewModel.collapseReceiveListToBanner();
+        }
+    }
+
     /** Activity 重建後（VM 仍保有接收清單）→ 重新顯示持久的接收列表。 */
     private void restoreReceiveListIfAny() {
         if (!receiveListActive && viewModel.hasReceivedList()) {
             receiveListActive = true;
             rebuildReceiveList();
         }
+        collapseReceiveListIfSendPending(); // 重建後若已有待傳項目 → 直接呈現橫幅而非整張清單
     }
 
     private void rebuildReceiveList() {
