@@ -25,7 +25,7 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 # 建置 debug APK
 ./gradlew :app:assembleDebug
 
-# 執行所有 linter（detekt 暫停用：detekt 1.23 尚未支援 Kotlin 2.2）
+# 執行所有 linter（Kotlin→ktlint、Java→spotless、Android→lint）
 ./gradlew ktlintCheck spotlessCheck :app:lintDebug
 
 # 自動修正 linter 問題

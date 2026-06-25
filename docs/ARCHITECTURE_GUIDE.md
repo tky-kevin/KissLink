@@ -2,8 +2,12 @@
 
 > 本文件定義 KissLink 的架構標準、開發模式、CI/CD 流程和 Linter 規範。
 > 目標：建立業界普遍認可的開發基線，減少架構債務。
+>
+> **第五節描述的重構已於 `audit/architecture-cleanup` 分支完成**（God Object 拆解、狀態收斂、
+> presenter 分層）。該節保留作為「重構前分析」的歷史紀錄；現況與心得請見
+> [`LESSONS_LEARNED.md` 第〇章與第七章](LESSONS_LEARNED.md)。架構圖見本文件第七節。
 
-最後更新：2026-06-14
+最後更新：2026-06-25
 
 ---
 
@@ -154,7 +158,11 @@ spotless {
 - 使用 Google Java Format（AOSP 風格）
 - CI 中執行 `spotlessCheck`
 
-### 2.3 Static Analysis：detekt（Kotlin）+ lint（Android）
+### 2.3 Static Analysis：lint（Android）
+
+> ⚠️ **detekt 已停用並移除**：detekt 1.23 不支援 Kotlin 2.2（本專案使用），且 CI 中早已註解掉。
+> Kotlin 由 ktlint 把關、Java 由 Spotless 把關、Android 由 lint 把關，已足夠；detekt 屬死重量故移除。
+> 下方為歷史配置範例，現已不適用。
 
 ```groovy
 // app/build.gradle
@@ -894,17 +902,143 @@ KissLink/
 
 ### 6.1 必須維護的文件
 
-| 文件 | 說明 | 更新時機 |
-|------|------|---------|
-| `README.md` | 專案概述、建置方式 | 每次 release |
-| `ARCHITECTURE.md` | 架構圖、設計決策 | 架構變更時 |
-| `LESSONS_LEARNED.md` | 踩坑紀錄 | 每次修 bug |
-| `CHANGELOG.md` | 版本變更紀錄 | 每次 release |
-| `CONTRIBUTING.md` | 貢獻指南 | 新人加入時 |
+| 文件 | 位置 | 說明 | 更新時機 |
+|------|------|------|---------|
+| `README.md` | 根目錄 | 專案概述、建置方式 | 每次 release |
+| `CHANGELOG.md` | 根目錄 | 版本變更紀錄 | 每次 release |
+| `CONTRIBUTING.md` | 根目錄 | 貢獻指南 | 新人加入時 |
+| `THIRD_PARTY_NOTICES.md` | 根目錄 | 第三方授權 | 引入新依賴時 |
+| `docs/ARCHITECTURE_GUIDE.md` | docs/ | 架構標準、設計決策、架構圖（本文件） | 架構變更時 |
+| `docs/LESSONS_LEARNED.md` | docs/ | 踩坑紀錄 + 開發心得（POSTMORTEM） | 每次修 bug |
+
+> 註：原 `KNOWN_ISSUES.md` 已併入 `LESSONS_LEARNED.md`（第七章）；原 `DIAGRAMS.md` 已併入本文件第七節。
 
 ### 6.2 文件標準
 
 - 使用 Markdown 格式
-- 包含 Mermaid 架構圖
+- 架構圖用 Mermaid（集中在本文件第七節）
 - 中文撰寫（技術術語保留英文）
-- 每個文件顶部標註最後更新時間
+- 每個文件頂部標註最後更新時間；過時即更新或刪除，不要留「殭屍文件」
+
+---
+
+## 七、架構圖（Mermaid）
+
+> 三層交握：**NFC** 碰一下啟動配對 → **BLE** 側通道交換憑證 → **Wi-Fi Direct** 群組承載高速 TCP 傳輸。
+> （由原 `DIAGRAMS.md` 併入。UI 層的渲染已拆為 `TransferListPresenter` / `SendStackPresenter` /
+> `SessionRenderer` 三個 presenter，圖中以 `HomeActivity` 概括其入口。）
+
+### 7.1 系統分層架構
+
+```mermaid
+graph TD
+    subgraph UI["UI 層（Java + Compose）"]
+        Home["HomeActivity<br/>薄殼：綁定/NFC/權限"]
+        Rend["SessionRenderer / TransferListPresenter /<br/>SendStackPresenter（渲染層）"]
+        VM["HomeViewModel<br/>狀態單一擁有者"]
+        Beam["BeamStageView<br/>(Compose / Kotlin)"]
+        Home --> Rend
+        Rend --> Beam
+        Home --> VM
+    end
+
+    subgraph Pair["配對 / 連線層（Java）"]
+        Coord["PairingCoordinator<br/>三層中樞"]
+        NfcCtl["NfcPairingController"]
+        HCE["KissLinkHCEService<br/>(HCE / reader)"]
+        BleS["BleCredentialServer<br/>(tag = peripheral)"]
+        BleC["BleCredentialClient<br/>(reader = central)"]
+        Wifi["WifiDirectManager"]
+        Coord --> NfcCtl
+        NfcCtl --> HCE
+        Coord --> BleS
+        Coord --> BleC
+        Coord --> Wifi
+    end
+
+    subgraph Xfer["傳輸層（Java）"]
+        FTS["FileTransferService<br/>前景服務 / 單一 session"]
+        SM["SessionManager<br/>狀態/身份/進度單一擁有者"]
+        Peer["PeerConnection<br/>framed TCP + CRC32 + heartbeat"]
+        Proto["TransferProtocol"]
+        FTS --> SM
+        FTS --> Peer
+        Peer --> Proto
+    end
+
+    subgraph Data["資料層"]
+        Repo["TransferRepository"]
+        DB["Room: AppDatabase<br/>TransferDao"]
+        Store["ProfileStore"]
+        Repo --> DB
+    end
+
+    Home --> Coord
+    Coord -. onPaired .-> FTS
+    Home --> FTS
+    FTS -. SessionState .-> VM
+    FTS --> Repo
+    Store -.-> Home
+```
+
+### 7.2 配對 → 連線時序
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 手機 A (reader)
+    participant B as 手機 B (tag)
+
+    Note over A,B: 背對背碰一下 (NFC)
+    A->>B: NFC 讀取 HCE，取得 peer token
+    A->>A: onLatchedAsReader(peerToken) → 鎖定角色
+    B->>B: onLatchedAsTag() → 鎖定角色
+
+    Note over A,B: BLE 側通道 (GATT)
+    A->>B: central 掃 nonce、寫入自身 token
+    B-->>A: peripheral 回 token
+    Note over A,B: 兩邊湊齊兩份 token
+
+    Note over A,B: GO 選舉 (PairingToken 決定性比較)
+    A->>A: shouldBeGroupOwner(peer)
+    B->>B: shouldBeGroupOwner(peer)
+
+    alt A 為 Group Owner
+        A->>A: WifiDirectManager.createGroupAsGO()
+        A-->>B: 經 BLE 送出 GroupCredential
+        B->>B: connectAsClient(cred) → 靜默加入群組
+    else B 為 Group Owner
+        B->>B: createGroupAsGO()
+        B-->>A: 經 BLE 送出 GroupCredential
+        A->>A: connectAsClient(cred)
+    end
+
+    Note over A,B: Wi-Fi Direct CONNECTED
+    A->>B: TCP socket 192.168.49.1:47890
+    Note over A,B: PeerConnection 全雙工分塊傳輸 (CRC32 / heartbeat)
+    A-->>B: 檔案 / 照片 / 聯絡卡（雙向、多輪）
+```
+
+### 7.3 PairingCoordinator 狀態機
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> LATCHED: NFC latch（角色鎖定）
+    LATCHED --> LINKING: 啟動 BLE 側通道
+    LINKING --> ELECTING: 兩份 token 湊齊
+    ELECTING --> CONNECTING: GO 選舉完成
+    CONNECTING --> CONNECTED: Wi-Fi Direct CONNECTED
+
+    CONNECTED --> [*]: onPaired(isGroupOwner)
+
+    LATCHED --> IDLE: 逾時 8s / 中斷重來
+    LINKING --> IDLE: 逾時 15s / 中斷重來
+    ELECTING --> IDLE: 逾時 8s / 中斷重來
+    CONNECTING --> IDLE: 逾時 25s / 中斷重來
+
+    note right of CONNECTING
+        每階段獨立看門狗逾時
+        逾時 → fail()，UI 回「再碰一下重連」
+    end note
+```

@@ -4,7 +4,6 @@ plugins {
 	id 'org.jetbrains.kotlin.plugin.compose'
 	id 'org.jlleitschuh.gradle.ktlint'
 	id 'com.diffplug.spotless'
-	id 'io.gitlab.arturbosch.detekt'
 }
 
 android {
@@ -140,12 +139,4 @@ spotless {
 	groovyGradle {
 		greclipse()
 	}
-}
-
-detekt {
-	input = files("src/main/java", "src/main/kotlin")
-	config = files("$rootDir/config/detekt/detekt.yml")
-	buildUponDefaultConfig = true
-	allRules = false
-	ignoreFailures = false
 }

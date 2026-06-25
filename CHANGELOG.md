@@ -9,18 +9,34 @@
 
 ## [Unreleased]
 
-### Added
-- 完整的架構規劃文件 (`docs/ARCHITECTURE_GUIDE.md`)
-- 踩坑紀錄文件 (`docs/LESSONS_LEARNED.md`)
-- 貢獻指南 (`CONTRIBUTING.md`)
-- Linter 配置（ktlint + spotless + detekt）
-- CI/CD Pipeline（`.github/workflows/ci.yml`）
-- detekt 規則配置 (`config/detekt/detekt.yml`)
+### Changed — 架構整理（`audit/architecture-cleanup`）
+- **狀態收斂為單一來源**：`SessionState` 退為純值物件，跨 enum 映射政策全集中於 `SessionManager`
+  （單一寫入者）。
+- **拆解 God Object**：抽出 `SessionManager`（狀態/身份/進度橋接）；`HomeActivity` 1018 → 587 行，
+  渲染層拆成三個 presenter（`TransferListPresenter` / `SendStackPresenter` / `SessionRenderer`）。
+- **飛行記錄器一般化**：`PairingFlightRecorder` → `com.kisslink.diag.FlightRecorder`，跨子系統單一
+  時間軸，失敗時落地 dump。
+- **配對身分/酬載分離**：`PairingToken` 把 identity（nonce/goIntent，曝光後凍結）與 payload 拆開，
+  rendezvous/選舉不變量改由結構保證（修坑 14）。
+- 死碼清理（`NfcForegroundHelper`、`countReceived`/`onIncomingBatch` 等被取代的舊路徑）。
 
-### Changed
-- 更新 `build.gradle` 加入 linter plugins
-- 更新 `app/build.gradle` 加入 linter 配置
-- 更新 lint 設定為 CI 中必須通過
+### Fixed
+- BLE 連線/掃描階段加看門狗，自癒 `connectGatt` 靜默失敗。
+- 接收清單完成時偶爾漏打勾（改由「下一檔開始 ⇒ 前面皆完成」回填，不依賴會被合併的 `FILE_DONE`）。
+- 切換深淺色/背景返回後接收清單只剩 1 項（`renderReady` 改為純視覺、不清 VM 持久狀態）。
+- 「收到 N 個」橫幅與接收清單漂移（橫幅計數改為 `received` 的純投影）。
+- 待傳清單文字/連結點擊無反應；本次接收 sheet 垃圾桶誤清全部歷史。
+
+### Removed
+- **detekt**：1.23 不支援 Kotlin 2.2 且 CI 早已停用，移除 plugin 與 `config/detekt/`（死重量）。
+- `KNOWN_ISSUES.md`（併入 `docs/LESSONS_LEARNED.md` 第七章）、`DIAGRAMS.md`（併入
+  `docs/ARCHITECTURE_GUIDE.md` 第七節）。
+- 將誤追蹤的 `.mimocode/` 移出版控。
+
+### Docs / CI
+- `LESSONS_LEARNED.md` 新增第〇章 POSTMORTEM（共同病根 + 開發心得）。
+- 修正 README/CONTRIBUTING 的 Gradle/AGP 版本（8.13 → 9.5.1 / AGP 9.2.1）。
+- 修掉 CI lint 紅燈（停用會隨上游變紅的 `GradleDependency`；修正搬移造成的 `InlinedApi`）。
 
 ---
 
