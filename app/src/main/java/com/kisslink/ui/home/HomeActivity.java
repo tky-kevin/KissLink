@@ -384,6 +384,7 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
             case IDLE:
             case CANCELLED:
                 ui.stopStageTicker();
+                resetSessionState();   // 真正回到閒置 → 清空 VM 持久狀態（重建走的是 onCreate→renderReady，不清）
                 renderReady();
                 if (nfc != null && viewModel.lastPhase() != SessionState.Phase.IDLE) nfc.resetLatched();
                 break;
@@ -452,22 +453,28 @@ public class HomeActivity extends AppCompatActivity implements ProfileCardSheet.
     }
 
     // ── READY ──
+    // 純視覺化、可重入：onCreate（含切換深淺色/背景返回的 Activity 重建）也會呼叫，故「不」清空
+    // ViewModel 的持久狀態（接收清單/慶祝旗標/送出中）——那屬於真正回到 IDLE 的語意，於 onSession
+    // 的 IDLE/CANCELLED 處理。否則重建時這裡會把待還原的接收清單清掉，replay 只補回最後一檔 → 剩 1 項。
     private void renderReady() {
         beam.setPhase(BeamStageView.READY);
         ui.showPeerIdentity(beam, null, null,
                 ProfileStore.get(this).name(), ProfileStore.get(this).loadAvatar());
         ui.showHeadlineText(getString(R.string.home_ready_title),
                 getString(R.string.home_ready_sub));
-        // 還原傳輸中版面：收合列表方塊（含持久的接收列表）、顯示挑檔列。
+        // 收合傳輸中列表方塊、顯示挑檔列（接收清單若仍有資料，連線 replay 後由 restoreIfAny 還原）。
         transferList.reset();
-        viewModel.clearReceivedList();
         pickRow.setVisibility(View.VISIBLE);
         hideReceivedBanner();
-        viewModel.resetReceived();
-        viewModel.resetCelebration();
-        viewModel.setSending(false);
         updateSendButton();
         rebuildSendStack();
+    }
+
+    /** 真正回到閒置：清空接收清單/慶祝旗標/送出中等 ViewModel 持久狀態（與單純的畫面重建區隔）。 */
+    private void resetSessionState() {
+        viewModel.clearReceivedList();   // 內含 resetReceived（橫幅計數歸零）
+        viewModel.resetCelebration();
+        viewModel.setSending(false);
     }
 
     // ── 連線對象身份 ──

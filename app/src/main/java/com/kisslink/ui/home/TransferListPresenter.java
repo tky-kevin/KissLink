@@ -131,8 +131,10 @@ final class TransferListPresenter {
 
     /** 逐幀更新傳輸中當前列的進度/完成/高亮（payload 局部 rebind，不碰縮圖），並自動捲動到當前列。 */
     void updateOutgoingProgress(@NonNull TransferProgress tp, boolean curFileDone) {
-        adapter.setProgress(tp.fileName, curFileDone ? 100 : tp.percentInt(), curFileDone);
         int idx = indexOfSelection(tp.fileName);
+        // 後面那列開始 → 前面各列必然已送完，回填被 LiveData 合併丟棄的中間檔完成。
+        if (idx > 0) adapter.markRowsDoneBefore(idx);
+        adapter.setProgress(tp.fileName, curFileDone ? 100 : tp.percentInt(), curFileDone);
         if (autoScroll && idx >= 0 && idx != lastAutoScrollIndex) {
             lastAutoScrollIndex = idx;
             rv.smoothScrollToPosition(idx);

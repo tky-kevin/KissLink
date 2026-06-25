@@ -65,7 +65,13 @@ public class HomeViewModel extends ViewModel {
         if (batchId != receiveListBatchId) { received.clear(); receiveListBatchId = batchId; }
         RecvFile f = received.get(name);
         boolean isNew = (f == null);
-        if (isNew) { f = new RecvFile(name, size, type); received.put(name, f); }
+        if (isNew) {
+            // 接收是循序的：新檔出現代表先前各檔皆已完成。FILE_DONE 事件經 LiveData 投遞會被合併
+            // 丟棄（快速小檔尤甚），不可依賴；改用「下一檔開始」這個更可靠的訊號回填前面各檔的完成。
+            for (RecvFile o : received.values()) { o.done = true; o.percent = 100; }
+            f = new RecvFile(name, size, type);
+            received.put(name, f);
+        }
         f.percent = done ? 100 : percent;
         f.done = done;
         for (RecvFile o : received.values()) o.highlight = false;
