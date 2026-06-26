@@ -1,5 +1,8 @@
 # 安卓抓普 (KissLink)
 
+[![CI](https://github.com/tkyke/KissLink/actions/workflows/ci.yml/badge.svg)](https://github.com/tkyke/KissLink/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Tap two Android phones back-to-back and instantly share files, photos, and contact
 cards — no accounts, no internet, no manual Wi-Fi pairing dialogs.
 

@@ -9,6 +9,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.format.DateUtils;
 import android.text.method.LinkMovementMethod;
 import android.text.util.Linkify;
@@ -21,12 +23,15 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.imageview.ShapeableImageView;
+import com.google.android.material.textfield.TextInputEditText;
 import com.kisslink.R;
 import com.kisslink.data.db.TransferRecordEntity;
 import com.kisslink.data.repository.TransferRepository;
@@ -41,20 +46,25 @@ import java.util.concurrent.Executors;
 
 /**
  * 傳輸紀錄 bottom sheet——每筆傳輸（同方向、相近時間）整理成一塊，點檔案即開啟。
- *
- * <p>分塊目前以「方向 + 時間相近（≤90 秒）」推斷批次；正式 batchId 待後端補上。
+ * 支援關鍵字搜尋（fileName/peerDeviceName）與方向篩選（全部/傳送/接收）。
  */
 public class HistorySheet extends BottomSheetDialogFragment {
 
     private static final long GROUP_GAP_MS = 90_000;
     private static final String ARG_BATCH = "batch_id";
 
-    /** Fragment Result key：批次紀錄已被清除 → host 可據此清掉「本次接收」live 橫幅（解耦，不直接碰 ViewModel）。 */
+    /** Fragment Result key：批次紀錄已被清除 → host 可據此清掉「本次接收」live 橫幅。 */
     public static final String RESULT_BATCH_CLEARED = "history.batch_cleared";
 
     private RecyclerView rv;
     private TextView tvEmpty;
     private final Adapter adapter = new Adapter();
+
+    // 搜尋 / 篩選狀態
+    private String currentQuery = "";
+    private String currentDirection = "";  // "" = 全部, "SEND", "RECEIVE"
+    @Nullable private LiveData<List<TransferRecordEntity>> currentLiveData;
+    private long batchId;
 
     /** 只顯示某一批次（例如「本次接收」）；batchId=0 顯示全部紀錄。 */
     public static HistorySheet forBatch(long batchId) {
@@ -78,15 +88,22 @@ public class HistorySheet extends BottomSheetDialogFragment {
         rv.setLayoutManager(new LinearLayoutManager(requireContext()));
         rv.setAdapter(adapter);
 
-        long batchId = getArguments() != null ? getArguments().getLong(ARG_BATCH, 0) : 0;
+        batchId = getArguments() != null ? getArguments().getLong(ARG_BATCH, 0) : 0;
         TextView title = v.findViewById(R.id.tvSheetTitle);
         if (batchId != 0 && title != null) title.setText(R.string.batch_title);
 
-        android.widget.ImageButton btnClearAll = v.findViewById(R.id.btnClearAll);
+        // 批次模式不顯示搜尋/篩選
+        if (batchId != 0) {
+            View searchLayout = v.findViewById(R.id.searchLayout);
+            View chipGroup = v.findViewById(R.id.chipGroup);
+            if (searchLayout != null) searchLayout.setVisibility(View.GONE);
+            if (chipGroup != null) chipGroup.setVisibility(View.GONE);
+        }
+
+        ImageButton btnClearAll = v.findViewById(R.id.btnClearAll);
         btnClearAll.setOnClickListener(x -> {
             TransferRepository repo = TransferRepository.getInstance(requireContext());
             if (batchId != 0) {
-                // 「本次接收/傳送」垃圾桶：只清這一批，不波及其他歷史；並通知 host 清掉 live 橫幅。
                 repo.deleteByBatch(batchId);
                 getParentFragmentManager().setFragmentResult(RESULT_BATCH_CLEARED, Bundle.EMPTY);
             } else {
@@ -95,21 +112,73 @@ public class HistorySheet extends BottomSheetDialogFragment {
             dismiss();
         });
 
+        // 搜尋欄
+        TextInputEditText etSearch = v.findViewById(R.id.etSearch);
+        if (etSearch != null) {
+            etSearch.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+                @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+                @Override public void afterTextChanged(Editable s) {
+                    currentQuery = s == null ? "" : s.toString().trim();
+                    rebindLiveData();
+                }
+            });
+        }
+
+        // 篩選 chips
+        ChipGroup chipGroup = v.findViewById(R.id.chipGroup);
+        if (chipGroup != null) {
+            chipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
+                if (checkedIds.isEmpty()) return;
+                int id = checkedIds.get(0);
+                if (id == R.id.chipSend) currentDirection = "SEND";
+                else if (id == R.id.chipReceive) currentDirection = "RECEIVE";
+                else currentDirection = "";
+                rebindLiveData();
+            });
+        }
+
+        rebindLiveData();
+    }
+
+    // ── 資料綁定 ──────────────────────────────────────────────
+
+    private void rebindLiveData() {
+        if (getViewLifecycleOwner() == null) return;
         TransferRepository repo = TransferRepository.getInstance(requireContext());
-        (batchId != 0 ? repo.getByBatch(batchId) : repo.getAllRecords())
-                .observe(getViewLifecycleOwner(), records -> {
-                    List<Object> flat = group(records);
-                    adapter.submit(flat);
-                    boolean empty = flat.isEmpty();
-                    tvEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
-                    rv.setVisibility(empty ? View.GONE : View.VISIBLE);
-                });
+
+        LiveData<List<TransferRecordEntity>> next;
+        if (batchId != 0) {
+            next = repo.getByBatch(batchId);
+        } else if (currentQuery.isEmpty() && currentDirection.isEmpty()) {
+            next = repo.getAllRecords();
+        } else {
+            next = repo.search(
+                    currentQuery.isEmpty() ? "" : currentQuery,
+                    currentDirection);
+        }
+
+        // 移除舊觀察者，換新觀察者
+        if (currentLiveData != null) currentLiveData.removeObservers(getViewLifecycleOwner());
+        currentLiveData = next;
+        currentLiveData.observe(getViewLifecycleOwner(), records -> {
+            List<Object> flat = group(records);
+            adapter.submit(flat);
+            boolean empty = flat.isEmpty();
+            tvEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+            rv.setVisibility(empty ? View.GONE : View.VISIBLE);
+            if (empty && !currentQuery.isEmpty()) {
+                tvEmpty.setText(R.string.history_search_empty);
+            } else {
+                tvEmpty.setText(R.string.history_empty);
+            }
+        });
     }
 
     // ── 分塊 ──────────────────────────────────────────────────
 
     static final class Header {
-        final String direction;       // SEND / RECEIVE
+        final String direction;
         final String peer;
         final long timestamp;
         int count;

@@ -81,8 +81,15 @@
     <!-- 傳輸紀錄 -->
     <string name="history_title">傳輸紀錄</string>
     <string name="history_empty">尚無傳輸紀錄</string>
+    <string name="history_search_empty">找不到符合的紀錄</string>
     <string name="history_send">傳送</string>
     <string name="history_receive">接收</string>
+    <string name="history_search_hint">搜尋檔案名稱或裝置</string>
+    <string name="history_filter_all">全部</string>
+
+    <!-- 剪貼板快速分享 -->
+    <string name="clipboard_share_prefix">分享：</string>
+    <string name="clipboard_added">剪貼板文字已加入待傳清單</string>
 
     <!-- 其它 -->
     <string name="need_perms">需要 Wi-Fi、藍牙與檔案權限才能使用</string>

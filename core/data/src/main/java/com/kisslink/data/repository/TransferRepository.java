@@ -71,6 +71,16 @@ public class TransferRepository {
         return dao.getByBatch(batchId);
     }
 
+    /**
+     * 模糊搜尋 + 可選方向過濾。
+     *
+     * @param query     搜尋關鍵字（自動補 % 前後綴）。
+     * @param direction "SEND"、"RECEIVE"，或 null/空字串（不過濾）。
+     */
+    public LiveData<List<TransferRecordEntity>> search(String query, String direction) {
+        return dao.search("%" + query + "%", direction);
+    }
+
     // ── 工廠方法：從傳輸進度建立紀錄 ──────────────────────────────
 
     public TransferRecordEntity buildRecord(String direction, String fileName,
