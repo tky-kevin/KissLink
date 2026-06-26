@@ -22,5 +22,9 @@ android {
 }
 
 dependencies {
-    implementation project(':core:domain')
+    api project(':core:domain')
+
+    implementation 'androidx.annotation:annotation:1.8.0'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
 }
