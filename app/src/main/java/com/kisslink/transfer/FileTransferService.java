@@ -48,6 +48,11 @@ public class FileTransferService extends Service {
     private final AtomicBoolean peerStarting = new AtomicBoolean(false);
     private final Handler mainHandler = new Handler(android.os.Looper.getMainLooper());
 
+    // ── Resume transfer state ─────────────────────────────────
+    // Volatile: written on main thread (onDisconnected post), read on PeerConnector bg thread (startPeer).
+    @Nullable private volatile PeerConnection.PendingSend pendingSend;
+    @Nullable private volatile PeerConnection.PendingRecv pendingRecv;
+
     // ── Extracted managers ─────────────────────────────────────
     private SessionManager sessionMgr;
     private IdleTeardownManager idleManager;
@@ -349,6 +354,9 @@ public class FileTransferService extends Service {
         String selfName = ps.name();
         byte[] selfAvatar = ps.avatarThumbBytes();
 
+        // Use a box so the onDisconnected lambda can reference the specific PeerConnection
+        // instance that fired the event (peer field may be null'd by teardownPeer by then).
+        final PeerConnection[] box = {null};
         peer = new PeerConnection(this, socket, new PeerConnection.Listener() {
             @Override public void onItemCompleted(boolean sent, String name, long size,
                                                   long avgSpeedBps, boolean success, byte itemType,
@@ -360,11 +368,21 @@ public class FileTransferService extends Service {
                 if (!sent && success && contentUri != null) {
                     receivedItemLd.postValue(new ReceivedItem(name, contentUri, mime, batchId));
                 }
+                // Transfer completed successfully — clear any stale resume state
+                mainHandler.post(() -> { pendingSend = null; pendingRecv = null; });
             }
             @Override public void onDisconnected() {
-                FlightRecorder.seq(TAG, "peer disconnected");
+                // Extract resume state BEFORE teardown so the next connection can pick it up
+                PeerConnection p = box[0];
+                PeerConnection.PendingSend ps2 = p != null ? p.takePendingSend() : null;
+                PeerConnection.PendingRecv pr2 = p != null ? p.takePendingRecv() : null;
+                FlightRecorder.seq(TAG, "peer disconnected"
+                        + (ps2 != null ? " (resume send pending)" : "")
+                        + (pr2 != null ? " (resume recv pending)" : ""));
                 Log.i(TAG, "Peer disconnected");
                 mainHandler.post(() -> {
+                    pendingSend = ps2;
+                    pendingRecv = pr2;
                     sessionMgr.clearPeerIdentity();
                     teardownPeer();
                     sessionMgr.toIdle();
@@ -381,6 +399,15 @@ public class FileTransferService extends Service {
                 incomingCardLd.postValue(vcard);
             }
         }, selfName, selfAvatar);
+        box[0] = peer;
+
+        // Inject resume state from the previous disconnected transfer (if any)
+        if (pendingSend != null || pendingRecv != null) {
+            peer.setPendingState(pendingSend, pendingRecv);
+            pendingSend = null;
+            pendingRecv = null;
+            Log.i(TAG, "Resume state injected into new PeerConnection");
+        }
 
         sessionMgr.setupProgressObserver(peer.getProgress(), mainHandler, this::onTransferCompleted);
 

@@ -6,7 +6,6 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
-import android.provider.MediaStore;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -22,6 +21,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Receiver thread: reads frames from the socket, writes received files to MediaStore
@@ -29,6 +29,9 @@ import java.util.concurrent.ArrayBlockingQueue;
  *
  * <p>Created by {@link PeerConnection#start()} and runs on its own thread.
  * Exits on EOF (peer closed) or socket timeout (liveness failure).
+ *
+ * <p>On unexpected disconnect mid-transfer, saves a {@link PeerConnection.PendingRecv} to
+ * {@code pendingRecvRef} (keeping the partial MediaStore file) so the next connection can append.
  */
 final class PeerReceiver implements Runnable {
 
@@ -41,6 +44,7 @@ final class PeerReceiver implements Runnable {
     private final MutableLiveData<TransferProgress> progressLd;
     private final PeerConnection.Listener listener;
     private final boolean verbose;
+    private final AtomicReference<PeerConnection.PendingRecv> pendingRecvRef;
     private volatile boolean running;
 
     private long recvBatchId = 0;
@@ -50,12 +54,14 @@ final class PeerReceiver implements Runnable {
                  @NonNull Socket socket,
                  @NonNull MutableLiveData<TransferProgress> progressLd,
                  @NonNull PeerConnection.Listener listener,
-                 boolean verbose) {
+                 boolean verbose,
+                 @NonNull AtomicReference<PeerConnection.PendingRecv> pendingRecvRef) {
         this.context = context;
         this.socket = socket;
         this.progressLd = progressLd;
         this.listener = listener;
         this.verbose = verbose;
+        this.pendingRecvRef = pendingRecvRef;
     }
 
     void setRunning(boolean running) { this.running = running; }
@@ -63,6 +69,7 @@ final class PeerReceiver implements Runnable {
     @Override
     public void run() {
         ReceivingItem cur = null;
+        boolean unexpectedDisconnect = false;
         try {
             InputStream in = socket.getInputStream();
             byte[] header = new byte[TransferProtocol.HEADER_SIZE];
@@ -89,16 +96,42 @@ final class PeerReceiver implements Runnable {
                         int fi = meta.optInt("i", 0);
                         int fc = meta.optInt("c", 0);
                         if (cur != null) cur.abort();
-                        long now = System.currentTimeMillis();
-                        if (now - lastRecvActivity > RECV_BATCH_GAP_MS) recvBatchId = now;
-                        lastRecvActivity = now;
-                        cur = new ReceivingItem(name, mime, h.totalSize, h.itemType, fi, fc);
-                        emitProgress(false, name, h.totalSize, 0, cur.started, cur.itemType, recvBatchId, fi, fc);
+
+                        // Check if sender is resuming a file we previously partially received
+                        PeerConnection.PendingRecv pr = pendingRecvRef.getAndSet(null);
+                        if (pr != null && pr.name.equals(name)
+                                && pr.totalSize == h.totalSize && pr.target != null) {
+                            Log.i(TAG, "Resuming receive: " + name + " from offset=" + pr.received);
+                            recvBatchId = pr.batchId; // keep same batch so history groups correctly
+                            cur = new ReceivingItem(pr, fi, fc);
+                            emitProgress(false, name, h.totalSize, cur.received, cur.started,
+                                    cur.itemType, recvBatchId, fi, fc);
+                        } else {
+                            if (pr != null) {
+                                // Name or size mismatch — the sender is sending something different; discard partial
+                                try { context.getContentResolver().delete(pr.target, null, null); }
+                                catch (Exception ignored) {}
+                            }
+                            long now = System.currentTimeMillis();
+                            if (now - lastRecvActivity > RECV_BATCH_GAP_MS) recvBatchId = now;
+                            lastRecvActivity = now;
+                            cur = new ReceivingItem(name, mime, h.totalSize, h.itemType, fi, fc);
+                            emitProgress(false, name, h.totalSize, 0, cur.started,
+                                    cur.itemType, recvBatchId, fi, fc);
+                        }
                         break;
                     }
 
                     case TransferProtocol.TYPE_DATA_CHUNK: {
                         if (cur != null) {
+                            long chunkEnd = h.offset + (long) h.chunkLen;
+
+                            if (chunkEnd <= cur.resumeFrom) {
+                                // Entirely within already-received range — drain from wire and skip
+                                discard(in, h.chunkLen);
+                                break;
+                            }
+
                             PeerConnection.Chunk c = cur.wfree.take();
                             try {
                                 readFully(in, c.data, h.chunkLen);
@@ -106,13 +139,23 @@ final class PeerReceiver implements Runnable {
                                 cur.wfree.put(c);
                                 throw e;
                             }
-                            c.len = h.chunkLen;
-                            int crc = TransferProtocol.crc32(c.data, 0, c.len);
+
+                            // CRC on full received bytes before any trimming
+                            int crc = TransferProtocol.crc32(c.data, 0, h.chunkLen);
                             if (crc != h.crc32) { Log.w(TAG, "CRC mismatch"); cur.corrupt = true; }
-                            cur.received += c.len;
+
+                            // Trim bytes that overlap with data already on disk (resume partial overlap)
+                            int writeLen = h.chunkLen;
+                            if (h.offset < cur.resumeFrom) {
+                                int skip = (int) (cur.resumeFrom - h.offset);
+                                System.arraycopy(c.data, skip, c.data, 0, h.chunkLen - skip);
+                                writeLen = h.chunkLen - skip;
+                            }
+                            c.len = writeLen;
+                            cur.received += writeLen;
                             cur.wqueue.put(c);
-                            emitProgress(false, cur.name, cur.size, cur.received, cur.started, cur.itemType,
-                                    recvBatchId, cur.fileIndex, cur.fileCount);
+                            emitProgress(false, cur.name, cur.size, cur.received, cur.started,
+                                    cur.itemType, recvBatchId, cur.fileIndex, cur.fileCount);
                         } else {
                             discard(in, h.chunkLen);
                         }
@@ -153,8 +196,17 @@ final class PeerReceiver implements Runnable {
         } catch (Exception e) {
             if (verbose) Log.w(TAG, "readLoop ended", e);
             else Log.w(TAG, "readLoop ended: " + e.getMessage());
+            unexpectedDisconnect = true;
         } finally {
-            if (cur != null) cur.abort();
+            if (cur != null) {
+                if (unexpectedDisconnect && cur.target != null && cur.received > cur.resumeFrom) {
+                    // Keep partial file and save resume state for the next connection
+                    pendingRecvRef.compareAndSet(null, cur.toPendingRecv(recvBatchId));
+                    cur.closeKeepFile();
+                } else {
+                    cur.abort();
+                }
+            }
             running = false;
             listener.onDisconnected();
         }
@@ -168,7 +220,9 @@ final class PeerReceiver implements Runnable {
         final byte itemType;
         final int fileIndex, fileCount;
         final long started = System.currentTimeMillis();
-        long received = 0;
+        long received;
+        /** Byte offset to start writing from; 0 for a fresh receive, >0 when resuming. */
+        final long resumeFrom;
         boolean corrupt = false;
         @Nullable Uri target;
         @Nullable OutputStream out;
@@ -181,22 +235,24 @@ final class PeerReceiver implements Runnable {
 
         @Nullable byte[] cardBytes() { return cardBuf != null ? cardBuf.toByteArray() : null; }
 
+        /** Normal (fresh) constructor. */
         ReceivingItem(String name, String mime, long size, byte itemType, int fileIndex, int fileCount) {
             this.name = name; this.mime = mime; this.size = size; this.itemType = itemType;
             this.fileIndex = fileIndex; this.fileCount = fileCount;
+            this.received = 0; this.resumeFrom = 0;
             if (itemType == TransferProtocol.ITEM_VCARD) cardBuf = new java.io.ByteArrayOutputStream();
             String saveName = itemType == TransferProtocol.ITEM_TEXT
                     ? "Shared_Text_" + System.currentTimeMillis() + ".txt" : name;
             try {
                 ContentResolver cr = context.getContentResolver();
                 ContentValues v = new ContentValues();
-                v.put(MediaStore.Downloads.DISPLAY_NAME, saveName);
-                v.put(MediaStore.Downloads.MIME_TYPE, mime);
+                v.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, saveName);
+                v.put(android.provider.MediaStore.Downloads.MIME_TYPE, mime);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    v.put(MediaStore.Downloads.RELATIVE_PATH, SAVE_DIR);
-                    v.put(MediaStore.Downloads.IS_PENDING, 1);
+                    v.put(android.provider.MediaStore.Downloads.RELATIVE_PATH, SAVE_DIR);
+                    v.put(android.provider.MediaStore.Downloads.IS_PENDING, 1);
                 }
-                target = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                target = cr.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                 if (target != null) out = cr.openOutputStream(target);
             } catch (Exception e) {
                 Log.e(TAG, "open receive output failed: " + name, e);
@@ -204,6 +260,30 @@ final class PeerReceiver implements Runnable {
             for (int i = 0; i < PeerConnection.CHUNK_POOL; i++) wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
             writer = new Thread(this::writeLoop, "peer-recv-write");
             writer.start();
+        }
+
+        /** Resume constructor: re-opens existing MediaStore entry in append mode. */
+        ReceivingItem(PeerConnection.PendingRecv pr, int fi, int fc) {
+            this.name = pr.name; this.mime = pr.mime; this.size = pr.totalSize;
+            this.itemType = pr.itemType; this.fileIndex = fi; this.fileCount = fc;
+            this.received = pr.received; this.resumeFrom = pr.received;
+            if (itemType == TransferProtocol.ITEM_VCARD) cardBuf = new java.io.ByteArrayOutputStream();
+            try {
+                target = pr.target;
+                // "wa" = write-append: positions the write pointer at end of existing content
+                out = context.getContentResolver().openOutputStream(target, "wa");
+            } catch (Exception e) {
+                Log.e(TAG, "resume open failed: " + pr.name, e);
+                target = null; out = null;
+            }
+            for (int i = 0; i < PeerConnection.CHUNK_POOL; i++) wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
+            writer = new Thread(this::writeLoop, "peer-recv-write");
+            writer.start();
+        }
+
+        PeerConnection.PendingRecv toPendingRecv(long batchId) {
+            return new PeerConnection.PendingRecv(name, mime, size, target, received,
+                    itemType, fileIndex, fileCount, batchId);
         }
 
         private void writeLoop() {
@@ -253,7 +333,7 @@ final class PeerReceiver implements Runnable {
             try {
                 if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues v = new ContentValues();
-                    v.put(MediaStore.Downloads.IS_PENDING, 0);
+                    v.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
                     context.getContentResolver().update(target, v, null, null);
                 }
             } catch (Exception ignored) {}
@@ -266,6 +346,14 @@ final class PeerReceiver implements Runnable {
             out = null;
             try { if (target != null) context.getContentResolver().delete(target, null, null); }
             catch (Exception ignored) {}
+        }
+
+        /** Close writer without deleting the partial file — keeps bytes on disk for resume. */
+        void closeKeepFile() {
+            drainWriter();
+            try { if (out != null) out.close(); } catch (IOException ignored) {}
+            out = null;
+            // IS_PENDING stays 1 while resumable; finish() clears it on successful completion
         }
     }
 
