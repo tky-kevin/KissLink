@@ -102,7 +102,7 @@ public class HomeViewModel extends ViewModel {
         for (RecvFile f : received.values()) {
             if (f.done) done++;
         }
-        receivedCountLd.setValue(done);
+        receivedCountLd.postValue(done);
     }
 
     // ── 旗標 ────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ public class HomeViewModel extends ViewModel {
     }
 
     private void notifySelectionChanged() {
-        selectionLd.setValue(selection);
+        selectionLd.postValue(selection);
     }
 
     // ══════════════════════════════════════════════════════════
@@ -275,7 +275,7 @@ public class HomeViewModel extends ViewModel {
 
     /** 隱藏橫幅（只重置投影；接收清單資料的清空由 {@link #clearReceivedList()} 負責）。 */
     public void resetReceived() {
-        receivedCountLd.setValue(0);
+        receivedCountLd.postValue(0);
     }
 
     // ══════════════════════════════════════════════════════════
