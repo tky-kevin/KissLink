@@ -14,3 +14,8 @@ dependencyResolutionManagement {
 }
 rootProject.name = "KissLink"
 include ':app'
+include ':core:domain'
+include ':core:data'
+include ':feature:pairing'
+include ':feature:transfer'
+include ':feature:home'

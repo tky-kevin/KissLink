@@ -108,10 +108,16 @@ dependencies {
 	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
 
+	// ── Feature modules ───────────────────────────────────────
+	implementation project(':feature:home')
+	implementation project(':feature:pairing')
+	implementation project(':feature:transfer')
+	implementation project(':core:data')
+	implementation project(':core:domain')
+
 	// ── Test ──────────────────────────────────────────────────
 	testImplementation 'junit:junit:4.13.2'
-	testImplementation 'org.mockito:mockito-core:5.11.0'
-	testImplementation 'org.mockito.kotlin:mockito-kotlin:5.2.1'
+	testImplementation 'io.mockk:mockk:1.13.12'
 	testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
 	androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 	androidTestImplementation 'androidx.test:runner:1.6.1'
