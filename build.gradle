@@ -22,6 +22,8 @@ subprojects {
             force 'androidx.activity:activity:1.9.0'
             force 'androidx.fragment:fragment:1.5.4'
             force 'androidx.savedstate:savedstate:1.2.1'
+            force 'androidx.annotation:annotation-experimental:1.4.1'
+            force 'androidx.collection:collection:1.1.0'
             force 'org.jetbrains.kotlin:kotlin-stdlib:2.2.10'
             force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.2.10'
             force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.10'

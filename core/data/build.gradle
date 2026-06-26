@@ -9,6 +9,11 @@ android {
 
     defaultConfig {
         minSdk = 29
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += ['room.schemaLocation': "$projectDir/schemas"]
+            }
+        }
     }
 
     compileOptions {
@@ -22,5 +27,17 @@ android {
 }
 
 dependencies {
-    implementation project(':core:domain')
+    api project(':core:domain')
+
+    // Room
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+
+    // LiveData (TransferRepository returns LiveData)
+    implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
+
+    // Coroutines (for ITransferRepository Flow impl)
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+
+    implementation 'androidx.core:core:1.13.1'
 }
