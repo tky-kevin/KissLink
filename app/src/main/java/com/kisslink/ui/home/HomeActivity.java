@@ -27,6 +27,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.ViewModelProvider;
 
+import dagger.hilt.android.AndroidEntryPoint;
+
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
@@ -57,6 +59,7 @@ import java.util.List;
  * <p>MVVM：選取／傳輸／接收等狀態與其衍生判斷集中在 {@link HomeViewModel}；本 Activity 是薄殼，
  * 只負責生命週期、權限、view binding、觀察 ViewModel 與轉發使用者意圖。
  */
+@AndroidEntryPoint
 @RequiresApi(api = Build.VERSION_CODES.Q)
 public class HomeActivity extends AppCompatActivity
         implements ProfileCardSheet.Host, SessionRenderer.Host {

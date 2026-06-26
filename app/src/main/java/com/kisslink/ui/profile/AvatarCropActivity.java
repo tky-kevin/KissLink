@@ -16,6 +16,8 @@ import androidx.core.content.IntentCompat;
 import com.kisslink.R;
 import com.kisslink.profile.ProfileStore;
 
+import dagger.hilt.android.AndroidEntryPoint;
+
 import java.io.IOException;
 
 /**
@@ -24,6 +26,7 @@ import java.io.IOException;
  * <p>解碼走 {@link ImageDecoder}（自動套用 EXIF 方向、降採樣大圖、輸出軟體點陣圖以便畫到
  * 軟體 Canvas）。套用成功回 {@link #RESULT_OK}，呼叫端據此重繪頭像。
  */
+@AndroidEntryPoint
 public class AvatarCropActivity extends AppCompatActivity {
 
     private static final String EXTRA_URI = "extra_source_uri";

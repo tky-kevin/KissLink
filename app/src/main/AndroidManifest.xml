@@ -54,6 +54,7 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:name=".KissLinkApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
