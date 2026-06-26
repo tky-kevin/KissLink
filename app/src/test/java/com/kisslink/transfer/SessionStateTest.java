@@ -1,11 +1,10 @@
 package com.kisslink.transfer;
 
-import com.kisslink.wifidirect.ConnectionState;
-
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+/** SessionState 是純值物件：只測值建構與自身 phase 判斷。跨 enum 轉譯在 SessionManagerTest。 */
 public class SessionStateTest {
 
     @Test
@@ -24,50 +23,6 @@ public class SessionStateTest {
     public void of_setsPhase() {
         SessionState s = SessionState.of(SessionState.Phase.CONNECTED);
         assertEquals(SessionState.Phase.CONNECTED, s.phase);
-    }
-
-    @Test
-    public void fromTransfer_mapsTransferring() {
-        TransferProgress tp = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .fileName("test.txt")
-                .build();
-        SessionState s = SessionState.fromTransfer(tp);
-        assertEquals(SessionState.Phase.TRANSFERRING, s.phase);
-    }
-
-    @Test
-    public void fromTransfer_nullReturnsIdle() {
-        assertEquals(SessionState.Phase.IDLE, SessionState.fromTransfer(null).phase);
-    }
-
-    @Test
-    public void fromConnection_nullReturnsIdle() {
-        assertEquals(SessionState.Phase.IDLE, SessionState.fromConnection(null).phase);
-    }
-
-    @Test
-    public void fromConnection_connected() {
-        SessionState s = SessionState.fromConnection(ConnectionState.CONNECTED);
-        assertEquals(SessionState.Phase.CONNECTED, s.phase);
-    }
-
-    @Test
-    public void fromConnection_disconnectedReturnsError() {
-        SessionState s = SessionState.fromConnection(ConnectionState.DISCONNECTED);
-        assertTrue(s.isError());
-    }
-
-    @Test
-    public void mapPhase_latched() {
-        SessionState s = SessionState.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.LATCHED);
-        assertEquals(SessionState.Phase.PAIRING_LATCHED, s.phase);
-    }
-
-    @Test
-    public void mapPhase_idle() {
-        SessionState s = SessionState.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.IDLE);
-        assertEquals(SessionState.Phase.IDLE, s.phase);
     }
 
     @Test

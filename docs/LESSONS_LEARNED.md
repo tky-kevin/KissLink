@@ -2,8 +2,83 @@
 
 > 本文件記錄 KissLink 專案開發過程中遇到的所有已知問題及其根因分析。
 > 目的：避免後續開發者（或未來的自己）重蹈覆轍。
+>
+> 讀法：**第〇章是總結與心得**（趕時間先讀這章）；第一～五章是逐坑技術細節；
+> 第六章是原則清單；第七章是現況與待辦。
 
-最後更新：2026-06-14
+最後更新：2026-06-25
+
+---
+
+## 零、共同病根與開發心得（POSTMORTEM）
+
+> 這一章把一路修過的 bug 往回收斂：它們不是各自獨立的意外，**絕大多數是同一個病在不同尺度發作**。
+> 寫下來是為了下一個大專案能一開始就避開，而不是又一路打補丁。
+
+### 0.1 一句話病根
+
+**狀態被複製成多份，再靠「事件」手動對齊，而不是從單一來源推導出來。**
+
+把症狀攤開看，它們是同一個病：
+
+| 尺度 | Bug（坑） | 重複/錯置的「同一份真相」 |
+|------|-----------|---------------------------|
+| 欄位 | nonce 漂移（坑14） | identity 與 payload 綁在同一個可變來源，改一個動到另一個 |
+| 型別 | SessionState 漂移 | 三套 enum，跨層映射散在多處呼叫端 |
+| ViewModel | 「收到 N 個」橫幅不同步 | `received` map 與 `recvCount`/`recvBatchId` 兩份權威值 |
+| 非同步 | 完成時漏打勾 | 逐檔 `FILE_DONE` 經會合併的 LiveData 投遞，快速檔事件被丟棄 |
+| 生命週期 | 重建後清單剩 1 項 | `renderReady` 無條件清掉 VM 持久狀態，replay 只補回最後一筆 |
+| 物件職責 | God Object（Service / HomeActivity） | 沒有元件「擁有」一份完整推導，於是萬事都塞進一個類別手動對齊 |
+| Session | 重疊 coordinator / 角色乒乓（坑4–7） | reset 邏輯散在三處、角色未在第一次 latch 凍結 |
+
+- 少觸發一個事件 → **漂移**（橫幅卡舊值、清單剩 1 項）。
+- 兩個事件搶著改同一份 → **競態**（重疊 coordinator、NFC 角色翻轉）。
+- 事件投遞本身會丟（LiveData 合併、postValue 非同步）→ **狀態殘缺**（漏打勾）。
+- 把所有「對齊邏輯」塞進一個物件 → **上帝物件**（是前幾項的後果，不是獨立問題）。
+
+### 0.2 為什麼會一路累積（過程因）
+
+功能一個一個長出來，每加一個需求就用最省事的方式滿足它：**「加一個欄位 + 在當下方便的 handler 裡同步它」**。
+同步線的數量約是 `狀態數 × 事件數`，隨功能成長是**乘法**膨脹，熵只增不減。死碼（`countReceived`/
+`onIncomingBatch` 等被取代卻沒清掉的舊路徑）就是化石證據：留著兩套並行狀態機等著漂移。
+
+### 0.3 解藥：把乘法變成加法
+
+讓畫面/衍生值成為狀態的純函數：`view = f(state)`。同步線從 `狀態 × 事件` 變成**一條**（一個推導）。
+具體奉行五條原則（與第六章的逐坑原則一致，這裡是上位的抽象）：
+
+1. **單一真相來源（SSOT）** — 每份狀態只有一個擁有者。
+   - 例：`SessionManager` 是 session 狀態唯一寫入者；`HomeViewModel` 是接收清單唯一擁有者，
+     橫幅計數是它的**純投影**而非第二份權威值。
+2. **推導，不複製** — 衍生值即時算，不另存一份再手動同步。
+   - 例：完成狀態不靠收齊每個 `FILE_DONE`，改用「下一檔開始 ⇒ 前面皆完成」這個可靠訊號回填。
+3. **不可表達非法狀態（make illegal states unrepresentable）** — 把不變量做成結構保證，勝過靠各處紀律。
+   - 例：把 identity（nonce/goIntent，曝光後凍結）與 payload（可刷新）拆成不同生命週期的欄位，
+     nonce 漂移從此結構上不可能發生。
+4. **單向資料流** — 事件 → 改 state → 重新 render；render 不准回頭改餵給別的 render 的 state。
+   - 例：`SessionRenderer` 是 `SessionState → 畫面` 的單向對應，beam 封裝其中。
+5. **依賴注入當原則、不一定要框架** — 依賴從外面傳進來，而非自己 `getInstance()` 去抓。
+   - 三個 presenter 都由建構子注入 view/VM/callback；**不需要 Hilt/Dagger**——痛點是狀態漂移，不是接線。
+
+### 0.4 這次架構整理如何體現（worked example）
+
+`audit/architecture-cleanup` 分支把上述原則套回專案：
+
+- **狀態單一來源**：`SessionState` 退為純值物件；跨 enum 映射全收進 `SessionManager`（單一寫入者）。
+- **God Object 拆解**：`HomeActivity` 1018 → 587 行，渲染層拆成三個內聚 presenter
+  （`TransferListPresenter` / `SendStackPresenter` / `SessionRenderer`），各自單一擁有者、單向 render。
+- **結構保證不變量**：`PairingToken` 的 identity/payload 分離，rendezvous 與選舉不變量由結構保證。
+- **診斷而非猜測**：把飛行記錄器（`FlightRecorder`）一般化為跨子系統單一時間軸，失敗時落地 dump——
+  因為最痛的 bug（BLE 競態、路由綁錯）純靠 code review 看不出來，**一定要實機看 log**（見坑 9、14）。
+
+### 0.5 給下一個大專案的檢查清單
+
+- 任何「衍生值」先問：能不能從來源**算**出來？能就別存第二份。
+- 任何「狀態」先問：**誰是唯一擁有者**？沒有答案就先別寫。
+- 任何「reset / 同步」先問：是不是該收斂成**單一決策點**？（坑 5 的教訓）
+- 任何「非同步回調」先問：會不會**丟、會不會過期、會不會重入**？（LiveData 合併、`postValue`、世代防護）
+- 類別變長時先問：是不是因為**沒有別人擁有某份推導**，才都塞進來？要拆的是「擁有權」，不是行數。
+- 測試先問：我寫的單元測試**測得到這個 bug 嗎**？（見第七章：本專案最痛的 bug 正好落在測試盲區）
 
 ---
 
@@ -219,27 +294,41 @@ GO 端 `acceptAsServer` 逾時、client 端每次 `connect` 2 秒逾時直到預
 
 ### 坑 14：BLE 掃不到對方 — 跨場次 nonce 不同源
 
-**嚴重度**：中 | **狀態**：觀察中（已加診斷 log）
+**嚴重度**：中 | **狀態**：已修復（結構性，分支 `fix/pairing-nonce-identity`）
 
 **症狀**：偶發某次配對卡在 LINKING——central 一直 `scanning…` 找不到 peripheral，最後 BLE 逾時。
-BLE/Wi-Fi 本身都正常。
+BLE/Wi-Fi 本身都正常。典型觸發：一台螢幕關久再解鎖（Service 閒置拆除後重建）、另一台 app 被回收後重開。
 
-**推定根因**：central 掃描用的 nonce 來自 NFC 當下讀到的對方 HCE token；但若對方在「碰一下」之後
-走了 dirty teardown → `createCoordinator()` 重建出**新 token / 新 nonce**（HCE 也換新），則對方
-BLE 廣播的是新 nonce，而 central 還在找舊 nonce → 永遠對不上。即「NFC 讀到的 nonce」與
-「BLE 廣播的 nonce」不同源。
+**根因**：central 掃描用的 nonce 是 NFC 當下讀到的對方 HCE token 的**一次性快照**；但若對方在「碰一下」
+之後換了 token，BLE 就廣播新 nonce，central 還在找舊的 → 永遠對不上。更深一層的結構性缺陷是
+**`PairingToken` 把「身分」與「酬載」綁在同一個可變來源上**：
 
-**目前處置（診斷）**：
-- central：`scanning for peer nonce=<X>`；逾時仍在掃描時明確警告
-  `never saw peer advertising nonce=<X> — likely stale/cross-session nonce mismatch`。
-- peripheral：`advertising nonce=<Y>`。
-- 下次重現只要比對兩台的 `<X>` 與 `<Y>` 即可確認是否同源。
+- `PairingToken.create()` 每次都重抽 `nonce` + `goIntent`；
+- `LocalPairing` 的每個 setter（`setCanHost5G` / `setDisplayName`）都走 `create()`——
+  於是「刷新一個酬載欄位」會連帶換掉整份身分（nonce/goIntent）；
+- `FileTransferService.createCoordinator()` 在 dirty 重建（配對進行中）時又呼叫 `setCanHost5G(...)`，
+  正好在對方已讀走快照之後重生 nonce → 不同源。
 
-**待辦（若確認）**：讓 NFC HCE token 與該場次 BLE 廣播 token 的生命週期一致，
-或 central 在掃不到時改用對方「當前」HCE token 重新掃描。
+即「NFC 讀到的 nonce」≠「BLE 廣播的 nonce」。本質是 **TOCTOU + 身分生命週期綁錯物件**：身分需要在一場
+配對內凍結，卻被綁在壽命更短、更易變動的 token/coordinator 上。
+
+**修復（結構性，非補丁）**：把**身分（nonce + goIntent）**與**酬載（canHost5G + deviceName）**分離。
+- `LocalPairing` 改持「身分生成一次、永不更動」+「酬載可刷新」；`current()` 永遠用穩定身分 + 最新酬載
+  組裝 token（`PairingToken.withPayload`），任何 setter 都不再動到 nonce/goIntent。→ rendezvous 不變量
+  （讀取端看到的 = 廣播端正在用的）由結構保證。
+- canHost5G 也是選舉關鍵值（曝光後須凍結）：把 `setCanHost5G(...)` 從 `createCoordinator()`（dirty 重建會
+  在配對中途呼叫）移到只在**閒置邊界**（`onCreate` / 使用者主動斷線）刷新。→ 選舉不變量（雙方以同一份快照
+  算 GO，結果反對稱）亦由結構保證。
+
+**診斷 log（保留，便於日後驗證）**：
+- central：`scanning for peer nonce=<X>`；逾時仍在掃描時警告 `never saw peer advertising nonce=<X>`。
+- peripheral：`advertising nonce=<Y>`。修復後 `<X>` 應恆等於 `<Y>`。
 
 **教訓**：
 - 跨裝置的識別鍵（nonce）必須保證「讀取端看到的」=「廣播端正在用的」同一份。
+- **識別（identity）與酬載（payload）的生命週期需求相反時，務必拆開**：身分曝光後凍結、酬載可刷新；
+  別讓「刷新酬載」連帶重生身分。把不變量做成結構保證，勝過靠各處紀律維持。
+- 識別鍵的生命週期應對齊「它所識別的東西」（一場配對），而非綁在某個壽命不一致的物件（coordinator/process）。
 - 偶發性連線問題優先把雙方的關鍵識別值印出來對比,比猜測快得多。
 
 ---
@@ -351,11 +440,46 @@ UI 訊息必須準確反映系統狀態，避免不必要的恐慌。
 
 ## 七、架構債務現狀
 
-| 問題 | 嚴重度 | 可修復性 | 備註 |
-|------|--------|---------|------|
-| God Object（FileTransferService） | 高 | 中 | 7 項職責混合 |
-| 三套重疊狀態機 | 中 | 低 | 映射層容易漂移 |
-| 狀態歸屬模糊 | 高 | 中 | 大部分已修正 |
-| WifiDirectManager 轉換分散 | 中 | 低 | 16+ 個 setState 位置 |
-| Magic delays | 低 | 中 | 部分是框架本質複雜度 |
-| WiFi 已連接時超時 | 嚴重 | 高 | 待修，有明確解法 |
+`audit/architecture-cleanup` 分支後，原本的架構債務大多已結清：
+
+| 問題 | 狀態 | 備註 |
+|------|------|------|
+| God Object（FileTransferService） | ✅ 已處理 | 抽出 `SessionManager`（狀態/身份/進度橋接單一擁有者） |
+| God Object（HomeActivity） | ✅ 已處理 | 1018 → 587 行；渲染拆成三個 presenter（見第〇章 0.4） |
+| 三套重疊狀態機 | ✅ 已收斂 | 映射政策集中在 `SessionManager`；`SessionState` 退為純值 |
+| 狀態歸屬模糊 | ✅ 已處理 | 接收清單/橫幅、session 狀態皆有單一擁有者 |
+| WifiDirectManager 轉換分散 | 🟡 部分 | `setState` 已導向 `FlightRecorder` 單一時間軸；仍多點呼叫 |
+| Magic delays | 🟡 接受 | 部分是 BLE/Wi-Fi 框架本質複雜度，已用 watchdog 自癒 |
+| WiFi 已連接時超時 | ✅ 已修 | 見坑 9（不綁 STA、改傳 `Supplier<Network>`） |
+
+### 7.1 待實作 / 待強化（功能面，非架構債）
+
+> 由原 `KNOWN_ISSUES.md` 併入；皆為「會動到已穩定核心、需多機驗證」的可選項。
+
+- **第三人觸碰切換（tag 側）**：連線中第三人觸碰的切換邏輯，僅當舊裝置這次擔任 **NFC reader** 才生效；
+  擔任 **tag**（HCE 被讀）時無法辨識新對象，會被當「同對象 resume」。解法：tag 側在隨後 BLE 換 token
+  取得對方 nonce 後再判定。需動配對核心 + 三機驗證。
+- **「傳完再切換」時間窗**：要求新對象整段傳輸維持 BLE 廣播未逾時；傳大檔可能逾時。可延長廣播或加重試。
+- **傳送端進度的應用層 ACK**：傳送端進度可能在實際送達前略早到 100%（TCP 送出緩衝，約 1MB 差）。
+  可加反向 `TRANSFER_COMPLETE_ACK`（接收端寫盤 + CRC32 後回送）。屬觀感正確性，傳輸本身已正確；風險中等。
+- **動態 GO IP（低優先）**：`GO_IP_ADDRESS` 硬編碼 `192.168.49.1`。實測所有 log 皆為此值，收益極低。
+- **kill 後重連穩定度（OEM 限制）**：已用前景服務型別 + 開機/`onCreate` `removeGroup` 緩解；MIUI/Samsung
+  仍可能秒殺背景前景服務。非程式可完全解決（需使用者關電池最佳化）。
+
+### 7.2 測試覆蓋的盲區（重要）
+
+> 呼應第〇章：本專案**最痛的 bug 全落在測試盲區**，這不是巧合，是該補強的方向。
+
+- 現有單元測試（約 39 個）只覆蓋**純值/狀態映射/憑證解析**（`SessionState`、`SessionManager`、
+  `ConnectionState`、`GroupCredential`），測得到「映射對不對」，**測不到** BLE 競態、LiveData 合併丟事件、
+  UI 漂移、路由綁錯——這些全是執行期/整合行為。
+- 唯一的儀器測試 `WifiDirectReceiverTest` 需要裝置，而 CI **沒有 emulator job → 從不執行**。
+- 啟示：要嘛補 emulator/整合測試把關鍵流程跑起來，要嘛承認「實機 + FlightRecorder dump」才是這類 bug
+  的真正防線（目前現實是後者）。
+
+### 7.3 Release / ProGuard 風險（CI）
+
+`android.yml` 每次 push `main` 都 `assembleRelease`（`minifyEnabled=true` + ProGuard，debug key 簽署）。
+ProGuard/R8 可能把反射、Room、Compose 用到的成員默默裁掉，**release 版閃退但 debug 版正常、且無任何測試把關**。
+建議：保留並持續驗證 `proguard-rules.pro` 的 keep 規則；發版前至少在實機 smoke test 一輪 release APK，
+或在 CI 加一個 release 安裝/啟動的 smoke 步驟。

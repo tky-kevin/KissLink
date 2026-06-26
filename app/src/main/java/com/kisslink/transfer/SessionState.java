@@ -1,14 +1,20 @@
 package com.kisslink.transfer;
 
-import com.kisslink.pairing.PairingCoordinator;
-import com.kisslink.wifidirect.ConnectionState;
-
+/**
+ * UI 面向的單一 session 狀態——<b>純不可變值物件</b>(phase + error + progress)。
+ *
+ * <p>本類別<b>只</b>承載狀態值與對自身 phase 的判斷;<b>不</b>含跨子系統 enum 的轉譯政策
+ * (那是「誰擁有狀態機」的責任,收斂在 {@link SessionManager})。子系統各有其內部 FSM
+ * ({@link com.kisslink.pairing.PairingCoordinator.Phase}、{@link com.kisslink.wifidirect.ConnectionState}、
+ * {@link TransferProgress.Phase}),由 {@link SessionManager} 統一映射為本狀態並發布——
+ * 單一真相、單一寫入者。
+ */
 public final class SessionState {
 
     public enum Phase {
         RESETTING,
         IDLE, PAIRING_LATCHED, PAIRING_LINKING, PAIRING_ELECTING,
-        CREATING_GROUP, HOSTING, CONNECTING, SOCKETING, CONNECTED,
+        CONNECTING, SOCKETING, CONNECTED,
         TRANSFERRING, FILE_DONE, ALL_DONE,
         CANCELLED, ERROR
     }
@@ -28,7 +34,6 @@ public final class SessionState {
     public boolean isPairing() {
         return phase == Phase.RESETTING || phase == Phase.PAIRING_LATCHED
                 || phase == Phase.PAIRING_LINKING || phase == Phase.PAIRING_ELECTING
-                || phase == Phase.CREATING_GROUP || phase == Phase.HOSTING
                 || phase == Phase.CONNECTING || phase == Phase.SOCKETING;
     }
 
@@ -36,6 +41,8 @@ public final class SessionState {
         return phase == Phase.CONNECTED || phase == Phase.TRANSFERRING
                 || phase == Phase.FILE_DONE || phase == Phase.ALL_DONE;
     }
+
+    // ── 值建構（同型別便利工廠；跨 enum 轉譯不在此，見 SessionManager）──
 
     public static SessionState idle() {
         return new SessionState(Phase.IDLE, null, null);
@@ -47,46 +54,6 @@ public final class SessionState {
 
     public static SessionState of(Phase p) {
         return new SessionState(p, null, null);
-    }
-
-    public static SessionState fromTransfer(TransferProgress tp) {
-        if (tp == null) return idle();
-        switch (tp.phase) {
-            case CONNECTED:    return new SessionState(Phase.CONNECTED, null, tp);
-            case TRANSFERRING: return new SessionState(Phase.TRANSFERRING, null, tp);
-            case FILE_DONE:    return new SessionState(Phase.FILE_DONE, null, tp);
-            case ALL_DONE:     return new SessionState(Phase.ALL_DONE, null, tp);
-            case CANCELLED:    return new SessionState(Phase.CANCELLED, null, tp);
-            case ERROR:        return new SessionState(Phase.ERROR, tp.errorMessage, tp);
-            default:           return new SessionState(Phase.CONNECTING, null, null);
-        }
-    }
-
-    public static SessionState fromConnection(ConnectionState cs) {
-        if (cs == null) return idle();
-        switch (cs) {
-            case CREATING_GROUP: return of(Phase.CREATING_GROUP);
-            case HOSTING:        return of(Phase.HOSTING);
-            case CONNECTING:     return of(Phase.CONNECTING);
-            case CONNECTED:      return of(Phase.CONNECTED);
-            case DISCONNECTED:   return error("連線中斷，請重試");
-            case ERROR:          return error("連線失敗，請重試");
-            case IDLE:
-            default:             return idle();
-        }
-    }
-
-    public static SessionState mapPhase(PairingCoordinator.Phase p) {
-        if (p == null) return idle();
-        switch (p) {
-            case LATCHED:    return of(Phase.PAIRING_LATCHED);
-            case LINKING:    return of(Phase.PAIRING_LINKING);
-            case ELECTING:   return of(Phase.PAIRING_ELECTING);
-            case CONNECTING: return of(Phase.CONNECTING);
-            case CONNECTED:  return of(Phase.CONNECTED);
-            case IDLE:
-            default:         return idle();
-        }
     }
 
     @Override

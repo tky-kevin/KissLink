@@ -83,6 +83,12 @@ public final class SessionManager {
         publish(state);
     }
 
+    // ── 語意化轉移：呼叫端表達意圖，SessionState 的建構收斂於此（單一寫入者）──
+    public void toIdle()                      { publish(SessionState.idle()); }
+    public void toResetting()                 { publish(SessionState.of(SessionState.Phase.RESETTING)); }
+    public void toConnected()                 { publish(SessionState.of(SessionState.Phase.CONNECTED)); }
+    public void toError(@NonNull String msg)  { publish(SessionState.error(msg)); }
+
     public void onPhase(@NonNull PairingCoordinator.Phase phase, int currentGen) {
         if (currentGen != sessionGen) return;
         publish(mapPhase(phase));
@@ -170,7 +176,7 @@ public final class SessionManager {
         peerProgressObs = tp -> {
             if (tp == null) return;
             boolean wasTransferring = isTransferring();
-            sessionLd.setValue(SessionState.fromTransfer(tp));
+            sessionLd.setValue(mapTransfer(tp));
             boolean nowTransferring = (tp.phase == TransferProgress.Phase.TRANSFERRING);
             if (wasTransferring && !nowTransferring) onTransferEnded.run();
         };
@@ -218,8 +224,31 @@ public final class SessionManager {
     //  Static helpers
     // ══════════════════════════════════════════════════════════
 
+    /** 配對協調器相位 → session 狀態。跨 enum 轉譯政策的單一所在地。 */
     static SessionState mapPhase(PairingCoordinator.Phase p) {
-        // 單一真相：委派至 SessionState.mapPhase，避免兩處 phase→state 對照表漂移。
-        return SessionState.mapPhase(p);
+        if (p == null) return SessionState.idle();
+        switch (p) {
+            case LATCHED:    return SessionState.of(SessionState.Phase.PAIRING_LATCHED);
+            case LINKING:    return SessionState.of(SessionState.Phase.PAIRING_LINKING);
+            case ELECTING:   return SessionState.of(SessionState.Phase.PAIRING_ELECTING);
+            case CONNECTING: return SessionState.of(SessionState.Phase.CONNECTING);
+            case CONNECTED:  return SessionState.of(SessionState.Phase.CONNECTED);
+            case IDLE:
+            default:         return SessionState.idle();
+        }
+    }
+
+    /** 傳輸進度 → session 狀態（含進度酬載）。 */
+    static SessionState mapTransfer(TransferProgress tp) {
+        if (tp == null) return SessionState.idle();
+        switch (tp.phase) {
+            case CONNECTED:    return new SessionState(SessionState.Phase.CONNECTED, null, tp);
+            case TRANSFERRING: return new SessionState(SessionState.Phase.TRANSFERRING, null, tp);
+            case FILE_DONE:    return new SessionState(SessionState.Phase.FILE_DONE, null, tp);
+            case ALL_DONE:     return new SessionState(SessionState.Phase.ALL_DONE, null, tp);
+            case CANCELLED:    return new SessionState(SessionState.Phase.CANCELLED, null, tp);
+            case ERROR:        return new SessionState(SessionState.Phase.ERROR, tp.errorMessage, tp);
+            default:           return new SessionState(SessionState.Phase.CONNECTING, null, null);
+        }
     }
 }

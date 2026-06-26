@@ -22,6 +22,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.kisslink.diag.FlightRecorder;
 import com.kisslink.model.GroupCredential;
 import com.kisslink.nfc.NFCCredential;
 import com.kisslink.pairing.PairingToken;
@@ -44,7 +45,7 @@ public class BleCredentialServer {
 
     /** PAIRSEQ 診斷：預設靜默，{@code adb shell setprop log.tag.BleCredentialServer DEBUG} 可叫出。 */
     private static void seq(String msg) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) Log.d(TAG, "PAIRSEQ " + msg);
+        FlightRecorder.seq(TAG, msg);
     }
 
     public interface Callback {
@@ -66,7 +67,11 @@ public class BleCredentialServer {
     public BleCredentialServer(@NonNull Context context, @NonNull Callback callback) {
         this.context = context.getApplicationContext();
         this.callback = callback;
-        this.timeoutRunnable = () -> callback.onError("BLE 連線逾時，請重試");
+        this.timeoutRunnable = () -> {
+            FlightRecorder.event(TAG, "server timeout: no central connected within window "
+                    + "(central never found/locked this peripheral's nonce)");
+            callback.onError("BLE 連線逾時，請重試");
+        };
     }
 
     @SuppressLint("MissingPermission")
@@ -160,7 +165,7 @@ public class BleCredentialServer {
             seq("advertising started (central can now discover this peripheral)");
         }
         @Override public void onStartFailure(int errorCode) {
-            Log.e(TAG, "PAIRSEQ advertise FAILED: " + errorCode);
+            FlightRecorder.event(TAG, "advertise FAILED: " + errorCode);
             main.post(() -> callback.onError("BLE 廣播失敗 (" + errorCode + ")"));
         }
     };
@@ -175,7 +180,7 @@ public class BleCredentialServer {
                 seq("central connected (status=" + status + ")");
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 if (device != null && device.equals(connectedDevice)) connectedDevice = null;
-                Log.w(TAG, "PAIRSEQ central disconnected (status=" + status + ")");
+                FlightRecorder.event(TAG, "central disconnected (status=" + status + ")");
             }
         }
 
@@ -243,7 +248,7 @@ public class BleCredentialServer {
         try { return NFCCredential.fromBytes(value); }
         catch (Exception e) {
             // 解析失敗不該靜默：留下診斷，否則只會表現為「卡在連線逾時」難以定位。
-            Log.w(TAG, "parseCredential failed (" + value.length + "B): " + e.getMessage());
+            FlightRecorder.event(TAG, "parseCredential failed (" + value.length + "B): " + e.getMessage());
             return null;
         }
     }

@@ -24,6 +24,19 @@ import java.util.Arrays;
  *
  * <p>NFC 是單向讀:一次 latch 只有 reader 讀到 tag 的 token。reader 之後透過 BLE
  * 把自己的 token 回送給 tag,兩邊才都湊齊兩份 token 做選舉。
+ *
+ * <h3>身分 vs 酬載(identity vs payload)</h3>
+ * <p>本物件混裝兩種<b>生命週期需求相反</b>的欄位,務必分清:
+ * <ul>
+ *   <li><b>身分(一場配對內必須凍結)</b>:{@link #nonce}(會合鍵/場次 id)與 {@link #goIntent}
+ *       (選舉權重)。一旦經 NFC/BLE 曝光給對方,對方就以這份快照做掃描與 GO 選舉;
+ *       本機若中途換掉任一個,對方掃不到(nonce 漂移)或雙方選舉結果不再反對稱(goIntent 漂移)。</li>
+ *   <li><b>酬載(可隨時刷新)</b>:{@link #canHost5G}(反映當下 Wi-Fi 狀態)與 {@link #deviceName}
+ *       (名片姓名)。應在<b>閒置時</b>刷新,使下一場曝光的值最新;但同一場曝光後同樣需凍結
+ *       (canHost5G 亦參與選舉)。</li>
+ * </ul>
+ * <p>因此「刷新酬載」絕不可連帶換掉身分——用 {@link #withPayload} 保留 nonce/goIntent、只換酬載,
+ * 而非 {@link #create}(後者會重抽身分)。身分的單一穩定來源見 {@link LocalPairing}。
  */
 public final class PairingToken {
 
@@ -34,9 +47,9 @@ public final class PairingToken {
             Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP;
 
     public final int     version;
-    public final byte[]  nonce;      // 8 bytes：場次 id / BLE 廣播鍵 / 選舉 tiebreaker
-    public final int     goIntent;   // 0..255：越大越想當 GO
-    public final String  deviceName; // UI 顯示用（可空）
+    public final byte[]  nonce;      // 8 bytes：場次 id / BLE 廣播鍵 / 選舉 tiebreaker（身分，曝光後凍結）
+    public final int     goIntent;   // 0..255：越大越想當 GO（身分，曝光後凍結）
+    public final String  deviceName; // UI 顯示用（酬載，可刷新；不參與選舉）
     /**
      * 本機若當 GO 是否能在 5GHz 開群組。Wi-Fi Direct 的 SCC 會把 P2P 群組綁到 GO 的
      * STA 頻道——GO 掛在 2.4GHz AP → 群組被鎖 2.4GHz（~13Mbps）。故選舉時優先讓
@@ -62,12 +75,25 @@ public final class PairingToken {
         return create(deviceName, true);
     }
 
-    /** 本機開一場新配對，帶 5GHz 開群組能力旗標。 */
+    /**
+     * 重抽一份<b>全新身分</b>(隨機 nonce + 隨機 goIntent)的 token。
+     * <p>僅用於本機身分的<b>首次生成</b>(見 {@link LocalPairing});刷新酬載請勿走這裡,
+     * 否則會連身分一起換掉——那正是「BLE 掃不到/選舉打架」的根因。刷新酬載用 {@link #withPayload}。
+     */
     public static PairingToken create(@Nullable String deviceName, boolean canHost5G) {
         SecureRandom rng = new SecureRandom();
         byte[] n = new byte[NONCE_LEN];
         rng.nextBytes(n);
         return new PairingToken(VERSION, n, rng.nextInt(256), deviceName, canHost5G);
+    }
+
+    /**
+     * 保留<b>身分</b>(version/nonce/goIntent),只換<b>酬載</b>(deviceName/canHost5G)。
+     * <p>這是「刷新本機能力/姓名」的唯一正確途徑:對方在本場已掃定我的 nonce、已用我的 goIntent
+     * 算選舉,換酬載不得動到這兩者。配合 {@link LocalPairing#current()} 達成「穩定身分 + 最新酬載」。
+     */
+    public PairingToken withPayload(@Nullable String deviceName, boolean canHost5G) {
+        return new PairingToken(this.version, this.nonce, this.goIntent, deviceName, canHost5G);
     }
 
     // ── 序列化 ────────────────────────────────────────────────

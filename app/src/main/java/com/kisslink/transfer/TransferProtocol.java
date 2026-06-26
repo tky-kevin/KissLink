@@ -88,6 +88,14 @@ public final class TransferProtocol {
     public static final byte ITEM_PHOTO = 2;
     public static final byte ITEM_TEXT  = 3; // 純文字/連結
 
+    /** 由 MIME 判定 item 型別：圖片/影片 → {@link #ITEM_PHOTO}（可顯示縮圖）；其餘 → {@link #ITEM_FILE}。 */
+    public static byte itemTypeForMime(@androidx.annotation.Nullable String mime) {
+        if (mime != null && (mime.startsWith("image/") || mime.startsWith("video/"))) {
+            return ITEM_PHOTO;
+        }
+        return ITEM_FILE;
+    }
+
     // ══════════════════════════════════════════════════════════
     //  Header POJO
     // ══════════════════════════════════════════════════════════

@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
  *   reader → SELECT AID F04B495353
  *   HCE    → [token UTF-8 bytes] + 90 00
  * </pre>
- * reader 端見 {@link NfcForegroundHelper} / {@link com.kisslink.pairing.NfcPairingController}。
+ * reader 端見 {@link NfcTokenReader} / {@link com.kisslink.pairing.NfcPairingController}。
  */
 public class KissLinkHCEService extends HostApduService {
 

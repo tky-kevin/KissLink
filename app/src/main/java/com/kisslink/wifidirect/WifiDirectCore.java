@@ -10,6 +10,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.MutableLiveData;
 
+import com.kisslink.diag.FlightRecorder;
 import com.kisslink.model.GroupCredential;
 
 /**
@@ -106,12 +107,12 @@ class WifiDirectCore {
                 || s == ConnectionState.DISCONNECTED || s == ConnectionState.IDLE) {
             starting = false;
         }
-        Log.d(TAG, "State: " + stateLd.getValue() + " → " + s);
+        FlightRecorder.seq(TAG, "wifi state " + stateLd.getValue() + " → " + s);
         stateLd.postValue(s);
     }
 
     void postError(String msg) {
-        Log.e(TAG, "Error: " + msg);
+        FlightRecorder.event(TAG, "wifi error: " + msg);
         errorLd.postValue(msg);
     }
 

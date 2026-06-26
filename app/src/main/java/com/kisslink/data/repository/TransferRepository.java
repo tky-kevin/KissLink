@@ -52,6 +52,11 @@ public class TransferRepository {
         executor.execute(dao::deleteAll);
     }
 
+    /** 只刪某一批次（「本次接收/傳送」清單的垃圾桶用，不波及其他歷史）。 */
+    public void deleteByBatch(long batchId) {
+        executor.execute(() -> dao.deleteByBatch(batchId));
+    }
+
     // ── 讀取（LiveData，主執行緒安全）────────────────────────────
 
     public LiveData<List<TransferRecordEntity>> getAllRecords() {

@@ -17,6 +17,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.kisslink.data.repository.TransferRepository;
+import com.kisslink.diag.FlightRecorder;
 import com.kisslink.nfc.KissLinkHCEService;
 import com.kisslink.pairing.LocalPairing;
 import com.kisslink.pairing.PairingCoordinator;
@@ -107,8 +108,9 @@ public class FileTransferService extends Service {
             mainHandler.post(() -> {
                 if (sessionMgr.isPendingReset()) return;
                 teardownSession();
+                refreshLocalCapabilities(); // 閒置邊界:已回待機,為下一場抓最新 5GHz 能力
                 createCoordinator();
-                sessionMgr.transitionTo(SessionState.idle());
+                sessionMgr.toIdle();
                 Log.i(TAG, "User disconnect → full teardown");
             });
         }
@@ -120,7 +122,7 @@ public class FileTransferService extends Service {
                 peerStarting = false;
                 teardownPeer();
                 if (coordinator != null) coordinator.cancelLightweight();
-                sessionMgr.transitionTo(SessionState.idle());
+                sessionMgr.toIdle();
                 Log.i(TAG, "Pairing interrupted → IDLE");
             });
         }
@@ -177,6 +179,7 @@ public class FileTransferService extends Service {
         wifi = new WifiDirectManager(this);
         wifi.registerReceiver(this);
         wifi.removeGroup();
+        refreshLocalCapabilities(); // 閒置邊界:服務初建,抓一份最新 5GHz 能力供本場曝光
         createCoordinator();
     }
 
@@ -211,11 +214,19 @@ public class FileTransferService extends Service {
     //  配對協調
     // ══════════════════════════════════════════════════════════
 
+    /**
+     * 刷新本機酬載(5GHz 開群組能力)——<b>只在閒置邊界呼叫</b>(onCreate / 使用者主動斷線),
+     * 使下一場曝光的 canHost5G 反映最新 Wi-Fi 狀態。
+     * <p>刻意<b>不</b>放進 {@link #createCoordinator()}:dirty 重建會在「碰一下之後、配對進行中」
+     * 呼叫 createCoordinator,此時若刷新,canHost5G 可能與對方剛經 NFC 讀到的快照不同 →
+     * GO 選舉不反對稱。只換酬載已不影響 nonce/goIntent(身分恆定,見 {@link LocalPairing})。
+     */
+    private void refreshLocalCapabilities() {
+        LocalPairing.setCanHost5G(WifiDirectManager.canHostFastGroup(this));
+    }
+
     private void createCoordinator() {
         final int gen = sessionMgr.nextSessionGen();
-        // 在建 coordinator（讀 LocalPairing.current()）與設 HCE token 前，刷新本機 5GHz
-        // 開群組能力旗標，讓對方碰一下讀到的 token 反映最新 Wi-Fi 狀態，GO 選舉才準。
-        LocalPairing.setCanHost5G(WifiDirectManager.canHostFastGroup(this));
         coordinator = new PairingCoordinator(this, wifi, new PairingCoordinator.Listener() {
             @Override public void onPhase(@NonNull PairingCoordinator.Phase phase) {
                 sessionMgr.onPhase(phase, gen);
@@ -272,12 +283,12 @@ public class FileTransferService extends Service {
             return;
         }
 
-        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.RESETTING));
+        sessionMgr.toResetting();
         teardownSession();
         Log.i(TAG, "Dirty state → teardown + settle before re-pair");
         mainHandler.postDelayed(() -> {
             createCoordinator();
-            sessionMgr.transitionTo(SessionState.idle());
+            sessionMgr.toIdle();
             deliver.run();
         }, RESET_SETTLE_MS);
     }
@@ -298,6 +309,7 @@ public class FileTransferService extends Service {
     private void establishPeer(boolean groupOwner) {
         if (peerStarting || peer != null) return;
         peerStarting = true;
+        FlightRecorder.seq(TAG, "establishing peer socket (groupOwner=" + groupOwner + ")");
         PeerConnector.Callback cb = new PeerConnector.Callback() {
             @Override public void onSocketReady(Socket socket) {
                 if (peer != null) {
@@ -310,7 +322,9 @@ public class FileTransferService extends Service {
             }
             @Override public void onError(String message) {
                 peerStarting = false;
-                sessionMgr.transitionTo(SessionState.error(message));
+                FlightRecorder.event(TAG, "socket establish failed: " + message);
+                FlightRecorder.dump(FileTransferService.this, "socket establish failed");
+                sessionMgr.toError(message);
             }
         };
         if (groupOwner) {
@@ -350,18 +364,19 @@ public class FileTransferService extends Service {
                 }
             }
             @Override public void onDisconnected() {
+                FlightRecorder.seq(TAG, "peer disconnected");
                 Log.i(TAG, "Peer disconnected");
                 mainHandler.post(() -> {
                     sessionMgr.clearPeerIdentity();
                     teardownPeer();
-                    sessionMgr.transitionTo(SessionState.idle());
+                    sessionMgr.toIdle();
                 });
             }
             @Override public void onPeerProfile(@Nullable String name, @Nullable byte[] avatarThumb) {
                 sessionMgr.setPeerProfile(name, avatarThumb);
                 mainHandler.post(() -> {
                     if (peer != null && peer.isAlive())
-                        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.CONNECTED));
+                        sessionMgr.toConnected();
                 });
             }
             @Override public void onCardReceived(@Nullable byte[] vcard, String name) {
@@ -375,7 +390,8 @@ public class FileTransferService extends Service {
         wakeLockManager.acquire();
         idleManager.setTransferring(true);
         notificationHelper.update("已連線", 0);
-        sessionMgr.transitionTo(SessionState.of(SessionState.Phase.CONNECTED));
+        sessionMgr.toConnected();
+        FlightRecorder.seq(TAG, "peer connection established (groupOwner=" + isGroupOwner + ")");
         Log.i(TAG, "PeerConnection established (groupOwner=" + isGroupOwner + ")");
     }
 

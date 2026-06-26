@@ -28,10 +28,6 @@ jobs:
       - name: Run spotless (Java)
         run: ./gradlew spotlessCheck --no-daemon
 
-      # detekt 1.23.x 尚未支援 Kotlin 2.2.x (JVM target 25)，暫時停用
-      # - name: Run detekt
-      #   run: ./gradlew detekt --no-daemon
-
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug --no-daemon
 

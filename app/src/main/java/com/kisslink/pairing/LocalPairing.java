@@ -12,56 +12,59 @@ import androidx.annotation.NonNull;
  * 若各畫面各自產生 token,會出現「HCE 廣播的 token ≠ Coordinator 選舉用的 token」,
  * 或主畫面根本沒設 token(HCE 無 NDEF → 對方讀不到 → 一直震動)。
  *
- * <p>因此把本機 token 收斂到這裡:任何畫面的 {@link com.kisslink.nfc.NfcForegroundHelper}
- * 都用 {@link #current()} 設 HCE,Service 的 {@link PairingCoordinator} 也用 {@link #current()}。
- * token 在 App 進程生命週期內保持穩定(nonce 跨「不重疊」的連續場次重用無妨),
- * 確保「主畫面讀到的對方 token」與「對方 Coordinator 廣播的 token」一致。
+ * <h3>身分(identity)與酬載(payload)分離</h3>
+ * <p>本類別把 token 拆成兩種生命週期:
+ * <ul>
+ *   <li><b>身分</b>——{@link PairingToken#nonce} + {@link PairingToken#goIntent}:本進程內
+ *       <b>生成一次、永不更動</b>。它是 BLE 會合鍵與 GO 選舉權重,對方一旦經 NFC/BLE 拿到這份快照,
+ *       就以它掃描與選舉;本機若中途換掉,對方就掃不到(nonce 漂移)或雙方選舉不再反對稱
+ *       (goIntent 漂移)——這正是「配對卡在 BLE」的結構性根因。nonce 跨「不重疊」場次重用無妨。</li>
+ *   <li><b>酬載</b>——{@link #canHost5G} + {@link #displayName}:可隨時刷新(由呼叫端在<b>閒置時</b>
+ *       更新,使下一場曝光的值最新)。刷新酬載<b>不會</b>動到身分。</li>
+ * </ul>
+ * <p>{@link #current()} 永遠回傳「穩定身分 + 最新酬載」組裝出的 token,因此不論
+ * Coordinator 重建幾次、Wi-Fi 能力如何翻動,本機對外的 nonce/goIntent 都是同一份——
+ * 讓「對方掃到的」=「本機選舉用的」這個不變量由結構保證,而非靠各處紀律維持。
  */
 public final class LocalPairing {
 
-    private static volatile PairingToken token;
-    /** 對外顯示名稱（對方碰一下即看到）。預設裝置型號，可由名片姓名覆寫。 */
+    /** 身分:生成一次後凍結(nonce + goIntent)。酬載欄位不寫回它,改在 {@link #current()} 時套用。 */
+    private static volatile PairingToken identity;
+
+    /** 對外顯示名稱（對方碰一下即看到）。酬載,可刷新;不參與選舉。預設裝置型號,可由名片姓名覆寫。 */
     private static volatile String displayName = Build.MODEL;
-    /** 本機若當 GO 是否能在 5GHz 開群組（供 GO 選舉偏置）。未知時樂觀 true。 */
+
+    /** 本機若當 GO 是否能在 5GHz 開群組（供 GO 選舉偏置）。酬載,可刷新。未知時樂觀 true。 */
     private static volatile boolean canHost5G = true;
 
     private LocalPairing() {}
 
-    /** 取得本機目前 token(首次呼叫時產生)。 */
+    /**
+     * 取得本機目前 token = <b>穩定身分</b>(nonce/goIntent,首次呼叫時生成)+ <b>最新酬載</b>(displayName/canHost5G)。
+     * 多次呼叫的 nonce/goIntent 恆等,只有酬載反映最近一次 setter 的值。
+     */
     @NonNull
     public static synchronized PairingToken current() {
-        if (token == null) token = PairingToken.create(displayName, canHost5G);
-        return token;
+        if (identity == null) identity = PairingToken.create(displayName, canHost5G);
+        return identity.withPayload(displayName, canHost5G);
     }
 
     /**
      * 更新「本機能否在 5GHz 開群組」旗標（由 {@link com.kisslink.wifidirect.WifiDirectManager#canHostFastGroup}
-     * 在設定 HCE token 前刷新）。值有變才換發 token（nonce 跨非重疊場次重用無妨），
-     * 確保對方碰一下讀到的能力旗標是最新的，GO 選舉才會把「能跑 5GHz」的那台選為 GO。
-     * 應在閒置時呼叫，避免換掉正在配對中的 token。
+     * 刷新）。只換酬載、<b>不</b>動身分,故 nonce/goIntent 不變。
+     * <p>仍應在<b>閒置時</b>呼叫:酬載一旦在某場曝光給對方(canHost5G 參與選舉),該場就不該再變,
+     * 否則雙方選舉可能不反對稱。配對進行中(尤其 dirty 重建)勿呼叫。
      */
     public static synchronized void setCanHost5G(boolean value) {
-        if (token != null && value == canHost5G) return;
         canHost5G = value;
-        token = PairingToken.create(displayName, canHost5G);
     }
 
     /**
-     * 設定對外顯示名稱（名片姓名）。若名稱有變且目前 token 已存在，
-     * 換發一份帶新名稱的 token（nonce 跨非重疊場次重用無妨）。
-     * 應在「閒置時」呼叫，避免換掉正在配對中的 token。
+     * 設定對外顯示名稱（名片姓名）。只換酬載、不動身分。
+     * deviceName 不參與選舉,故隨時刷新皆安全。
      */
     public static synchronized void setDisplayName(@NonNull String name) {
         if (name.trim().isEmpty()) return;
-        if (name.equals(displayName)) return;
         displayName = name;
-        if (token != null) token = PairingToken.create(displayName, canHost5G);
-    }
-
-    /** 強制換一份新 token(目前未使用;保留給未來需要輪替 nonce 的情境)。 */
-    @NonNull
-    public static synchronized PairingToken renew() {
-        token = PairingToken.create(displayName, canHost5G);
-        return token;
     }
 }

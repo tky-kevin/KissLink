@@ -104,6 +104,22 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         return indexOfName(name);
     }
 
+    /**
+     * 把 {@code index} 之前尚未完成的列回填為完成。循序傳輸下「後面那列開始 → 前面各列必然完成」，
+     * 用來補上經 LiveData 投遞被合併丟棄的中間檔 FILE_DONE（否則完成時偶有幾項沒打勾）。
+     */
+    public void markRowsDoneBefore(int index) {
+        for (int i = 0; i < index && i < rows.size(); i++) {
+            SendRow r = rows.get(i);
+            if (!r.done) {
+                r.done = true;
+                r.percent = 100;
+                r.highlight = false;
+                notifyItemChanged(i, PAYLOAD_PROGRESS);
+            }
+        }
+    }
+
     private int indexOfName(@NonNull String name) {
         for (int i = 0; i < rows.size(); i++) {
             if (name.equals(rows.get(i).name)) return i;
@@ -145,9 +161,10 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
         });
 
-        // 項目點擊（開啟檔案）
+        // 項目點擊（開啟檔案；文字/連結項無 fileUri，但仍要能點開預覽 → openFile 內以 ITEM_TEXT 分支處理）
         h.itemView.setOnClickListener(v -> {
-            if (onItemClickListener != null && r.fileUri != null) {
+            if (onItemClickListener != null
+                    && (r.fileUri != null || r.itemType == TransferProtocol.ITEM_TEXT)) {
                 onItemClickListener.onItemClick(r);
             }
         });
