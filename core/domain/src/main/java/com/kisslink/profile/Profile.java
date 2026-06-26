@@ -87,7 +87,7 @@ public final class Profile {
         }
         if (photo != null && photo.length > 0) {
             // vCard 3.0 內嵌頭像（base64，單行不折行以便自家解析）。
-            String b64 = android.util.Base64.encodeToString(photo, android.util.Base64.NO_WRAP);
+            String b64 = java.util.Base64.getEncoder().encodeToString(photo);
             sb.append("PHOTO;ENCODING=b;TYPE=JPEG:").append(b64).append("\r\n");
         }
         sb.append("END:VCARD\r\n");
@@ -119,7 +119,7 @@ public final class Profile {
             if (key.equals("FN")) {
                 p.name = val;
             } else if (key.startsWith("PHOTO")) {
-                try { p.photo = android.util.Base64.decode(val, android.util.Base64.DEFAULT); }
+                try { p.photo = java.util.Base64.getDecoder().decode(val); }
                 catch (Exception ignored) {}
             } else if (key.startsWith("TEL")) {
                 p.fields.add(new Field("電話", val));
