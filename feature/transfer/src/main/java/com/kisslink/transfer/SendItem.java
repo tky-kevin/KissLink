@@ -1,12 +1,12 @@
 package com.kisslink.transfer;
 
 import android.content.ContentResolver;
+import android.database.Cursor;
 import android.net.Uri;
+import android.provider.OpenableColumns;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-
-import com.kisslink.util.FileUtils;
 
 /**
  * 一個待送出的項目(雙向 peer 模型下,任一端都能送)。
@@ -33,10 +33,35 @@ public final class SendItem {
 
     /** 由 SAF/MediaStore Uri 建立檔案項目。 */
     public static SendItem fromUri(@NonNull ContentResolver cr, @NonNull Uri uri, byte itemType) {
-        String name = FileUtils.getFileName(cr, uri);
-        long   size = FileUtils.getFileSize(cr, uri);
+        String name = resolveFileName(cr, uri);
+        long   size = resolveFileSize(cr, uri);
         String mime = cr.getType(uri);
         return new SendItem(itemType, name, mime, size, uri, null);
+    }
+
+    private static String resolveFileName(ContentResolver cr, Uri uri) {
+        if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+            try (Cursor c = cr.query(uri, null, null, null, null)) {
+                if (c != null && c.moveToFirst()) {
+                    int col = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (col >= 0) return c.getString(col);
+                }
+            } catch (Exception ignored) {}
+        }
+        String seg = uri.getLastPathSegment();
+        return seg != null ? seg : "unknown_file";
+    }
+
+    private static long resolveFileSize(ContentResolver cr, Uri uri) {
+        if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+            try (Cursor c = cr.query(uri, null, null, null, null)) {
+                if (c != null && c.moveToFirst()) {
+                    int col = c.getColumnIndex(OpenableColumns.SIZE);
+                    if (col >= 0 && !c.isNull(col)) return c.getLong(col);
+                }
+            } catch (Exception ignored) {}
+        }
+        return -1;
     }
 
     /** 名片(vCard)：直接以 bytes 攜帶。{@code fileName} 為顯示用檔名（例如「漫遊者的名片」）。 */
