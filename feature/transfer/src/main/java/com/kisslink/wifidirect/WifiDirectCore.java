@@ -23,8 +23,8 @@ import com.kisslink.model.GroupCredential;
  * <p>把這些共享資源集中於此，是為了讓上述控制器各自只負責單一角色流程，
  * 而不需互相持有對方的欄位。本類別<b>不</b>含任何 GO/Client 角色邏輯。
  *
- * <p>呼叫端 {@link WifiDirectManager} 已宣告 {@code @RequiresApi(Q)}；本模組 minSdk 即為 29，
- * 故各 package-private 控制器不再重複標註（避免 lint {@code ObsoleteSdkInt}）。
+ * <p>minSdk=29 (Q), so {@code @RequiresApi} annotations are omitted throughout this module
+ * (would be flagged by lint as {@code ObsoleteSdkInt}).
  */
 class WifiDirectCore {
 

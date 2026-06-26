@@ -28,6 +28,7 @@ android {
 		}
 		release {
 			minifyEnabled = true
+			shrinkResources = true
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
 					'proguard-rules.pro'
 			// 以內建 debug key 簽署 release，讓 CI 產出的 APK 可直接安裝（不需設定 keystore secrets）。

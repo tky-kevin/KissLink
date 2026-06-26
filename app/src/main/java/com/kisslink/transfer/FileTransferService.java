@@ -4,14 +4,12 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.MainThread;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -27,11 +25,11 @@ import com.kisslink.wifidirect.WifiDirectManager;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 檔案傳輸前景 Service —— 薄殼，委派業務邏輯至 SessionManager。
  */
-@RequiresApi(api = Build.VERSION_CODES.Q)
 public class FileTransferService extends Service {
 
     private static final String TAG = "FileTransferService";
@@ -47,7 +45,7 @@ public class FileTransferService extends Service {
     private PairingCoordinator coordinator;
     @Nullable private PeerConnection peer;
     private boolean isGroupOwner = false;
-    private volatile boolean peerStarting = false;
+    private final AtomicBoolean peerStarting = new AtomicBoolean(false);
     private final Handler mainHandler = new Handler(android.os.Looper.getMainLooper());
 
     // ── Extracted managers ─────────────────────────────────────
@@ -119,7 +117,7 @@ public class FileTransferService extends Service {
             mainHandler.post(() -> {
                 if (sessionMgr.isPendingReset()) return;
                 sessionMgr.resetSession();
-                peerStarting = false;
+                peerStarting.set(false);
                 teardownPeer();
                 if (coordinator != null) coordinator.cancelLightweight();
                 sessionMgr.toIdle();
@@ -253,7 +251,7 @@ public class FileTransferService extends Service {
         // Wi-Fi 已連、PeerConnection 仍在背景建 socket 的視窗期（coordinator 已 finished、peer 尚未 alive）：
         // 此時兩機正貼著，極易再觸發 NFC latch。若放行會被判 dirty 而拆掉這條健康的連線、
         // 退回 LATCHED/LINKING（即「跳到 Wi-Fi Direct 又跳回 NFC/BLE」）。建立中一律忽略。
-        if (peerStarting) {
+        if (peerStarting.get()) {
             Log.d(TAG, "Latch ignored: peer connection establishing");
             return;
         }
@@ -307,21 +305,21 @@ public class FileTransferService extends Service {
     // ══════════════════════════════════════════════════════════
 
     private void establishPeer(boolean groupOwner) {
-        if (peerStarting || peer != null) return;
-        peerStarting = true;
+        if (!peerStarting.compareAndSet(false, true)) return;  // already starting — bail atomically
+        if (peer != null) { peerStarting.set(false); return; }
         FlightRecorder.seq(TAG, "establishing peer socket (groupOwner=" + groupOwner + ")");
         PeerConnector.Callback cb = new PeerConnector.Callback() {
             @Override public void onSocketReady(Socket socket) {
                 if (peer != null) {
                     try { socket.close(); } catch (IOException ignored) {}
-                    peerStarting = false;
+                    peerStarting.set(false);
                     return;
                 }
                 startPeer(socket);
-                peerStarting = false;
+                peerStarting.set(false);
             }
             @Override public void onError(String message) {
-                peerStarting = false;
+                peerStarting.set(false);
                 FlightRecorder.event(TAG, "socket establish failed: " + message);
                 FlightRecorder.dump(FileTransferService.this, "socket establish failed");
                 sessionMgr.toError(message);

@@ -1,7 +1,6 @@
 package com.kisslink.pairing;
 
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -9,7 +8,6 @@ import android.util.Log;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.lifecycle.Observer;
 
 import com.kisslink.diag.FlightRecorder;
@@ -41,7 +39,6 @@ import com.kisslink.wifidirect.WifiDirectManager;
  * {@link NfcPairingController},latch 後把結果經 binder 餵進
  * {@link #onLatchedAsReader}/{@link #onLatchedAsTag}。
  */
-@RequiresApi(api = Build.VERSION_CODES.Q)
 public class PairingCoordinator {
 
     private static final String TAG = "PairingCoordinator";

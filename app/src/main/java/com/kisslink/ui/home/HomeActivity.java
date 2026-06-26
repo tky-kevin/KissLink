@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -17,7 +16,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -60,7 +58,6 @@ import java.util.List;
  * 只負責生命週期、權限、view binding、觀察 ViewModel 與轉發使用者意圖。
  */
 @AndroidEntryPoint
-@RequiresApi(api = Build.VERSION_CODES.Q)
 public class HomeActivity extends AppCompatActivity
         implements ProfileCardSheet.Host, SessionRenderer.Host {
 

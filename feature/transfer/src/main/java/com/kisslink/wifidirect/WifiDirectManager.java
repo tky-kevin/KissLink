@@ -7,11 +7,9 @@ import android.net.Network;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pInfo;
 import android.net.wifi.p2p.WifiP2pManager;
-import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.LiveData;
 
@@ -51,7 +49,6 @@ import com.kisslink.model.GroupCredential;
  *   onCleared: wifiDirectManager.reset()
  * </pre>
  */
-@RequiresApi(api = Build.VERSION_CODES.Q)
 public class WifiDirectManager implements WifiDirectEventCallback {
 
     private static final String TAG = "WifiDirectManager";
