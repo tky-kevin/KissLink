@@ -134,18 +134,74 @@ public final class HomeNfcDelegate {
      * @return true 表示就緒，false 表示已彈提示（呼叫端應放棄本次配對）。
      */
     public boolean connectivityReadyOrPrompt() {
-        if (!host.hasConnectivityPermissions()) {
-            host.requestPermissions();
-            host.toast(activity.getString(R.string.conn_need_perms));
-            if (nfc != null) nfc.resetLatched();
-            return false;
+        // 短路評估：權限不足時不查無線電，無線電未開時不查熱點（避免無謂的反射呼叫）。
+        boolean hasPerms = host.hasConnectivityPermissions();
+        PermissionHelper.Radio off = hasPerms ? PermissionHelper.firstDisabledRadio(activity) : null;
+        // 熱點開啟時 P2P 介面建不出來（ap0+wlan0 佔滿介面額度）→ 一律 BUSY(2)，重試無效。
+        // 與其讓使用者乾等 25 秒逾時，不如先擋下並提示關閉熱點。
+        boolean hotspotOn = hasPerms && off == null && PermissionHelper.isHotspotEnabled(activity);
+        switch (evaluateReadiness(hasPerms, off != null, hotspotOn)) {
+            case NEED_PERMS:
+                host.requestPermissions();
+                host.toast(activity.getString(R.string.conn_need_perms));
+                if (nfc != null) nfc.resetLatched();
+                return false;
+            case NEED_RADIO:
+                promptEnableRadio(off);
+                return false;
+            case HOTSPOT_ON:
+                promptDisableHotspot();
+                return false;
+            case READY:
+            default:
+                return true;
         }
-        PermissionHelper.Radio off = PermissionHelper.firstDisabledRadio(activity);
-        if (off != null) {
-            promptEnableRadio(off);
-            return false;
-        }
-        return true;
+    }
+
+    /** 配對前置就緒狀態。 */
+    enum Readiness { READY, NEED_PERMS, NEED_RADIO, HOTSPOT_ON }
+
+    /**
+     * 純函式版的就緒判定，不碰 Android 以便單元測試。
+     *
+     * <p>優先序固定為 權限 → 無線電 → 熱點：權限缺失時最優先（連 API 都不能呼叫），
+     * 其次無線電未開，最後才是熱點佔用介面。鎖住此優先序避免日後被改動打亂。
+     */
+    static Readiness evaluateReadiness(boolean hasPerms, boolean anyRadioOff, boolean hotspotOn) {
+        if (!hasPerms) return Readiness.NEED_PERMS;
+        if (anyRadioOff) return Readiness.NEED_RADIO;
+        if (hotspotOn) return Readiness.HOTSPOT_ON;
+        return Readiness.READY;
+    }
+
+    /** 提示關閉個人熱點，提供「前往設定」直達熱點/無線設定頁。 */
+    private void promptDisableHotspot() {
+        if (radioPromptShowing) return;
+        radioPromptShowing = true;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.conn_hotspot_title)
+                .setMessage(R.string.conn_hotspot_on)
+                .setNegativeButton(R.string.btn_cancel, null)
+                .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
+                    try {
+                        Intent tether = new Intent(Intent.ACTION_MAIN).setClassName(
+                                "com.android.settings", "com.android.settings.TetherSettings");
+                        activity.startActivity(tether);
+                    } catch (Exception e) {
+                        // OEM（如 MIUI）的熱點頁元件名不同 → 退回通用無線設定頁。
+                        try {
+                            activity.startActivity(new Intent(
+                                    android.provider.Settings.ACTION_WIRELESS_SETTINGS));
+                        } catch (Exception e2) {
+                            host.toast(activity.getString(R.string.conn_hotspot_on));
+                        }
+                    }
+                })
+                .setOnDismissListener(d -> {
+                    radioPromptShowing = false;
+                    if (nfc != null) nfc.resetLatched();
+                })
+                .show();
     }
 
     /** 提示開啟未啟用的無線電，提供「前往設定」直達系統設定頁。 */
