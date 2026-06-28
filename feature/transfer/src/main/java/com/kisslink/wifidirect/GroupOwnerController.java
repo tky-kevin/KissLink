@@ -58,11 +58,13 @@ class GroupOwnerController {
             return;
         }
 
-        // 1. 先移除可能殘存的舊 Group，避免 BUSY 錯誤
+        // 1. 先移除可能殘存的舊 Group，避免 BUSY 錯誤。
+        //    removeGroup 成功（表示真的有殘留 group）時，額外等 500 ms 讓驅動完成拆除，
+        //    再呼叫 createGroup，否則 P2P 狀態機還在過渡期，會立刻回 BUSY(2)。
         core.p2pManager.removeGroup(core.getChannel(), new WifiP2pManager.ActionListener() {
             @Override public void onSuccess() {
-                Log.d(TAG, "removeGroup success");
-                doCreateGroup();
+                Log.d(TAG, "removeGroup success, settling 500ms before createGroup");
+                core.mainHandler.postDelayed(() -> doCreateGroup(), 500);
             }
             @Override public void onFailure(int r) {
                 Log.w(TAG, "removeGroup failed: " + r + " (expected if no group)");
@@ -77,7 +79,7 @@ class GroupOwnerController {
 
     @SuppressLint("MissingPermission")
     private void doCreateGroup(final int attempt) {
-        core.setState(ConnectionState.CREATING_GROUP);
+        core.dispatch(WifiDirectEvent.GO_CREATE_INITIATED);
 
         final String ssid       = SSID_PREFIX + generateShortId(); // e.g. "DIRECT-KL-A3F2"
         final String passphrase = generatePassphrase();            // 16 char
@@ -94,7 +96,7 @@ class GroupOwnerController {
 
         core.startTimeout(() -> {
             Log.e(TAG, "createGroup timeout");
-            core.setState(ConnectionState.ERROR);
+            core.dispatch(WifiDirectEvent.GO_CREATE_TIMED_OUT);
             core.postError("建立群組逾時，請確認 Wi-Fi 已開啟並重試");
         });
 
@@ -137,7 +139,7 @@ class GroupOwnerController {
                             }, WifiDirectCore.P2P_TRANSIENT_RETRY_MS);
                         } else {
                             core.cancelTimeout();
-                            core.setState(ConnectionState.ERROR);
+                            core.dispatch(WifiDirectEvent.GO_CREATE_FAILED);
                             core.postError("建立 P2P 群組失敗：" + WifiDirectCore.reasonToString(reason2));
                         }
                     }
@@ -171,7 +173,7 @@ class GroupOwnerController {
 
             if (ssid == null || pass == null) {
                 Log.e(TAG, "Failed to get SSID or Passphrase from system or fallback");
-                core.setState(ConnectionState.ERROR);
+                core.dispatch(WifiDirectEvent.GO_CREDENTIAL_UNAVAILABLE);
                 core.postError("無法取得連線憑證，請重試");
                 return;
             }
@@ -182,7 +184,7 @@ class GroupOwnerController {
                 Log.d(TAG, "GroupCredential ready (ssid=" + ssid + ")");
             }
             core.credentialLd.postValue(cred);
-            core.setState(ConnectionState.HOSTING);
+            core.dispatch(WifiDirectEvent.GO_GROUP_READY);
             goPoller.start(); // 啟動 Client 偵測輪詢（廣播可能不可靠）
         });
     }

@@ -42,7 +42,7 @@ class GoDetectionPoller {
                                 + group.getClientList().size() + " peer(s))");
                         core.cancelTimeout();
                         stop();
-                        core.setState(ConnectionState.CONNECTED);
+                        core.dispatch(WifiDirectEvent.GO_CLIENT_DETECTED);
                     } else {
                         // 尚未有 Client，繼續輪詢
                         if (core.currentState() == ConnectionState.HOSTING) {
