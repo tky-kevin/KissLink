@@ -35,6 +35,10 @@ class WifiDirectCore {
     /**
      * 暫時性 P2P 失敗（BUSY/ERROR）的重試設定。切換傳輸/接收太快時，框架可能還在
      * 拆除上一場群組而回 BUSY(2)/ERROR(0)；短延遲後重試即可成功，毋須讓使用者重來。
+     *
+     * <p>注意：當本機<b>熱點開著</b>時的 BUSY 並非「暫時性、會沉澱」的失敗（ap0+wlan0
+     * 介面組合已耗盡），重試再多次也不會成功，只會讓注定失敗的連線拖更久才報錯。
+     * 故此窗口刻意維持保守；治本應靠關閉熱點（前置檢查），而非加寬重試。
      */
     static final int  P2P_TRANSIENT_MAX_RETRY = 3;
     static final long P2P_TRANSIENT_RETRY_MS  = 1_500;
@@ -92,7 +96,7 @@ class WifiDirectCore {
         Log.w(TAG, "P2P channel lost, reinitializing...");
         p2pChannel = p2pManager.initialize(
                 appContext, Looper.getMainLooper(), this::onChannelDisconnected);
-        setState(ConnectionState.DISCONNECTED);
+        dispatch(WifiDirectEvent.CHANNEL_LOST);
     }
 
     // ── 狀態機 ─────────────────────────────────────────────────
@@ -101,7 +105,22 @@ class WifiDirectCore {
         return stateLd.getValue();
     }
 
-    void setState(ConnectionState s) {
+    /**
+     * 狀態機的<b>唯一</b>外部入口：各角色控制器投遞 {@link WifiDirectEvent} 意圖，由此處
+     * 集中決定目標狀態並寫入。非法（未知）來源狀態時記錄到 FlightRecorder 供診斷，但不阻擋轉移
+     * （保持與舊有直接 {@code setState} 呼叫相同的行為）。
+     */
+    void dispatch(@NonNull WifiDirectEvent event) {
+        ConnectionState from = stateLd.getValue();
+        if (!event.isLegalFrom(from)) {
+            FlightRecorder.event(TAG,
+                    "unexpected wifi transition " + from + " --" + event + "--> " + event.target);
+        }
+        applyState(event.target);
+    }
+
+    /** 狀態機的唯一寫入點（private，僅由 {@link #dispatch} 呼叫）。 */
+    private void applyState(ConnectionState s) {
         // 到達任何終態 → 釋放重入守衛,允許下一場 createGroup/connect。
         if (s == ConnectionState.CONNECTED || s == ConnectionState.ERROR
                 || s == ConnectionState.DISCONNECTED || s == ConnectionState.IDLE) {

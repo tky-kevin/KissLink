@@ -162,7 +162,7 @@ public class WifiDirectManager implements WifiDirectEventCallback {
         // 注意：不在此處呼叫 removeGroup()，因為 PairingActivity 結束時會觸發 reset，
         // 但此時傳輸可能才剛要開始。Group 的生命週期應由系統或使用者手動結束。
         clientConnector.disconnectAsClient();
-        core.setState(ConnectionState.IDLE);
+        core.dispatch(WifiDirectEvent.RESET);
         Log.d(TAG, "WifiDirectManager reset");
     }
 
@@ -206,7 +206,7 @@ public class WifiDirectManager implements WifiDirectEventCallback {
             Log.w(TAG, "Wi-Fi P2P disabled");
             ConnectionState cs = core.currentState();
             if (cs == ConnectionState.CONNECTED || cs == ConnectionState.HOSTING) {
-                core.setState(ConnectionState.DISCONNECTED);
+                core.dispatch(WifiDirectEvent.P2P_DISABLED);
             }
         }
     }
@@ -246,7 +246,7 @@ public class WifiDirectManager implements WifiDirectEventCallback {
             Log.w(TAG, "P2P connection dropped or failed while connecting");
             goPoller.stop();
             clientConnector.stopClientPoll();
-            core.setState(ConnectionState.DISCONNECTED);
+            core.dispatch(WifiDirectEvent.CONNECTION_DROPPED);
         }
     }
 

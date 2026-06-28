@@ -65,7 +65,7 @@ class ClientConnector {
             return;
         }
         core.starting = true;
-        core.setState(ConnectionState.CONNECTING);
+        core.dispatch(WifiDirectEvent.CLIENT_CONNECT_INITIATED);
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Connecting as client (silent P2P) to ssid=" + credential.getSsid());
         }
@@ -100,7 +100,7 @@ class ClientConnector {
 
         core.startTimeout(() -> {
             Log.e(TAG, "connectAsClient timeout");
-            core.setState(ConnectionState.ERROR);
+            core.dispatch(WifiDirectEvent.CLIENT_CONNECT_TIMED_OUT);
             core.postError("連線逾時，請靠近後重試");
         });
 
@@ -138,7 +138,7 @@ class ClientConnector {
                 } else {
                     core.cancelTimeout();
                     stopClientPoll();
-                    core.setState(ConnectionState.ERROR);
+                    core.dispatch(WifiDirectEvent.CLIENT_CONNECT_FAILED);
                     core.postError("P2P 連線失敗：" + WifiDirectCore.reasonToString(reason));
                 }
             }
@@ -157,7 +157,7 @@ class ClientConnector {
             // 部分裝置不回報 P2P 網路至 ConnectivityManager，等待會造成 timeout。
             core.cancelTimeout();
             Log.i(TAG, "Client: P2P group formed -> CONNECTED; binding network in background");
-            core.setState(ConnectionState.CONNECTED);
+            core.dispatch(WifiDirectEvent.CLIENT_GROUP_FORMED);
             bindToP2pNetwork();
         }
     }
@@ -201,7 +201,7 @@ class ClientConnector {
                 clientNetwork = network;
                 core.connManager.bindProcessToNetwork(network);
                 Log.i(TAG, "P2P network bound: " + network + " (real P2P, no INTERNET)");
-                core.setState(ConnectionState.CONNECTED);
+                core.dispatch(WifiDirectEvent.CLIENT_NETWORK_BOUND);
             }
 
             @Override
@@ -210,7 +210,7 @@ class ClientConnector {
                 Log.w(TAG, "P2P network lost");
                 core.connManager.bindProcessToNetwork(null);
                 clientNetwork = null;
-                core.setState(ConnectionState.DISCONNECTED);
+                core.dispatch(WifiDirectEvent.CLIENT_NETWORK_LOST);
             }
         };
 

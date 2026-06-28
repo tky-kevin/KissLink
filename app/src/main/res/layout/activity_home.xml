@@ -290,6 +290,49 @@
                 android:text="@string/view_batch" />
         </LinearLayout>
 
+        <!-- 剪貼板快速分享（有文字時顯示） -->
+        <LinearLayout
+            android:id="@+id/clipboardRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_chip"
+            android:foreground="@drawable/ripple_chip"
+            android:clickable="true"
+            android:focusable="true"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvClipboardPreview"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:includeFontPadding="false"
+                android:textColor="@color/beam_ink"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:drawablePadding="8dp" />
+
+            <ImageButton
+                android:id="@+id/ibClipboardDismiss"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_close"
+                android:scaleType="centerInside"
+                android:padding="6dp"
+                android:contentDescription="@string/btn_cancel" />
+
+        </LinearLayout>
+
         <!-- 內容選擇 -->
         <LinearLayout
             android:id="@+id/pickRow"

@@ -46,6 +46,46 @@ public class PeerConnection {
         }
     }
 
+    // ── Resume transfer state ─────────────────────────────────
+    // Written by PeerSender/PeerReceiver on unexpected disconnect; read by the next PeerConnection.
+
+    static final class PendingSend {
+        final OutItem outItem;
+        final long offsetBytes; // bytes already confirmed written to socket
+        PendingSend(OutItem item, long offset) { outItem = item; offsetBytes = offset; }
+    }
+
+    static final class PendingRecv {
+        final String name, mime;
+        final long totalSize, received;
+        @Nullable final android.net.Uri target;
+        final byte itemType;
+        final int fileIndex, fileCount;
+        final long batchId;
+
+        PendingRecv(String name, String mime, long totalSize,
+                    @Nullable android.net.Uri target, long received,
+                    byte itemType, int fileIndex, int fileCount, long batchId) {
+            this.name = name; this.mime = mime; this.totalSize = totalSize;
+            this.target = target; this.received = received; this.itemType = itemType;
+            this.fileIndex = fileIndex; this.fileCount = fileCount; this.batchId = batchId;
+        }
+    }
+
+    final java.util.concurrent.atomic.AtomicReference<PendingSend> pendingSendRef =
+            new java.util.concurrent.atomic.AtomicReference<>();
+    final java.util.concurrent.atomic.AtomicReference<PendingRecv> pendingRecvRef =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    /** Called by {@link FileTransferService} when creating a new connection after a disconnect. */
+    public void setPendingState(@Nullable PendingSend ps, @Nullable PendingRecv pr) {
+        pendingSendRef.set(ps);
+        pendingRecvRef.set(pr);
+    }
+
+    @Nullable public PendingSend takePendingSend() { return pendingSendRef.getAndSet(null); }
+    @Nullable public PendingRecv takePendingRecv() { return pendingRecvRef.getAndSet(null); }
+
     public interface Listener {
         void onItemCompleted(boolean sent, String name, long size, long avgSpeedBps,
                              boolean success, byte itemType,
@@ -118,8 +158,8 @@ public class PeerConnection {
 
         PeerSender.FrameWriter fw = (header, payload, off, len) -> writeFrame(header, payload, off, len);
         PeerSender sender = new PeerSender(context, outQueue, fw, progressLd, listener,
-                selfName, selfAvatarThumb, verbose);
-        receiver = new PeerReceiver(context, socket, progressLd, listener, verbose);
+                selfName, selfAvatarThumb, verbose, pendingSendRef);
+        receiver = new PeerReceiver(context, socket, progressLd, listener, verbose, pendingRecvRef);
         receiver.setRunning(true); // 對稱於 close() 的 setRunning(false)；漏設會讓 run() 迴圈一次都不跑→立即 onDisconnected
 
         senderThread    = new Thread(sender, "peer-sender");
