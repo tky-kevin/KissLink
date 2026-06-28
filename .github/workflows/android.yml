@@ -23,7 +23,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 專案已含 gradle wrapper（8.13）；CI 仍用 action 安裝對應 Gradle 並以 `gradle` 指令建置。
+      # 專案已含 gradle wrapper（9.5.1）；以 ./gradlew 建置。
       - name: Build release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 

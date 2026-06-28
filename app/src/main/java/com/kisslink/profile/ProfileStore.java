@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -25,6 +26,8 @@ import java.io.FileOutputStream;
  * </ul>
  */
 public final class ProfileStore {
+
+    private static final String TAG = "ProfileStore";
 
     private static final String PREFS = "kisslink_profile";
     private static final String K_NAME = "name";
@@ -82,7 +85,10 @@ public final class ProfileStore {
                 JSONObject o = arr.getJSONObject(i);
                 p.addField(new Profile.Field(o.optString("l", ""), o.optString("v", "")));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            // 損毀的 prefs JSON：回傳已解析的部分欄位，但留下診斷紀錄。
+            Log.w(TAG, "corrupt profile prefs, returning partial fields", e);
+        }
         return p;
     }
 
@@ -96,7 +102,9 @@ public final class ProfileStore {
                 o.put("l", f.getLabel() == null ? "" : f.getLabel().trim());
                 o.put("v", f.getValue() == null ? "" : f.getValue().trim());
                 arr.put(o);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+                // JSONObject.put(String, String) 對非空字串不會丟；保留 catch 純為防禦。
+            }
         }
         prefs.edit()
                 .putString(K_NAME, p.getName() == null ? "" : p.getName().trim())
@@ -167,6 +175,7 @@ public final class ProfileStore {
             if (scaled != square) scaled.recycle();
             return true;
         } catch (Exception e) {
+            Log.w(TAG, "saveAvatarBitmap failed", e);
             return false;
         }
     }
