@@ -98,4 +98,4 @@ notifications, and scoped media access for picking files/photos.
 
 ## Known issues
 
-See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for the current list of pending work and limitations.
+See [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md) (ch. 7) for the current list of pending work and limitations.
