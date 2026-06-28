@@ -1,6 +1,7 @@
 package com.kisslink.util;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
@@ -145,6 +146,32 @@ public class PermissionHelper {
         WifiManager wm = (WifiManager)
                 context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         return wm != null && wm.isWifiEnabled();
+    }
+
+    /**
+     * 個人熱點（SoftAP）是否開啟。
+     *
+     * <p>為何重要：Wi-Fi 晶片的並存介面額度多半只有兩個；熱點開著時 {@code ap0}(AP) +
+     * {@code wlan0}(STA) 已佔滿，Wi-Fi Direct 想再開 {@code p2p} 介面會被 HAL 拒絕
+     * （{@code bestIfaceCreationProposal is null}）→ createGroup/connect 一律回 BUSY(2)。
+     * 重試無效，因為熱點不關介面就不會空出來。故配對前先擋下並提示關閉。
+     *
+     * <p>無公開 API 可查自身 SoftAP 狀態，改用反射呼叫隱藏的 {@code WifiManager#isWifiApEnabled()}。
+     * 反射被新版系統擋下或拋例外時一律回 {@code false}（保守：偵測不到就不擋，避免誤擋正常配對）。
+     */
+    @SuppressLint("PrivateApi")
+    public static boolean isHotspotEnabled(@NonNull Context context) {
+        WifiManager wm = (WifiManager)
+                context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        if (wm == null) return false;
+        try {
+            java.lang.reflect.Method m = wm.getClass().getDeclaredMethod("isWifiApEnabled");
+            m.setAccessible(true);
+            Object r = m.invoke(wm);
+            return (r instanceof Boolean) && (Boolean) r;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /**
