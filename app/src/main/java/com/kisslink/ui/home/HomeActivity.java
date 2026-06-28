@@ -259,6 +259,9 @@ public class HomeActivity extends AppCompatActivity
             try { unbindService(connection); } catch (IllegalArgumentException ignored) {}
             bound = false;
             binder = null;
+            // binder 已失效：清掉 nfcDelegate 的 binderReady，否則下次 onResume 會在
+            // bindService 非同步回呼前就以 stale 旗標走進 requireBinder() → 閃退。
+            nfcDelegate.onBinderLost();
         }
     }
 
@@ -304,7 +307,8 @@ public class HomeActivity extends AppCompatActivity
         @Override public void onServiceConnected(ComponentName name, IBinder service) {
             binder = (FileTransferService.TransferBinder) service;
             nfcDelegate.onBinderReady();
-            binder.getSessionState().observe(HomeActivity.this, sessionObserver);
+            androidx.lifecycle.LiveData<SessionState> state = binder.getSessionState();
+            if (state != null) state.observe(HomeActivity.this, sessionObserver);
             binder.getIncomingCard().observe(HomeActivity.this, incomingCardObserver);
             binder.getReceivedItem().observe(HomeActivity.this, receivedItemObserver);
         }
@@ -503,7 +507,7 @@ public class HomeActivity extends AppCompatActivity
     private final HomeNfcDelegate.Host nfcHost = new HomeNfcDelegate.Host() {
         @Override @NonNull
         public FileTransferService.TransferBinder requireBinder() {
-            // nfcDelegate 只在 binder != null 時呼叫此方法
+            if (binder == null) throw new IllegalStateException("requireBinder: binder is null");
             return binder;
         }
         @Override public void haptic() { HomeActivity.this.haptic(); }
