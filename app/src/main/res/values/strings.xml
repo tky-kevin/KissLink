@@ -90,7 +90,7 @@
     <string name="history_filter_all">全部</string>
 
     <!-- 剪貼板快速分享 -->
-    <string name="clipboard_share_prefix">分享：</string>
+    <string name="clipboard_share_prefix">分享：%s</string>
     <string name="clipboard_added">剪貼板文字已加入待傳清單</string>
 
     <!-- 其它 -->

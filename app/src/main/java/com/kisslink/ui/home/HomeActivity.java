@@ -58,11 +58,7 @@ import java.util.List;
 public class HomeActivity extends AppCompatActivity
         implements ProfileCardSheet.Host, SessionRenderer.Host {
 
-    private static final String TAG = "HomeActivity";
-
     // ── Views ──
-    private MaterialButton btnPickFiles, btnPickMedia;
-    private ImageButton ibHistory, ibSettings;
     private ShapeableImageView ivAvatar;
 
     private TransferListPresenter transferList;
@@ -89,9 +85,6 @@ public class HomeActivity extends AppCompatActivity
         Uri uri = item.contentUri != null ? Uri.parse(item.contentUri) : null;
         transferList.updateReceivedThumbnail(item.name, uri, item.mime);
     };
-
-    // ── 主執行緒 Handler（延遲回復用）──
-    private final Handler main = new Handler(Looper.getMainLooper());
 
     // ── 剪貼板快速分享 ──
     private View clipboardRow;
@@ -164,12 +157,13 @@ public class HomeActivity extends AppCompatActivity
         View pickRow        = findViewById(R.id.pickRow);
         LinearLayout receivedBanner = findViewById(R.id.receivedBanner);
         TextView tvReceived = findViewById(R.id.tvReceived);
-        btnPickFiles= findViewById(R.id.btnPickFiles);
-        btnPickMedia= findViewById(R.id.btnPickMedia);
-        ibHistory   = findViewById(R.id.ibHistory);
-        ibSettings  = findViewById(R.id.ibSettings);
+        MaterialButton btnPickFiles = findViewById(R.id.btnPickFiles);
+        MaterialButton btnPickMedia = findViewById(R.id.btnPickMedia);
+        ImageButton ibHistory   = findViewById(R.id.ibHistory);
+        ImageButton ibSettings  = findViewById(R.id.ibSettings);
         ivAvatar    = findViewById(R.id.ivAvatar);
 
+        Handler main = new Handler(Looper.getMainLooper());
         TransferUiController ui = new TransferUiController(
                 this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
 
@@ -189,11 +183,11 @@ public class HomeActivity extends AppCompatActivity
         });
 
         btnPickFiles.setOnClickListener(v -> {
-            if (!ensurePerms()) return;
+            if (lacksPerms()) return;
             filePicker.launch(new String[]{"*/*"});
         });
         btnPickMedia.setOnClickListener(v -> {
-            if (!ensurePerms()) return;
+            if (lacksPerms()) return;
             mediaPicker.launch(new PickVisualMediaRequest.Builder()
                     .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
                     .build());
@@ -236,7 +230,8 @@ public class HomeActivity extends AppCompatActivity
             sendStack.updateButton();
         });
         viewModel.getReceivedCount().observe(this, count -> {
-            if (count != null && count > 0) sessionRenderer.showReceivedBanner(count);
+            int n = count != null ? count : 0;
+            if (n > 0) sessionRenderer.showReceivedBanner(n);
             else sessionRenderer.hideReceivedBanner();
         });
         getSupportFragmentManager().setFragmentResultListener(
@@ -404,7 +399,7 @@ public class HomeActivity extends AppCompatActivity
             clipboardRow.setVisibility(View.GONE);
             return;
         }
-        tvClipboardPreview.setText(getString(R.string.clipboard_share_prefix) + content);
+        tvClipboardPreview.setText(getString(R.string.clipboard_share_prefix, content));
         tvClipboardPreview.setTag(content);
         clipboardRow.setVisibility(View.VISIBLE);
     }
@@ -427,10 +422,10 @@ public class HomeActivity extends AppCompatActivity
     }
 
     // ── 工具 ──
-    private boolean ensurePerms() {
-        if (PermissionHelper.hasPermissions(this)) return true;
+    private boolean lacksPerms() {
+        if (PermissionHelper.hasPermissions(this)) return false;
         PermissionHelper.requestPermissions(this);
-        return false;
+        return true;
     }
 
     private void haptic() {
