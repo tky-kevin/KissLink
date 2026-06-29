@@ -134,13 +134,18 @@ public final class HomeNfcDelegate {
      * @return true 表示就緒，false 表示已彈提示（呼叫端應放棄本次配對）。
      */
     public boolean connectivityReadyOrPrompt() {
-        // 短路評估：權限不足時不查無線電，無線電未開時不查熱點（避免無謂的反射呼叫）。
+        // 短路評估：前一關不過就不查後面（避免無謂的系統查詢/反射呼叫）。
         boolean hasPerms = host.hasConnectivityPermissions();
         PermissionHelper.Radio off = hasPerms ? PermissionHelper.firstDisabledRadio(activity) : null;
+        boolean radioReady = hasPerms && off == null;
+        // 定位服務主開關：API 32 及以下 Wi-Fi Direct 探索/連線需要它，關閉會靜默失敗。
+        boolean locationOff = radioReady
+                && PermissionHelper.isLocationServicesRequired()
+                && !PermissionHelper.isLocationEnabled(activity);
         // 熱點開啟時 P2P 介面建不出來（ap0+wlan0 佔滿介面額度）→ 一律 BUSY(2)，重試無效。
         // 與其讓使用者乾等 25 秒逾時，不如先擋下並提示關閉熱點。
-        boolean hotspotOn = hasPerms && off == null && PermissionHelper.isHotspotEnabled(activity);
-        switch (evaluateReadiness(hasPerms, off != null, hotspotOn)) {
+        boolean hotspotOn = radioReady && !locationOff && PermissionHelper.isHotspotEnabled(activity);
+        switch (evaluateReadiness(hasPerms, off != null, locationOff, hotspotOn)) {
             case NEED_PERMS:
                 host.requestPermissions();
                 host.toast(activity.getString(R.string.conn_need_perms));
@@ -148,6 +153,9 @@ public final class HomeNfcDelegate {
                 return false;
             case NEED_RADIO:
                 promptEnableRadio(off);
+                return false;
+            case NEED_LOCATION:
+                promptEnableLocation();
                 return false;
             case HOTSPOT_ON:
                 promptDisableHotspot();
@@ -159,17 +167,20 @@ public final class HomeNfcDelegate {
     }
 
     /** 配對前置就緒狀態。 */
-    enum Readiness { READY, NEED_PERMS, NEED_RADIO, HOTSPOT_ON }
+    enum Readiness { READY, NEED_PERMS, NEED_RADIO, NEED_LOCATION, HOTSPOT_ON }
 
     /**
      * 純函式版的就緒判定，不碰 Android 以便單元測試。
      *
-     * <p>優先序固定為 權限 → 無線電 → 熱點：權限缺失時最優先（連 API 都不能呼叫），
-     * 其次無線電未開，最後才是熱點佔用介面。鎖住此優先序避免日後被改動打亂。
+     * <p>優先序固定為 權限 → 無線電 → 定位服務 → 熱點：權限缺失時最優先（連 API 都不能呼叫），
+     * 其次無線電未開，再來是舊版所需的定位服務主開關，最後才是熱點佔用介面。
+     * 鎖住此優先序避免日後被改動打亂。
      */
-    static Readiness evaluateReadiness(boolean hasPerms, boolean anyRadioOff, boolean hotspotOn) {
+    static Readiness evaluateReadiness(boolean hasPerms, boolean anyRadioOff,
+                                       boolean locationRequiredButOff, boolean hotspotOn) {
         if (!hasPerms) return Readiness.NEED_PERMS;
         if (anyRadioOff) return Readiness.NEED_RADIO;
+        if (locationRequiredButOff) return Readiness.NEED_LOCATION;
         if (hotspotOn) return Readiness.HOTSPOT_ON;
         return Readiness.READY;
     }
@@ -195,6 +206,29 @@ public final class HomeNfcDelegate {
                         } catch (Exception e2) {
                             host.toast(activity.getString(R.string.conn_hotspot_on));
                         }
+                    }
+                })
+                .setOnDismissListener(d -> {
+                    radioPromptShowing = false;
+                    if (nfc != null) nfc.resetLatched();
+                })
+                .show();
+    }
+
+    /** 提示開啟定位服務主開關，提供「前往設定」直達定位來源設定頁。 */
+    private void promptEnableLocation() {
+        if (radioPromptShowing) return;
+        radioPromptShowing = true;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.conn_location_title)
+                .setMessage(R.string.conn_location_off)
+                .setNegativeButton(R.string.btn_cancel, null)
+                .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
+                    try {
+                        activity.startActivity(new Intent(
+                                android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    } catch (Exception e) {
+                        host.toast(activity.getString(R.string.conn_location_off));
                     }
                 })
                 .setOnDismissListener(d -> {
