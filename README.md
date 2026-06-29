@@ -81,10 +81,17 @@ Outputs:
 
 ## Continuous integration
 
-`.github/workflows/android.yml` runs on every push to `main` (or manual dispatch):
-it builds the **signed release APK** and publishes it to **GitHub Releases**
-(tagged `v1.0.<run-number>`). The release APK is signed with the Android debug key so it
-can be installed directly; switch to a real upload key before publishing to the Play Store.
+Two workflows run on every push to `main`:
+
+- **`.github/workflows/ci.yml`** (the badge above) — the quality gate, on push **and** pull
+  requests: ktlint + spotless (all modules), Android Lint (all modules), unit tests (all
+  modules), then a debug build.
+- **`.github/workflows/android.yml`** — builds the **signed release APK** and publishes it to
+  **GitHub Releases**, tagged `v<versionName>.<run-number>` (e.g. `v1.1.42`, derived from
+  `app/build.gradle`).
+
+The release APK is signed with the Android debug key so it can be installed directly; switch to a
+real upload key before publishing to the Play Store.
 
 ## Permissions
 
