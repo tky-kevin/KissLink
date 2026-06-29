@@ -79,7 +79,7 @@ public class TransferRepository {
 
     // ── 工廠方法：從傳輸進度建立紀錄 ──────────────────────────────
 
-    public TransferRecordEntity buildRecord(
+    public static TransferRecordEntity buildRecord(
             String direction,
             String fileName,
             long sizeBytes,
@@ -90,7 +90,7 @@ public class TransferRepository {
                 direction, fileName, sizeBytes, success, avgSpeedBps, filePath, null, null, 0L);
     }
 
-    public TransferRecordEntity buildRecord(
+    public static TransferRecordEntity buildRecord(
             String direction,
             String fileName,
             long sizeBytes,

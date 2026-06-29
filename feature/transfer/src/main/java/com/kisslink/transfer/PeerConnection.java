@@ -312,9 +312,11 @@ public class PeerConnection {
             int freq = wi.getFrequency();
             // 一律寫入 flight recorder（非僅 verbose）：2.4GHz 常因 SCC 把 P2P 釘在慢頻段，
             // dump 時可據此解釋「為何傳輸偏慢」（見 com.kisslink.wifidirect.WifiBand）。
+            // 注意：這是 STA（一般 Wi-Fi）介面的頻段，非 P2P 群組介面——但因 SCC 會把 P2P
+            // 群組釘到 GO 的 STA 頻段，讀 STA 正是用來解釋傳輸速度，故標明 (STA) 以免誤讀。
             com.kisslink.diag.FlightRecorder.event(
                     TAG,
-                    "LINK band="
+                    "LINK(STA) band="
                             + com.kisslink.wifidirect.WifiBand.label(freq)
                             + " freq="
                             + freq
