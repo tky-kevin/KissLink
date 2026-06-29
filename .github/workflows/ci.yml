@@ -28,15 +28,15 @@ jobs:
       - name: Run spotless (Java)
         run: ./gradlew spotlessCheck --no-daemon
 
-      - name: Run Android Lint
-        run: ./gradlew :app:lintDebug --no-daemon
+      - name: Run Android Lint (all modules)
+        run: ./gradlew lintDebug --no-daemon
 
       - name: Upload lint results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lint-results
-          path: app/build/reports/
+          path: '**/build/reports/'
 
   # ── Stage 2: 單元測試（< 5 分鐘）──
   unit-test:
@@ -54,15 +54,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: Run unit tests (all modules)
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: app/build/reports/tests/
+          path: '**/build/reports/tests/'
 
   # ── Stage 3: 建置（< 10 分鐘）──
   build:
