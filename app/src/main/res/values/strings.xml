@@ -44,6 +44,8 @@
     <string name="conn_need_wifi">請先開啟 Wi-Fi 才能建立連線</string>
     <string name="conn_hotspot_title">請先關閉個人熱點</string>
     <string name="conn_hotspot_on">偵測到「個人熱點」開啟中。Wi-Fi Direct 需要 Wi-Fi 晶片的介面資源，熱點開啟時無法建立連線。請關閉熱點後再碰一下重試。</string>
+    <string name="conn_location_title">請先開啟定位服務</string>
+    <string name="conn_location_off">此 Android 版本的 Wi-Fi Direct 需要「定位服務」開啟才能探索並連接對方裝置。請開啟定位後再碰一下重試。</string>
     <string name="action_open_settings">前往設定</string>
 
     <!-- 內容選擇 / 傳送 -->

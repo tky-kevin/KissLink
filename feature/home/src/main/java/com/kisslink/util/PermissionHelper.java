@@ -175,6 +175,28 @@ public class PermissionHelper {
     }
 
     /**
+     * Wi-Fi Direct 是否需要「定位服務」主開關開啟。
+     *
+     * <p>API 33+ 改用 {@code NEARBY_WIFI_DEVICES} 執行期權限，P2P 不再依賴定位服務；
+     * 但 API 32 及以下（含本專案 minSdk 29）的 Wi-Fi P2P 探索/連線仍要求<b>定位服務主開關</b>
+     * 開啟——權限授予但主開關關閉時，{@code discoverPeers}/{@code connect} 會靜默失敗、
+     * 無錯誤回呼，使用者只看到配對卡住。故在舊版上需於配對前檢查並提示。
+     */
+    public static boolean isLocationServicesRequired() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU;
+    }
+
+    /**
+     * 定位服務主開關是否開啟。用 {@link android.location.LocationManager#isLocationEnabled()}
+     * （API 28+，本專案 minSdk 29 下恆可用）。取不到服務時保守回 {@code false}。
+     */
+    public static boolean isLocationEnabled(@NonNull Context context) {
+        android.location.LocationManager lm = (android.location.LocationManager)
+                context.getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+        return lm != null && lm.isLocationEnabled();
+    }
+
+    /**
      * 回傳第一個尚未開啟的無線電（依 NFC → 藍牙 → Wi-Fi 順序）；全部已開啟回 {@code null}。
      * 供配對前置檢查決定要提示使用者開啟哪一項。
      */
