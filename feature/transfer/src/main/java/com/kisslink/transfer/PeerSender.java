@@ -172,10 +172,38 @@ final class PeerSender implements Runnable {
                                     // previous connection
                                     if (resumeFrom > 0) {
                                         long remaining = resumeFrom;
+                                        byte[] skipBuf = null;
                                         while (remaining > 0) {
                                             long skipped = in.skip(remaining);
-                                            if (skipped <= 0) break;
-                                            remaining -= skipped;
+                                            if (skipped > 0) {
+                                                remaining -= skipped;
+                                                continue;
+                                            }
+                                            // skip() can return 0 without being at EOF (common for
+                                            // content:// streams); fall back to reading to advance,
+                                            // and only stop on a genuine EOF.
+                                            if (skipBuf == null) {
+                                                skipBuf = new byte[(int) Math.min(remaining, 8192)];
+                                            }
+                                            int r =
+                                                    in.read(
+                                                            skipBuf,
+                                                            0,
+                                                            (int)
+                                                                    Math.min(
+                                                                            remaining,
+                                                                            skipBuf.length));
+                                            if (r < 0) {
+                                                // Source is shorter than the resume offset — cannot
+                                                // safely resume; fail rather than send misaligned
+                                                // bytes (caller re-saves PendingSend / drops).
+                                                throw new IOException(
+                                                        "resume skip hit EOF at "
+                                                                + (resumeFrom - remaining)
+                                                                + "/"
+                                                                + resumeFrom);
+                                            }
+                                            remaining -= r;
                                         }
                                     }
                                     while (true) {

@@ -37,7 +37,10 @@ public class FileTransferService extends Service {
     // ── Core components ───────────────────────────────────────
     private WifiDirectManager wifi;
     private PairingCoordinator coordinator;
-    @Nullable private PeerConnection peer;
+    // volatile: assigned on the PeerConnector bg thread (startPeer ← onSocketReady) but read on
+    // the main thread (sendItems / handleLatch / establishPeer) — without it those reads can see
+    // a stale null or a half-constructed PeerConnection.
+    @Nullable private volatile PeerConnection peer;
     private boolean isGroupOwner = false;
     private final AtomicBoolean peerStarting = new AtomicBoolean(false);
     private final Handler mainHandler = new Handler(android.os.Looper.getMainLooper());
@@ -47,6 +50,13 @@ public class FileTransferService extends Service {
     // (startPeer).
     @Nullable private volatile PeerConnection.PendingSend pendingSend;
     @Nullable private volatile PeerConnection.PendingRecv pendingRecv;
+
+    // Set true by explicit user teardown (cancel / disconnect / interruptPairing) so the async
+    // onDisconnected those calls trigger DROPS the resume state instead of saving it — otherwise a
+    // user-cancelled transfer would silently auto-resume on the next pairing. Deliberately NOT set
+    // by handleLatch's dirty reconnect, which must preserve resume so a same-peer re-tap after a
+    // network drop can continue where it left off.
+    private volatile boolean discardResumeState = false;
 
     // ── Extracted managers ─────────────────────────────────────
     private SessionManager sessionMgr;
@@ -112,6 +122,7 @@ public class FileTransferService extends Service {
         }
 
         public void cancel() {
+            discardResumeState = true;
             teardownPeer();
             stopSelf();
         }
@@ -120,6 +131,7 @@ public class FileTransferService extends Service {
             mainHandler.post(
                     () -> {
                         if (sessionMgr.isPendingReset()) return;
+                        discardResumeState = true;
                         teardownSession();
                         refreshLocalCapabilities(); // 閒置邊界:已回待機,為下一場抓最新 5GHz 能力
                         createCoordinator();
@@ -132,6 +144,7 @@ public class FileTransferService extends Service {
             mainHandler.post(
                     () -> {
                         if (sessionMgr.isPendingReset()) return;
+                        discardResumeState = true;
                         sessionMgr.resetSession();
                         peerStarting.set(false);
                         teardownPeer();
@@ -408,6 +421,9 @@ public class FileTransferService extends Service {
     }
 
     private void startPeer(@NonNull Socket socket) {
+        // Fresh connection — clear any stale discard flag (e.g. a user disconnect that fired with
+        // no live peer) so it can't suppress this connection's first real disconnect.
+        discardResumeState = false;
         com.kisslink.profile.ProfileStore ps = com.kisslink.profile.ProfileStore.get(this);
         String selfName = ps.name();
         byte[] selfAvatar = ps.avatarThumbBytes();
@@ -471,8 +487,24 @@ public class FileTransferService extends Service {
                                 Log.i(TAG, "Peer disconnected");
                                 mainHandler.post(
                                         () -> {
-                                            pendingSend = ps2;
-                                            pendingRecv = pr2;
+                                            if (discardResumeState) {
+                                                // User-initiated teardown: drop resume state and
+                                                // delete any kept partial file, rather than
+                                                // auto-resuming a transfer the user cancelled.
+                                                discardResumeState = false;
+                                                if (pr2 != null && pr2.target != null) {
+                                                    try {
+                                                        getContentResolver()
+                                                                .delete(pr2.target, null, null);
+                                                    } catch (Exception ignored) {
+                                                    }
+                                                }
+                                                pendingSend = null;
+                                                pendingRecv = null;
+                                            } else {
+                                                pendingSend = ps2;
+                                                pendingRecv = pr2;
+                                            }
                                             sessionMgr.clearPeerIdentity();
                                             teardownPeer();
                                             sessionMgr.toIdle();
