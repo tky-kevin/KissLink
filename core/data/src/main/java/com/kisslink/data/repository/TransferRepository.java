@@ -1,13 +1,10 @@
 package com.kisslink.data.repository;
 
 import android.content.Context;
-
 import androidx.lifecycle.LiveData;
-
 import com.kisslink.data.db.AppDatabase;
 import com.kisslink.data.db.TransferDao;
 import com.kisslink.data.db.TransferRecordEntity;
-
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,8 +12,7 @@ import java.util.concurrent.Executors;
 /**
  * 傳輸紀錄的資料存取層（Repository Pattern）。
  *
- * <p>所有寫入操作均在背景執行緒執行（Room 不允許主執行緒 DB 操作）。
- * 讀取操作透過 LiveData 自動在背景查詢並切換到主執行緒通知觀察者。
+ * <p>所有寫入操作均在背景執行緒執行（Room 不允許主執行緒 DB 操作）。 讀取操作透過 LiveData 自動在背景查詢並切換到主執行緒通知觀察者。
  */
 public class TransferRepository {
 
@@ -74,7 +70,7 @@ public class TransferRepository {
     /**
      * 模糊搜尋 + 可選方向過濾。
      *
-     * @param query     搜尋關鍵字（自動補 % 前後綴）。
+     * @param query 搜尋關鍵字（自動補 % 前後綴）。
      * @param direction "SEND"、"RECEIVE"，或 null/空字串（不過濾）。
      */
     public LiveData<List<TransferRecordEntity>> search(String query, String direction) {
@@ -83,28 +79,38 @@ public class TransferRepository {
 
     // ── 工廠方法：從傳輸進度建立紀錄 ──────────────────────────────
 
-    public TransferRecordEntity buildRecord(String direction, String fileName,
-                                            long sizeBytes, boolean success,
-                                            long avgSpeedBps, String filePath) {
-        return buildRecord(direction, fileName, sizeBytes, success, avgSpeedBps,
-                filePath, null, null, 0L);
+    public TransferRecordEntity buildRecord(
+            String direction,
+            String fileName,
+            long sizeBytes,
+            boolean success,
+            long avgSpeedBps,
+            String filePath) {
+        return buildRecord(
+                direction, fileName, sizeBytes, success, avgSpeedBps, filePath, null, null, 0L);
     }
 
-    public TransferRecordEntity buildRecord(String direction, String fileName,
-                                            long sizeBytes, boolean success,
-                                            long avgSpeedBps, String filePath,
-                                            String peerName, String mimeType, long batchId) {
+    public TransferRecordEntity buildRecord(
+            String direction,
+            String fileName,
+            long sizeBytes,
+            boolean success,
+            long avgSpeedBps,
+            String filePath,
+            String peerName,
+            String mimeType,
+            long batchId) {
         TransferRecordEntity e = new TransferRecordEntity();
-        e.direction     = direction;
-        e.fileName      = fileName;
+        e.direction = direction;
+        e.fileName = fileName;
         e.fileSizeBytes = sizeBytes;
-        e.success       = success;
-        e.avgSpeedBps   = avgSpeedBps;
-        e.filePath      = filePath;
-        e.peerDeviceName= peerName;
-        e.mimeType      = mimeType;
-        e.batchId       = batchId;
-        e.timestampMs   = System.currentTimeMillis();
+        e.success = success;
+        e.avgSpeedBps = avgSpeedBps;
+        e.filePath = filePath;
+        e.peerDeviceName = peerName;
+        e.mimeType = mimeType;
+        e.batchId = batchId;
+        e.timestampMs = System.currentTimeMillis();
         return e;
     }
 }

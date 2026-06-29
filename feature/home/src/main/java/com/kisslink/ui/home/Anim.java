@@ -14,7 +14,9 @@ final class Anim {
         v.animate().cancel();
         v.setAlpha(0f);
         v.setTranslationY(dy);
-        v.animate().alpha(1f).translationY(0f)
+        v.animate()
+                .alpha(1f)
+                .translationY(0f)
                 .setDuration(340)
                 .setInterpolator(new DecelerateInterpolator(1.4f))
                 .start();

@@ -1,11 +1,9 @@
 package com.kisslink.ui.home;
 
 import android.content.Intent;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-
 import com.kisslink.R;
 import com.kisslink.pairing.NfcPairingController;
 import com.kisslink.pairing.PairingToken;
@@ -16,21 +14,23 @@ import com.kisslink.util.PermissionHelper;
  * HomeActivity 的 NFC 配對層封裝。
  *
  * <p>職責：
+ *
  * <ul>
- *   <li>持有並管理 {@link NfcPairingController} 的生命週期（enable/disable）。</li>
- *   <li>回應 NFC latch（reader/tag）並做前置就緒檢查。</li>
- *   <li>無線電 (NFC/藍牙/Wi-Fi) 未開啟時彈提示對話框。</li>
+ *   <li>持有並管理 {@link NfcPairingController} 的生命週期（enable/disable）。
+ *   <li>回應 NFC latch（reader/tag）並做前置就緒檢查。
+ *   <li>無線電 (NFC/藍牙/Wi-Fi) 未開啟時彈提示對話框。
  * </ul>
  *
- * <p>Activity 只需在生命週期節點呼叫 {@link #onResume}、{@link #onPause}、{@link #onNewIntent}，
- * 並在 binder 就緒後呼叫 {@link #onBinderReady}。
+ * <p>Activity 只需在生命週期節點呼叫 {@link #onResume}、{@link #onPause}、{@link #onNewIntent}， 並在 binder 就緒後呼叫
+ * {@link #onBinderReady}。
  */
 public final class HomeNfcDelegate {
 
     /** Activity 需提供的回調介面。 */
     public interface Host {
         /** 呼叫時 binder 確定不為 null；由此執行 latch 後的配對邏輯。 */
-        @NonNull FileTransferService.TransferBinder requireBinder();
+        @NonNull
+        FileTransferService.TransferBinder requireBinder();
 
         /** 觸發觸覺回饋。 */
         void haptic();
@@ -109,23 +109,31 @@ public final class HomeNfcDelegate {
 
     private void ensureController() {
         if (nfc != null) return;
-        nfc = new NfcPairingController(activity, new NfcPairingController.Callback() {
-            @Override public void onPeerToken(@NonNull PairingToken peer) {
-                host.haptic();
-                if (!connectivityReadyOrPrompt()) return;
-                FileTransferService.TransferBinder b = host.requireBinder();
-                b.onNfcLatchedAsReader(peer);
-            }
-            @Override public void onTagRead() {
-                host.haptic();
-                if (!connectivityReadyOrPrompt()) return;
-                FileTransferService.TransferBinder b = host.requireBinder();
-                b.onNfcLatchedAsTag();
-            }
-            @Override public void onError(@NonNull String message) {
-                host.toast(message);
-            }
-        });
+        nfc =
+                new NfcPairingController(
+                        activity,
+                        new NfcPairingController.Callback() {
+                            @Override
+                            public void onPeerToken(@NonNull PairingToken peer) {
+                                host.haptic();
+                                if (!connectivityReadyOrPrompt()) return;
+                                FileTransferService.TransferBinder b = host.requireBinder();
+                                b.onNfcLatchedAsReader(peer);
+                            }
+
+                            @Override
+                            public void onTagRead() {
+                                host.haptic();
+                                if (!connectivityReadyOrPrompt()) return;
+                                FileTransferService.TransferBinder b = host.requireBinder();
+                                b.onNfcLatchedAsTag();
+                            }
+
+                            @Override
+                            public void onError(@NonNull String message) {
+                                host.toast(message);
+                            }
+                        });
     }
 
     /**
@@ -136,15 +144,18 @@ public final class HomeNfcDelegate {
     public boolean connectivityReadyOrPrompt() {
         // 短路評估：前一關不過就不查後面（避免無謂的系統查詢/反射呼叫）。
         boolean hasPerms = host.hasConnectivityPermissions();
-        PermissionHelper.Radio off = hasPerms ? PermissionHelper.firstDisabledRadio(activity) : null;
+        PermissionHelper.Radio off =
+                hasPerms ? PermissionHelper.firstDisabledRadio(activity) : null;
         boolean radioReady = hasPerms && off == null;
         // 定位服務主開關：API 32 及以下 Wi-Fi Direct 探索/連線需要它，關閉會靜默失敗。
-        boolean locationOff = radioReady
-                && PermissionHelper.isLocationServicesRequired()
-                && !PermissionHelper.isLocationEnabled(activity);
+        boolean locationOff =
+                radioReady
+                        && PermissionHelper.isLocationServicesRequired()
+                        && !PermissionHelper.isLocationEnabled(activity);
         // 熱點開啟時 P2P 介面建不出來（ap0+wlan0 佔滿介面額度）→ 一律 BUSY(2)，重試無效。
         // 與其讓使用者乾等 25 秒逾時，不如先擋下並提示關閉熱點。
-        boolean hotspotOn = radioReady && !locationOff && PermissionHelper.isHotspotEnabled(activity);
+        boolean hotspotOn =
+                radioReady && !locationOff && PermissionHelper.isHotspotEnabled(activity);
         switch (evaluateReadiness(hasPerms, off != null, locationOff, hotspotOn)) {
             case NEED_PERMS:
                 host.requestPermissions();
@@ -167,17 +178,25 @@ public final class HomeNfcDelegate {
     }
 
     /** 配對前置就緒狀態。 */
-    enum Readiness { READY, NEED_PERMS, NEED_RADIO, NEED_LOCATION, HOTSPOT_ON }
+    enum Readiness {
+        READY,
+        NEED_PERMS,
+        NEED_RADIO,
+        NEED_LOCATION,
+        HOTSPOT_ON
+    }
 
     /**
      * 純函式版的就緒判定，不碰 Android 以便單元測試。
      *
-     * <p>優先序固定為 權限 → 無線電 → 定位服務 → 熱點：權限缺失時最優先（連 API 都不能呼叫），
-     * 其次無線電未開，再來是舊版所需的定位服務主開關，最後才是熱點佔用介面。
+     * <p>優先序固定為 權限 → 無線電 → 定位服務 → 熱點：權限缺失時最優先（連 API 都不能呼叫）， 其次無線電未開，再來是舊版所需的定位服務主開關，最後才是熱點佔用介面。
      * 鎖住此優先序避免日後被改動打亂。
      */
-    static Readiness evaluateReadiness(boolean hasPerms, boolean anyRadioOff,
-                                       boolean locationRequiredButOff, boolean hotspotOn) {
+    static Readiness evaluateReadiness(
+            boolean hasPerms,
+            boolean anyRadioOff,
+            boolean locationRequiredButOff,
+            boolean hotspotOn) {
         if (!hasPerms) return Readiness.NEED_PERMS;
         if (anyRadioOff) return Readiness.NEED_RADIO;
         if (locationRequiredButOff) return Readiness.NEED_LOCATION;
@@ -193,25 +212,33 @@ public final class HomeNfcDelegate {
                 .setTitle(R.string.conn_hotspot_title)
                 .setMessage(R.string.conn_hotspot_on)
                 .setNegativeButton(R.string.btn_cancel, null)
-                .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
-                    try {
-                        Intent tether = new Intent(Intent.ACTION_MAIN).setClassName(
-                                "com.android.settings", "com.android.settings.TetherSettings");
-                        activity.startActivity(tether);
-                    } catch (Exception e) {
-                        // OEM（如 MIUI）的熱點頁元件名不同 → 退回通用無線設定頁。
-                        try {
-                            activity.startActivity(new Intent(
-                                    android.provider.Settings.ACTION_WIRELESS_SETTINGS));
-                        } catch (Exception e2) {
-                            host.toast(activity.getString(R.string.conn_hotspot_on));
-                        }
-                    }
-                })
-                .setOnDismissListener(d -> {
-                    radioPromptShowing = false;
-                    if (nfc != null) nfc.resetLatched();
-                })
+                .setPositiveButton(
+                        R.string.action_open_settings,
+                        (dd, w) -> {
+                            try {
+                                Intent tether =
+                                        new Intent(Intent.ACTION_MAIN)
+                                                .setClassName(
+                                                        "com.android.settings",
+                                                        "com.android.settings.TetherSettings");
+                                activity.startActivity(tether);
+                            } catch (Exception e) {
+                                // OEM（如 MIUI）的熱點頁元件名不同 → 退回通用無線設定頁。
+                                try {
+                                    activity.startActivity(
+                                            new Intent(
+                                                    android.provider.Settings
+                                                            .ACTION_WIRELESS_SETTINGS));
+                                } catch (Exception e2) {
+                                    host.toast(activity.getString(R.string.conn_hotspot_on));
+                                }
+                            }
+                        })
+                .setOnDismissListener(
+                        d -> {
+                            radioPromptShowing = false;
+                            if (nfc != null) nfc.resetLatched();
+                        })
                 .show();
     }
 
@@ -223,18 +250,23 @@ public final class HomeNfcDelegate {
                 .setTitle(R.string.conn_location_title)
                 .setMessage(R.string.conn_location_off)
                 .setNegativeButton(R.string.btn_cancel, null)
-                .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
-                    try {
-                        activity.startActivity(new Intent(
-                                android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-                    } catch (Exception e) {
-                        host.toast(activity.getString(R.string.conn_location_off));
-                    }
-                })
-                .setOnDismissListener(d -> {
-                    radioPromptShowing = false;
-                    if (nfc != null) nfc.resetLatched();
-                })
+                .setPositiveButton(
+                        R.string.action_open_settings,
+                        (dd, w) -> {
+                            try {
+                                activity.startActivity(
+                                        new Intent(
+                                                android.provider.Settings
+                                                        .ACTION_LOCATION_SOURCE_SETTINGS));
+                            } catch (Exception e) {
+                                host.toast(activity.getString(R.string.conn_location_off));
+                            }
+                        })
+                .setOnDismissListener(
+                        d -> {
+                            radioPromptShowing = false;
+                            if (nfc != null) nfc.resetLatched();
+                        })
                 .show();
     }
 
@@ -263,14 +295,20 @@ public final class HomeNfcDelegate {
                 .setTitle(R.string.conn_need_title)
                 .setMessage(msgRes)
                 .setNegativeButton(R.string.btn_cancel, null)
-                .setPositiveButton(R.string.action_open_settings, (dd, w) -> {
-                    try { activity.startActivity(settings); }
-                    catch (Exception e) { host.toast(activity.getString(msgRes)); }
-                })
-                .setOnDismissListener(d -> {
-                    radioPromptShowing = false;
-                    if (nfc != null) nfc.resetLatched();
-                })
+                .setPositiveButton(
+                        R.string.action_open_settings,
+                        (dd, w) -> {
+                            try {
+                                activity.startActivity(settings);
+                            } catch (Exception e) {
+                                host.toast(activity.getString(msgRes));
+                            }
+                        })
+                .setOnDismissListener(
+                        d -> {
+                            radioPromptShowing = false;
+                            if (nfc != null) nfc.resetLatched();
+                        })
                 .show();
     }
 }

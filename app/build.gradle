@@ -3,8 +3,7 @@ plugins {
 	id 'org.jetbrains.kotlin.android'
 	id 'org.jetbrains.kotlin.plugin.compose'
 	id 'com.google.dagger.hilt.android'
-	id 'org.jlleitschuh.gradle.ktlint'
-	id 'com.diffplug.spotless'
+	// spotless + ktlint 由 root build.gradle 的 subprojects {} 統一套用到所有模組。
 }
 
 android {
@@ -131,24 +130,5 @@ dependencies {
 }
 
 // ── Linter 配置 ────────────────────────────────────────────────
-
-ktlint {
-	ignoreFailures = false
-	enableExperimentalRules = true
-	filter {
-		exclude("**/build/**")
-		exclude("**/generated/**")
-	}
-}
-
-spotless {
-	java {
-		googleJavaFormat('1.19.2').aosp()
-		removeUnusedImports()
-		trimTrailingWhitespace()
-		endWithNewline()
-	}
-	groovyGradle {
-		greclipse()
-	}
-}
+// spotless / ktlint 的設定已移至 root build.gradle 的 subprojects {}，
+// 對所有模組（:app + core/* + feature/*）統一套用，CI 才能 gate 全 repo 的格式。

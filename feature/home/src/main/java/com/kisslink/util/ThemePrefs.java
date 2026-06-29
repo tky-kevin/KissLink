@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatDelegate;
  * 主題偏好持久化——三模式：跟隨系統（預設）、強制亮色、強制深色。
  *
  * <p>使用方式：
+ *
  * <pre>
  *   // 在 Application.onCreate() 或 Activity 最早時套用：
  *   ThemePrefs.apply(context);
@@ -19,11 +20,11 @@ import androidx.appcompat.app.AppCompatDelegate;
 public final class ThemePrefs {
 
     public static final int MODE_SYSTEM = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
-    public static final int MODE_LIGHT  = AppCompatDelegate.MODE_NIGHT_NO;
-    public static final int MODE_DARK   = AppCompatDelegate.MODE_NIGHT_YES;
+    public static final int MODE_LIGHT = AppCompatDelegate.MODE_NIGHT_NO;
+    public static final int MODE_DARK = AppCompatDelegate.MODE_NIGHT_YES;
 
     private static final String PREFS_NAME = "kiss_theme";
-    private static final String KEY_MODE   = "night_mode";
+    private static final String KEY_MODE = "night_mode";
 
     private ThemePrefs() {}
 
@@ -48,7 +49,6 @@ public final class ThemePrefs {
     }
 
     private static SharedPreferences prefs(Context ctx) {
-        return ctx.getApplicationContext()
-                  .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return ctx.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 }

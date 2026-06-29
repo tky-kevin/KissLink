@@ -4,26 +4,22 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
-
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.transfer.SendItem;
 import com.kisslink.transfer.TransferProtocol;
-
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 底部「待傳」區的單一擁有者：疊起來的摘要縮圖、送出鈕、與點開的完整可移除清單（sheet）。
  *
- * <p>與 {@link TransferListPresenter} 對稱——把原本散在 {@link HomeActivity} 的待傳渲染
- * （rebuildSendStack / buildStackThumbs / updateSendButton / showSendSheet）連同其 adapter 與
- * sheet 管理器收斂於此。資料真相仍在 {@link HomeViewModel}（選取清單）；本類別只負責呈現，
- * 並把使用者意圖（點送出鈕、點某列）以 callback 往外轉發。
+ * <p>與 {@link TransferListPresenter} 對稱——把原本散在 {@link HomeActivity} 的待傳渲染 （rebuildSendStack /
+ * buildStackThumbs / updateSendButton / showSendSheet）連同其 adapter 與 sheet 管理器收斂於此。資料真相仍在 {@link
+ * HomeViewModel}（選取清單）；本類別只負責呈現， 並把使用者意圖（點送出鈕、點某列）以 callback 往外轉發。
  */
 final class SendStackPresenter {
 
@@ -37,11 +33,15 @@ final class SendStackPresenter {
     private final SendListAdapter itemsAdapter = new SendListAdapter();
     private final SendSheetManager sheet = new SendSheetManager();
 
-    SendStackPresenter(@NonNull FragmentActivity activity, @NonNull View sendStackRow,
-                       @NonNull FrameLayout stackThumbs, @NonNull TextView tvStackLabel,
-                       @NonNull MaterialButton btnSend, @NonNull HomeViewModel vm,
-                       @NonNull SendListAdapter.OnItemClickListener onItemClick,
-                       @NonNull Runnable onSendClick) {
+    SendStackPresenter(
+            @NonNull FragmentActivity activity,
+            @NonNull View sendStackRow,
+            @NonNull FrameLayout stackThumbs,
+            @NonNull TextView tvStackLabel,
+            @NonNull MaterialButton btnSend,
+            @NonNull HomeViewModel vm,
+            @NonNull SendListAdapter.OnItemClickListener onItemClick,
+            @NonNull Runnable onSendClick) {
         this.activity = activity;
         this.sendStackRow = sendStackRow;
         this.stackThumbs = stackThumbs;
@@ -58,9 +58,14 @@ final class SendStackPresenter {
     void rebuild() {
         List<SendRow> rows = new ArrayList<>();
         for (SendItem it : vm.currentSelection()) {
-            SendRow r = new SendRow(it.name, TransferUiController.sizeLabel(it.size), it.itemType,
-                    it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
-                    it.uri, it.mime);
+            SendRow r =
+                    new SendRow(
+                            it.name,
+                            TransferUiController.sizeLabel(it.size),
+                            it.itemType,
+                            it.itemType == TransferProtocol.ITEM_PHOTO ? it.uri : null,
+                            it.uri,
+                            it.mime);
             r.removable = true;
             rows.add(r);
         }
@@ -77,10 +82,7 @@ final class SendStackPresenter {
         Anim.revealFadeUp(sendStackRow);
     }
 
-    /**
-     * 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。
-     * 不用 lastPhase 判斷——否則「接收對方一包檔」期間/結束時會誤把送出鈕藏掉。
-     */
+    /** 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。 不用 lastPhase 判斷——否則「接收對方一包檔」期間/結束時會誤把送出鈕藏掉。 */
     void updateButton() {
         if (vm.shouldShowSendButton()) {
             btnSend.setText(activity.getString(R.string.btn_send_n, vm.selectionCount()));

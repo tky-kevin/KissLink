@@ -1,20 +1,15 @@
 package com.kisslink.ui.home;
 
+import static org.junit.Assert.*;
+
 import androidx.arch.core.executor.ArchTaskExecutor;
 import androidx.arch.core.executor.TaskExecutor;
-
 import com.kisslink.transfer.SendItem;
 import com.kisslink.transfer.SessionState;
 import com.kisslink.transfer.TransferProgress;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Collection;
-import java.util.List;
-
-import static org.junit.Assert.*;
 
 public class HomeViewModelTest {
 
@@ -24,11 +19,24 @@ public class HomeViewModelTest {
     public void setUp() {
         // Swap ArchTaskExecutor to synchronous mode so LiveData.postValue() works without Looper.
         // Equivalent to InstantTaskExecutorRule internals, without the core-testing dependency.
-        ArchTaskExecutor.getInstance().setDelegate(new TaskExecutor() {
-            @Override public void executeOnDiskIO(Runnable r) { r.run(); }
-            @Override public void postToMainThread(Runnable r) { r.run(); }
-            @Override public boolean isMainThread() { return true; }
-        });
+        ArchTaskExecutor.getInstance()
+                .setDelegate(
+                        new TaskExecutor() {
+                            @Override
+                            public void executeOnDiskIO(Runnable r) {
+                                r.run();
+                            }
+
+                            @Override
+                            public void postToMainThread(Runnable r) {
+                                r.run();
+                            }
+
+                            @Override
+                            public boolean isMainThread() {
+                                return true;
+                            }
+                        });
         vm = new HomeViewModel();
     }
 
@@ -211,8 +219,7 @@ public class HomeViewModelTest {
 
     @Test
     public void upsertReceived_newFileReturnsTrue() {
-        boolean isNew = vm.upsertReceived(1L, "photo.jpg", 1024L,
-                (byte) 2, 50, false);
+        boolean isNew = vm.upsertReceived(1L, "photo.jpg", 1024L, (byte) 2, 50, false);
         assertTrue(isNew);
         assertTrue(vm.hasReceivedList());
     }
@@ -244,16 +251,26 @@ public class HomeViewModelTest {
 
     @Test
     public void batchProgress_doesNotDecrease() {
-        TransferProgress tp1 = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .batchId(1L).fileName("f.txt").totalBytes(1000L)
-                .doneBytes(800L).fileIndex(0).fileCount(1)
-                .build();
-        TransferProgress tp2 = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .batchId(1L).fileName("f.txt").totalBytes(1000L)
-                .doneBytes(400L).fileIndex(0).fileCount(1)
-                .build();
+        TransferProgress tp1 =
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .batchId(1L)
+                        .fileName("f.txt")
+                        .totalBytes(1000L)
+                        .doneBytes(800L)
+                        .fileIndex(0)
+                        .fileCount(1)
+                        .build();
+        TransferProgress tp2 =
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .batchId(1L)
+                        .fileName("f.txt")
+                        .totalBytes(1000L)
+                        .doneBytes(400L)
+                        .fileIndex(0)
+                        .fileCount(1)
+                        .build();
 
         float p1 = vm.batchProgress(tp1);
         float p2 = vm.batchProgress(tp2);
@@ -262,16 +279,26 @@ public class HomeViewModelTest {
 
     @Test
     public void batchProgress_newBatchResetsProgress() {
-        TransferProgress tp1 = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .batchId(1L).fileName("f.txt").totalBytes(100L)
-                .doneBytes(100L).fileIndex(0).fileCount(1)
-                .build();
-        TransferProgress tp2 = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .batchId(2L).fileName("new.txt").totalBytes(100L)
-                .doneBytes(0L).fileIndex(0).fileCount(1)
-                .build();
+        TransferProgress tp1 =
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .batchId(1L)
+                        .fileName("f.txt")
+                        .totalBytes(100L)
+                        .doneBytes(100L)
+                        .fileIndex(0)
+                        .fileCount(1)
+                        .build();
+        TransferProgress tp2 =
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .batchId(2L)
+                        .fileName("new.txt")
+                        .totalBytes(100L)
+                        .doneBytes(0L)
+                        .fileIndex(0)
+                        .fileCount(1)
+                        .build();
 
         float p1 = vm.batchProgress(tp1);
         float p2 = vm.batchProgress(tp2);

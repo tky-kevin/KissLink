@@ -1,8 +1,8 @@
 package com.kisslink.transfer;
 
-import org.junit.Test;
-
 import static org.junit.Assert.*;
+
+import org.junit.Test;
 
 public class TransferProtocolTest {
 
@@ -37,7 +37,8 @@ public class TransferProtocolTest {
     public void encodeDecodeDataChunk_preservesOffsetAndCrc() throws Exception {
         byte[] payload = "hello world".getBytes();
         int crc = TransferProtocol.crc32(payload, 0, payload.length);
-        TransferProtocol.Header out = TransferProtocol.makeDataChunk(1, 65536L, payload.length, crc);
+        TransferProtocol.Header out =
+                TransferProtocol.makeDataChunk(1, 65536L, payload.length, crc);
         byte[] raw = TransferProtocol.encodeHeader(out);
         TransferProtocol.Header in = TransferProtocol.decodeHeader(raw);
 
@@ -60,8 +61,8 @@ public class TransferProtocolTest {
 
     @Test
     public void encodeDecodeItemMeta_preservesItemType() throws Exception {
-        TransferProtocol.Header out = TransferProtocol.makeItemMeta(
-                0, TransferProtocol.ITEM_PHOTO, 2_000_000L, 128);
+        TransferProtocol.Header out =
+                TransferProtocol.makeItemMeta(0, TransferProtocol.ITEM_PHOTO, 2_000_000L, 128);
         byte[] raw = TransferProtocol.encodeHeader(out);
         TransferProtocol.Header in = TransferProtocol.decodeHeader(raw);
 
@@ -116,33 +117,30 @@ public class TransferProtocolTest {
     public void crc32_differentInputDifferentOutput() {
         byte[] a = "aaa".getBytes();
         byte[] b = "bbb".getBytes();
-        assertNotEquals(TransferProtocol.crc32(a, 0, a.length),
-                        TransferProtocol.crc32(b, 0, b.length));
+        assertNotEquals(
+                TransferProtocol.crc32(a, 0, a.length), TransferProtocol.crc32(b, 0, b.length));
     }
 
     // ── itemTypeForMime ───────────────────────────────────────
 
     @Test
     public void itemTypeForMime_imageIsPhoto() {
-        assertEquals(TransferProtocol.ITEM_PHOTO,
-                TransferProtocol.itemTypeForMime("image/jpeg"));
+        assertEquals(TransferProtocol.ITEM_PHOTO, TransferProtocol.itemTypeForMime("image/jpeg"));
     }
 
     @Test
     public void itemTypeForMime_videoIsPhoto() {
-        assertEquals(TransferProtocol.ITEM_PHOTO,
-                TransferProtocol.itemTypeForMime("video/mp4"));
+        assertEquals(TransferProtocol.ITEM_PHOTO, TransferProtocol.itemTypeForMime("video/mp4"));
     }
 
     @Test
     public void itemTypeForMime_pdfIsFile() {
-        assertEquals(TransferProtocol.ITEM_FILE,
-                TransferProtocol.itemTypeForMime("application/pdf"));
+        assertEquals(
+                TransferProtocol.ITEM_FILE, TransferProtocol.itemTypeForMime("application/pdf"));
     }
 
     @Test
     public void itemTypeForMime_nullIsFile() {
-        assertEquals(TransferProtocol.ITEM_FILE,
-                TransferProtocol.itemTypeForMime(null));
+        assertEquals(TransferProtocol.ITEM_FILE, TransferProtocol.itemTypeForMime(null));
     }
 }

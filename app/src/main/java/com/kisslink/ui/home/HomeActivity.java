@@ -14,20 +14,16 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.ViewModelProvider;
-
-import dagger.hilt.android.AndroidEntryPoint;
-
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
@@ -43,7 +39,7 @@ import com.kisslink.ui.profile.ProfileCardSheet;
 import com.kisslink.ui.profile.ReceivedCardSheet;
 import com.kisslink.util.PermissionHelper;
 import com.kisslink.util.ThemePrefs;
-
+import dagger.hilt.android.AndroidEntryPoint;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,8 +47,8 @@ import java.util.List;
 /**
  * 單頁主畫面（C 方案 Beam）——配對、連線、傳輸全在這一頁，靠 {@link SessionState} 切換內容。
  *
- * <p>NFC 配對委由 {@link HomeNfcDelegate}；選取/傳輸狀態由 {@link HomeViewModel} 管理；
- * 本 Activity 只負責生命週期、view binding、觀察 ViewModel 與轉發使用者意圖。
+ * <p>NFC 配對委由 {@link HomeNfcDelegate}；選取/傳輸狀態由 {@link HomeViewModel} 管理； 本 Activity 只負責生命週期、view
+ * binding、觀察 ViewModel 與轉發使用者意圖。
  */
 @AndroidEntryPoint
 public class HomeActivity extends AppCompatActivity
@@ -74,17 +70,23 @@ public class HomeActivity extends AppCompatActivity
     @Nullable private FileTransferService.TransferBinder binder;
     private boolean bound = false;
     private final androidx.lifecycle.Observer<SessionState> sessionObserver = this::onSession;
-    private final androidx.lifecycle.Observer<byte[]> incomingCardObserver = vcard -> {
-        if (vcard == null || vcard.length == 0 || binder == null) return;
-        ReceivedCardSheet.newInstance(vcard).show(getSupportFragmentManager(), "received_card");
-        binder.clearIncomingCard();
-    };
-    private final androidx.lifecycle.Observer<FileTransferService.ReceivedItem> receivedItemObserver = item -> {
-        if (item == null || transferList == null || !transferList.isReceiveListActive()) return;
-        viewModel.setReceivedUri(item.name, item.contentUri, item.mime);
-        Uri uri = item.contentUri != null ? Uri.parse(item.contentUri) : null;
-        transferList.updateReceivedThumbnail(item.name, uri, item.mime);
-    };
+    private final androidx.lifecycle.Observer<byte[]> incomingCardObserver =
+            vcard -> {
+                if (vcard == null || vcard.length == 0 || binder == null) return;
+                ReceivedCardSheet.newInstance(vcard)
+                        .show(getSupportFragmentManager(), "received_card");
+                binder.clearIncomingCard();
+            };
+    private final androidx.lifecycle.Observer<FileTransferService.ReceivedItem>
+            receivedItemObserver =
+                    item -> {
+                        if (item == null
+                                || transferList == null
+                                || !transferList.isReceiveListActive()) return;
+                        viewModel.setReceivedUri(item.name, item.contentUri, item.mime);
+                        Uri uri = item.contentUri != null ? Uri.parse(item.contentUri) : null;
+                        transferList.updateReceivedThumbnail(item.name, uri, item.mime);
+                    };
 
     // ── 剪貼板快速分享 ──
     private View clipboardRow;
@@ -93,33 +95,47 @@ public class HomeActivity extends AppCompatActivity
 
     // ── 內容選擇器 ──
     private final ActivityResultLauncher<String[]> filePicker =
-            registerForActivityResult(new ActivityResultContracts.OpenMultipleDocuments(), uris -> {
-                if (uris == null || uris.isEmpty()) return;
-                List<SendItem> picked = new ArrayList<>();
-                for (Uri uri : uris) {
-                    try {
-                        getContentResolver().takePersistableUriPermission(
-                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (SecurityException ignored) {}
-                    byte type = TransferProtocol.itemTypeForMime(getContentResolver().getType(uri));
-                    picked.add(SendItem.fromUri(getContentResolver(), uri, type));
-                }
-                viewModel.addAllToSelection(picked);
-            });
+            registerForActivityResult(
+                    new ActivityResultContracts.OpenMultipleDocuments(),
+                    uris -> {
+                        if (uris == null || uris.isEmpty()) return;
+                        List<SendItem> picked = new ArrayList<>();
+                        for (Uri uri : uris) {
+                            try {
+                                getContentResolver()
+                                        .takePersistableUriPermission(
+                                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            } catch (SecurityException ignored) {
+                            }
+                            byte type =
+                                    TransferProtocol.itemTypeForMime(
+                                            getContentResolver().getType(uri));
+                            picked.add(SendItem.fromUri(getContentResolver(), uri, type));
+                        }
+                        viewModel.addAllToSelection(picked);
+                    });
 
     private final ActivityResultLauncher<PickVisualMediaRequest> mediaPicker =
-            registerForActivityResult(new ActivityResultContracts.PickMultipleVisualMedia(30), uris -> {
-                if (uris == null || uris.isEmpty()) return;
-                List<SendItem> picked = new ArrayList<>();
-                for (Uri uri : uris) {
-                    try {
-                        getContentResolver().takePersistableUriPermission(
-                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (SecurityException ignored) {}
-                    picked.add(SendItem.fromUri(getContentResolver(), uri, TransferProtocol.ITEM_PHOTO));
-                }
-                viewModel.addAllToSelection(picked);
-            });
+            registerForActivityResult(
+                    new ActivityResultContracts.PickMultipleVisualMedia(30),
+                    uris -> {
+                        if (uris == null || uris.isEmpty()) return;
+                        List<SendItem> picked = new ArrayList<>();
+                        for (Uri uri : uris) {
+                            try {
+                                getContentResolver()
+                                        .takePersistableUriPermission(
+                                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            } catch (SecurityException ignored) {
+                            }
+                            picked.add(
+                                    SendItem.fromUri(
+                                            getContentResolver(),
+                                            uri,
+                                            TransferProtocol.ITEM_PHOTO));
+                        }
+                        viewModel.addAllToSelection(picked);
+                    });
 
     // ══════════════════════════════════════════════════════════
     //  生命週期
@@ -150,95 +166,138 @@ public class HomeActivity extends AppCompatActivity
     private void bindViews() {
         BeamStageView beam = findViewById(R.id.beam);
         TextView tvHeadline = findViewById(R.id.tvHeadline);
-        TextView tvSub      = findViewById(R.id.tvSub);
-        TextView tvPercent  = findViewById(R.id.tvPercent);
+        TextView tvSub = findViewById(R.id.tvSub);
+        TextView tvPercent = findViewById(R.id.tvPercent);
         TextView tvPercentUnit = findViewById(R.id.tvPercentUnit);
         LinearLayout percentRow = findViewById(R.id.percentRow);
-        View pickRow        = findViewById(R.id.pickRow);
+        View pickRow = findViewById(R.id.pickRow);
         LinearLayout receivedBanner = findViewById(R.id.receivedBanner);
         TextView tvReceived = findViewById(R.id.tvReceived);
         MaterialButton btnPickFiles = findViewById(R.id.btnPickFiles);
         MaterialButton btnPickMedia = findViewById(R.id.btnPickMedia);
-        ImageButton ibHistory   = findViewById(R.id.ibHistory);
-        ImageButton ibSettings  = findViewById(R.id.ibSettings);
-        ivAvatar    = findViewById(R.id.ivAvatar);
+        ImageButton ibHistory = findViewById(R.id.ibHistory);
+        ImageButton ibSettings = findViewById(R.id.ibSettings);
+        ivAvatar = findViewById(R.id.ivAvatar);
 
         Handler main = new Handler(Looper.getMainLooper());
-        TransferUiController ui = new TransferUiController(
-                this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
+        TransferUiController ui =
+                new TransferUiController(
+                        this, main, tvHeadline, tvSub, tvPercent, tvPercentUnit, percentRow);
 
-        transferList = new TransferListPresenter(findViewById(R.id.rvTransfer), viewModel, this::openFile);
-        sendStack = new SendStackPresenter(this, findViewById(R.id.sendStackRow),
-                findViewById(R.id.stackThumbs), findViewById(R.id.tvStackLabel),
-                findViewById(R.id.btnSend), viewModel, this::openFile, this::doSend);
-        sessionRenderer = new SessionRenderer(this, main, beam, ui, transferList, sendStack,
-                viewModel, pickRow, receivedBanner, tvReceived, this);
+        transferList =
+                new TransferListPresenter(findViewById(R.id.rvTransfer), viewModel, this::openFile);
+        sendStack =
+                new SendStackPresenter(
+                        this,
+                        findViewById(R.id.sendStackRow),
+                        findViewById(R.id.stackThumbs),
+                        findViewById(R.id.tvStackLabel),
+                        findViewById(R.id.btnSend),
+                        viewModel,
+                        this::openFile,
+                        this::doSend);
+        sessionRenderer =
+                new SessionRenderer(
+                        this,
+                        main,
+                        beam,
+                        ui,
+                        transferList,
+                        sendStack,
+                        viewModel,
+                        pickRow,
+                        receivedBanner,
+                        tvReceived,
+                        this);
 
         tvHeadline.setOnClickListener(v -> onHeadlineTapped());
 
-        receivedBanner.setOnClickListener(v -> {
-            long batchId = viewModel.receivedBatchId();
-            if (batchId != 0)
-                HistorySheet.forBatch(batchId).show(getSupportFragmentManager(), "batch");
-        });
+        receivedBanner.setOnClickListener(
+                v -> {
+                    long batchId = viewModel.receivedBatchId();
+                    if (batchId != 0)
+                        HistorySheet.forBatch(batchId).show(getSupportFragmentManager(), "batch");
+                });
 
-        btnPickFiles.setOnClickListener(v -> {
-            if (lacksPerms()) return;
-            filePicker.launch(new String[]{"*/*"});
-        });
-        btnPickMedia.setOnClickListener(v -> {
-            if (lacksPerms()) return;
-            mediaPicker.launch(new PickVisualMediaRequest.Builder()
-                    .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
-                    .build());
-        });
+        btnPickFiles.setOnClickListener(
+                v -> {
+                    if (lacksPerms()) return;
+                    filePicker.launch(new String[] {"*/*"});
+                });
+        btnPickMedia.setOnClickListener(
+                v -> {
+                    if (lacksPerms()) return;
+                    mediaPicker.launch(
+                            new PickVisualMediaRequest.Builder()
+                                    .setMediaType(
+                                            ActivityResultContracts.PickVisualMedia.ImageAndVideo
+                                                    .INSTANCE)
+                                    .build());
+                });
 
-        ibHistory.setOnClickListener(v ->
-                new HistorySheet().show(getSupportFragmentManager(), "history"));
-        ibSettings.setOnClickListener(v ->
-                SettingsSheet.newInstance().show(getSupportFragmentManager(), "settings"));
-        ivAvatar.setOnClickListener(v ->
-                ProfileCardSheet.newInstance().show(getSupportFragmentManager(), "profile"));
+        ibHistory.setOnClickListener(
+                v -> new HistorySheet().show(getSupportFragmentManager(), "history"));
+        ibSettings.setOnClickListener(
+                v -> SettingsSheet.newInstance().show(getSupportFragmentManager(), "settings"));
+        ivAvatar.setOnClickListener(
+                v -> ProfileCardSheet.newInstance().show(getSupportFragmentManager(), "profile"));
 
         // 剪貼板快速分享
         clipboardRow = findViewById(R.id.clipboardRow);
         tvClipboardPreview = findViewById(R.id.tvClipboardPreview);
         clipboardRow.setOnClickListener(v -> onClipboardShareTapped());
         ImageButton ibDismiss = findViewById(R.id.ibClipboardDismiss);
-        ibDismiss.setOnClickListener(v -> {
-            lastOfferedClip = tvClipboardPreview.getTag() instanceof String
-                    ? (String) tvClipboardPreview.getTag() : null;
-            clipboardRow.setVisibility(View.GONE);
-        });
+        ibDismiss.setOnClickListener(
+                v -> {
+                    lastOfferedClip =
+                            tvClipboardPreview.getTag() instanceof String
+                                    ? (String) tvClipboardPreview.getTag()
+                                    : null;
+                    clipboardRow.setVisibility(View.GONE);
+                });
 
         refreshAvatar();
     }
 
     private void applyInsets() {
         View root = findViewById(R.id.root);
-        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
-            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(0, bars.top, 0, bars.bottom);
-            return insets;
-        });
+        ViewCompat.setOnApplyWindowInsetsListener(
+                root,
+                (v, insets) -> {
+                    Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                    v.setPadding(0, bars.top, 0, bars.bottom);
+                    return insets;
+                });
     }
 
     private void observeViewModel() {
-        viewModel.getSelection().observe(this, items -> {
-            transferList.collapseIfSendPending();
-            sendStack.rebuild();
-            sendStack.updateButton();
-        });
-        viewModel.getReceivedCount().observe(this, count -> {
-            int n = count != null ? count : 0;
-            if (n > 0) sessionRenderer.showReceivedBanner(n);
-            else sessionRenderer.hideReceivedBanner();
-        });
-        getSupportFragmentManager().setFragmentResultListener(
-                HistorySheet.RESULT_BATCH_CLEARED, this, (key, bundle) -> viewModel.clearReceivedList());
+        viewModel
+                .getSelection()
+                .observe(
+                        this,
+                        items -> {
+                            transferList.collapseIfSendPending();
+                            sendStack.rebuild();
+                            sendStack.updateButton();
+                        });
+        viewModel
+                .getReceivedCount()
+                .observe(
+                        this,
+                        count -> {
+                            int n = count != null ? count : 0;
+                            if (n > 0) sessionRenderer.showReceivedBanner(n);
+                            else sessionRenderer.hideReceivedBanner();
+                        });
+        getSupportFragmentManager()
+                .setFragmentResultListener(
+                        HistorySheet.RESULT_BATCH_CLEARED,
+                        this,
+                        (key, bundle) -> viewModel.clearReceivedList());
     }
 
-    @Override protected void onStart() {
+    @Override
+    protected void onStart() {
         super.onStart();
         Intent svc = FileTransferService.intent(this);
         startForegroundService(svc);
@@ -248,10 +307,14 @@ public class HomeActivity extends AppCompatActivity
         }
     }
 
-    @Override protected void onStop() {
+    @Override
+    protected void onStop() {
         super.onStop();
         if (bound) {
-            try { unbindService(connection); } catch (IllegalArgumentException ignored) {}
+            try {
+                unbindService(connection);
+            } catch (IllegalArgumentException ignored) {
+            }
             bound = false;
             binder = null;
             // binder 已失效：清掉 nfcDelegate 的 binderReady，否則下次 onResume 會在
@@ -260,7 +323,8 @@ public class HomeActivity extends AppCompatActivity
         }
     }
 
-    @Override protected void onResume() {
+    @Override
+    protected void onResume() {
         super.onResume();
         refreshAvatar();
         LocalPairing.setDisplayName(ProfileStore.get(this).name());
@@ -268,26 +332,32 @@ public class HomeActivity extends AppCompatActivity
         refreshClipboardChip();
     }
 
-    @Override protected void onPause() {
+    @Override
+    protected void onPause() {
         super.onPause();
         nfcDelegate.onPause();
     }
 
-    @Override protected void onNewIntent(Intent intent) {
+    @Override
+    protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         nfcDelegate.onNewIntent(intent);
         ShareIntentReceiver.ingest(this, viewModel, intent);
     }
 
-    @Override protected void onDestroy() {
+    @Override
+    protected void onDestroy() {
         super.onDestroy();
-        if (bound) { unbindService(connection); bound = false; }
+        if (bound) {
+            unbindService(connection);
+            bound = false;
+        }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(
+            int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (!PermissionHelper.allGranted(grantResults)) {
             toast(getString(R.string.need_perms));
@@ -298,20 +368,24 @@ public class HomeActivity extends AppCompatActivity
     //  Service 綁定
     // ══════════════════════════════════════════════════════════
 
-    private final ServiceConnection connection = new ServiceConnection() {
-        @Override public void onServiceConnected(ComponentName name, IBinder service) {
-            binder = (FileTransferService.TransferBinder) service;
-            nfcDelegate.onBinderReady();
-            androidx.lifecycle.LiveData<SessionState> state = binder.getSessionState();
-            if (state != null) state.observe(HomeActivity.this, sessionObserver);
-            binder.getIncomingCard().observe(HomeActivity.this, incomingCardObserver);
-            binder.getReceivedItem().observe(HomeActivity.this, receivedItemObserver);
-        }
-        @Override public void onServiceDisconnected(ComponentName name) {
-            nfcDelegate.onBinderLost();
-            binder = null;
-        }
-    };
+    private final ServiceConnection connection =
+            new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder service) {
+                    binder = (FileTransferService.TransferBinder) service;
+                    nfcDelegate.onBinderReady();
+                    androidx.lifecycle.LiveData<SessionState> state = binder.getSessionState();
+                    if (state != null) state.observe(HomeActivity.this, sessionObserver);
+                    binder.getIncomingCard().observe(HomeActivity.this, incomingCardObserver);
+                    binder.getReceivedItem().observe(HomeActivity.this, receivedItemObserver);
+                }
+
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+                    nfcDelegate.onBinderLost();
+                    binder = null;
+                }
+            };
 
     // ══════════════════════════════════════════════════════════
     //  狀態 → UI
@@ -336,9 +410,11 @@ public class HomeActivity extends AppCompatActivity
                     .setTitle(R.string.disconnect_title)
                     .setMessage(R.string.disconnect_msg)
                     .setNegativeButton(R.string.btn_cancel, null)
-                    .setPositiveButton(R.string.disconnect_confirm, (dd, w) -> {
-                        if (binder != null) binder.disconnect();
-                    })
+                    .setPositiveButton(
+                            R.string.disconnect_confirm,
+                            (dd, w) -> {
+                                if (binder != null) binder.disconnect();
+                            })
                     .show();
         } else if (isInterruptiblePairing(viewModel.lastPhase())) {
             binder.interruptPairing();
@@ -371,7 +447,8 @@ public class HomeActivity extends AppCompatActivity
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
         } catch (Exception e) {
-            android.widget.Toast.makeText(this, "沒有可開啟此檔案的應用程式", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "沒有可開啟此檔案的應用程式", android.widget.Toast.LENGTH_SHORT)
+                    .show();
         }
     }
 
@@ -418,7 +495,8 @@ public class HomeActivity extends AppCompatActivity
 
     private void refreshAvatar() {
         ivAvatar.setPadding(0, 0, 0, 0);
-        ivAvatar.setImageBitmap(ProfileStore.get(this).loadAvatarForDisplay(this, AVATAR_DISPLAY_PX));
+        ivAvatar.setImageBitmap(
+                ProfileStore.get(this).loadAvatarForDisplay(this, AVATAR_DISPLAY_PX));
     }
 
     // ── 工具 ──
@@ -444,23 +522,30 @@ public class HomeActivity extends AppCompatActivity
     //  SessionRenderer.Host
     // ══════════════════════════════════════════════════════════
 
-    @Override @Nullable public String peerName() {
+    @Override
+    @Nullable
+    public String peerName() {
         return binder != null ? binder.connectedPeerName() : null;
     }
 
-    @Override @Nullable public byte[] peerAvatar() {
+    @Override
+    @Nullable
+    public byte[] peerAvatar() {
         return binder != null ? binder.connectedPeerAvatar() : null;
     }
 
-    @Override public void resetLatchedNfc() {
+    @Override
+    public void resetLatchedNfc() {
         nfcDelegate.resetLatched();
     }
 
-    @Override public void requestSend() {
+    @Override
+    public void requestSend() {
         doSend();
     }
 
-    @Override public void requestSendProfileCard() {
+    @Override
+    public void requestSendProfileCard() {
         sendMyProfileCard();
     }
 
@@ -499,19 +584,34 @@ public class HomeActivity extends AppCompatActivity
 
     // ── HomeNfcDelegate.Host 實作 ──────────────────────────────
 
-    private final HomeNfcDelegate.Host nfcHost = new HomeNfcDelegate.Host() {
-        @Override @NonNull
-        public FileTransferService.TransferBinder requireBinder() {
-            if (binder == null) throw new IllegalStateException("requireBinder: binder is null");
-            return binder;
-        }
-        @Override public void haptic() { HomeActivity.this.haptic(); }
-        @Override public void toast(@NonNull String message) { HomeActivity.this.toast(message); }
-        @Override public boolean hasConnectivityPermissions() {
-            return PermissionHelper.hasConnectivityPermissions(HomeActivity.this);
-        }
-        @Override public void requestPermissions() {
-            PermissionHelper.requestPermissions(HomeActivity.this);
-        }
-    };
+    private final HomeNfcDelegate.Host nfcHost =
+            new HomeNfcDelegate.Host() {
+                @Override
+                @NonNull
+                public FileTransferService.TransferBinder requireBinder() {
+                    if (binder == null)
+                        throw new IllegalStateException("requireBinder: binder is null");
+                    return binder;
+                }
+
+                @Override
+                public void haptic() {
+                    HomeActivity.this.haptic();
+                }
+
+                @Override
+                public void toast(@NonNull String message) {
+                    HomeActivity.this.toast(message);
+                }
+
+                @Override
+                public boolean hasConnectivityPermissions() {
+                    return PermissionHelper.hasConnectivityPermissions(HomeActivity.this);
+                }
+
+                @Override
+                public void requestPermissions() {
+                    PermissionHelper.requestPermissions(HomeActivity.this);
+                }
+            };
 }

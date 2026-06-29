@@ -9,30 +9,29 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.google.android.material.imageview.ShapeableImageView;
 import com.kisslink.R;
 import com.kisslink.transfer.TransferProtocol;
 import com.kisslink.util.FileUtils;
 import com.kisslink.util.ThumbUtils;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Beam 中央下方的項目清單：已選待送、傳輸中（含百分比）、完成（勾）。
- * 相片/影片載入小縮圖；檔案用圖示。
- */
+/** Beam 中央下方的項目清單：已選待送、傳輸中（含百分比）、完成（勾）。 相片/影片載入小縮圖；檔案用圖示。 */
 public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
-    public interface OnRemove { void onRemove(int position); }
-    public interface OnItemClickListener { void onItemClick(SendRow row); }
+    public interface OnRemove {
+        void onRemove(int position);
+    }
+
+    public interface OnItemClickListener {
+        void onItemClick(SendRow row);
+    }
 
     private final List<SendRow> rows = new ArrayList<>();
     // 縮圖執行緒池，在 onDetachedFromRecyclerView 關閉（避免累積），
@@ -41,21 +40,29 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private static ExecutorService newThumbPool() {
-        return Executors.newFixedThreadPool(2, r -> {
-            Thread t = new Thread(r, "send-thumb");
-            t.setDaemon(true);
-            return t;
-        });
+        return Executors.newFixedThreadPool(
+                2,
+                r -> {
+                    Thread t = new Thread(r, "send-thumb");
+                    t.setDaemon(true);
+                    return t;
+                });
     }
+
     // 局部更新標記：只更新進度/狀態/高亮，不重設縮圖（避免傳輸中每幀 rebind 造成縮圖閃爍）。
     private static final Object PAYLOAD_PROGRESS = new Object();
-    private int highlightPos = -1;   // 目前高亮（傳輸中）那一列
+    private int highlightPos = -1; // 目前高亮（傳輸中）那一列
 
     @androidx.annotation.Nullable private OnRemove onRemove;
     @androidx.annotation.Nullable private OnItemClickListener onItemClickListener;
 
-    public void setOnRemove(@androidx.annotation.Nullable OnRemove l) { this.onRemove = l; }
-    public void setOnItemClickListener(@androidx.annotation.Nullable OnItemClickListener l) { this.onItemClickListener = l; }
+    public void setOnRemove(@androidx.annotation.Nullable OnRemove l) {
+        this.onRemove = l;
+    }
+
+    public void setOnItemClickListener(@androidx.annotation.Nullable OnItemClickListener l) {
+        this.onItemClickListener = l;
+    }
 
     @SuppressWarnings("NotifyDataSetChanged")
     public void submit(@NonNull List<SendRow> next) {
@@ -65,10 +72,7 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         notifyDataSetChanged();
     }
 
-    /**
-     * 傳輸中：只更新某列的進度/完成/高亮，並用 payload 做局部 rebind——不重設縮圖、
-     * 不觸發換場動畫，徹底消除每幀整列重綁造成的縮圖閃爍。換檔時順手清掉舊高亮列。
-     */
+    /** 傳輸中：只更新某列的進度/完成/高亮，並用 payload 做局部 rebind——不重設縮圖、 不觸發換場動畫，徹底消除每幀整列重綁造成的縮圖閃爍。換檔時順手清掉舊高亮列。 */
     public void setProgress(@NonNull String fileName, int percent, boolean done) {
         int target = indexOfName(fileName);
         if (target < 0) return;
@@ -86,10 +90,11 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     }
 
     /**
-     * 接收方某檔收完後補上存檔 Uri（縮圖/開啟用，來自 ReceivedItem → setReceivedUri），
-     * 只更新該列不觸發其他列的 notifyDataSetChanged，避免 flicker。
+     * 接收方某檔收完後補上存檔 Uri（縮圖/開啟用，來自 ReceivedItem → setReceivedUri）， 只更新該列不觸發其他列的
+     * notifyDataSetChanged，避免 flicker。
      */
-    public void updateReceivedThumbnail(@NonNull String name, @Nullable Uri uri, @Nullable String mime) {
+    public void updateReceivedThumbnail(
+            @NonNull String name, @Nullable Uri uri, @Nullable String mime) {
         int pos = indexOfName(name);
         if (pos < 0) return;
         SendRow r = rows.get(pos);
@@ -105,8 +110,8 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
     }
 
     /**
-     * 把 {@code index} 之前尚未完成的列回填為完成。循序傳輸下「後面那列開始 → 前面各列必然完成」，
-     * 用來補上經 LiveData 投遞被合併丟棄的中間檔 FILE_DONE（否則完成時偶有幾項沒打勾）。
+     * 把 {@code index} 之前尚未完成的列回填為完成。循序傳輸下「後面那列開始 → 前面各列必然完成」， 用來補上經 LiveData 投遞被合併丟棄的中間檔
+     * FILE_DONE（否則完成時偶有幾項沒打勾）。
      */
     public void markRowsDoneBefore(int index) {
         for (int i = 0; i < index && i < rows.size(); i++) {
@@ -127,21 +132,23 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         return -1;
     }
 
-    @NonNull @Override
+    @NonNull
+    @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View v = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_send, parent, false);
+        View v =
+                LayoutInflater.from(parent.getContext()).inflate(R.layout.item_send, parent, false);
         return new VH(v);
     }
 
     @Override
-    public void onBindViewHolder(@NonNull VH h, int position, @NonNull java.util.List<Object> payloads) {
+    public void onBindViewHolder(
+            @NonNull VH h, int position, @NonNull java.util.List<Object> payloads) {
         if (!payloads.isEmpty()) {
             // 局部更新：只動進度/狀態/高亮，縮圖維持不變（消除閃爍）。
             bindProgress(h, rows.get(position), h.itemView.getContext());
             return;
         }
-        super.onBindViewHolder(h, position, payloads);   // → 完整 onBindViewHolder(h, position)
+        super.onBindViewHolder(h, position, payloads); // → 完整 onBindViewHolder(h, position)
     }
 
     @Override
@@ -156,18 +163,20 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
         // 移除鈕（待傳清單）
         h.remove.setVisibility(r.removable && !r.done && r.percent < 0 ? View.VISIBLE : View.GONE);
-        h.remove.setOnClickListener(v -> {
-            int pos = h.getBindingAdapterPosition();
-            if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
-        });
+        h.remove.setOnClickListener(
+                v -> {
+                    int pos = h.getBindingAdapterPosition();
+                    if (pos != RecyclerView.NO_POSITION && onRemove != null) onRemove.onRemove(pos);
+                });
 
         // 項目點擊（開啟檔案；文字/連結項無 fileUri，但仍要能點開預覽 → openFile 內以 ITEM_TEXT 分支處理）
-        h.itemView.setOnClickListener(v -> {
-            if (onItemClickListener != null
-                    && (r.fileUri != null || r.itemType == TransferProtocol.ITEM_TEXT)) {
-                onItemClickListener.onItemClick(r);
-            }
-        });
+        h.itemView.setOnClickListener(
+                v -> {
+                    if (onItemClickListener != null
+                            && (r.fileUri != null || r.itemType == TransferProtocol.ITEM_TEXT)) {
+                        onItemClickListener.onItemClick(r);
+                    }
+                });
 
         // 縮圖
         h.thumb.setImageResource(FileUtils.iconFor(r.itemType, r.mime, r.name));
@@ -176,16 +185,18 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         if (r.isVisualMedia() && r.thumbUri != null) {
             final Uri want = r.thumbUri;
             try {
-                thumbPool.execute(() -> {
-                    Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 48));
-                    if (bm == null) return;
-                    main.post(() -> {
-                        if (want.equals(h.thumbTag)) {
-                            h.thumb.setPadding(0, 0, 0, 0);
-                            h.thumb.setImageBitmap(bm);
-                        }
-                    });
-                });
+                thumbPool.execute(
+                        () -> {
+                            Bitmap bm = ThumbUtils.decode(ctx, want, dp(ctx, 48));
+                            if (bm == null) return;
+                            main.post(
+                                    () -> {
+                                        if (want.equals(h.thumbTag)) {
+                                            h.thumb.setPadding(0, 0, 0, 0);
+                                            h.thumb.setImageBitmap(bm);
+                                        }
+                                    });
+                        });
             } catch (java.util.concurrent.RejectedExecutionException ignored) {
                 // pool 已 shutdown（不應發生，但作為最後防線）
             }
@@ -205,14 +216,17 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
             h.status.setText(r.percent + "%");
             h.status.setTextColor(ctx.getColor(R.color.beam_accent));
         } else {
-            h.status.setText("");   // 待傳：大小已在上一行，右側留空
+            h.status.setText(""); // 待傳：大小已在上一行，右側留空
         }
 
         // 傳輸中當前列高亮（accent_soft，透過 activated 狀態）
         h.itemView.setActivated(r.highlight);
     }
 
-    @Override public int getItemCount() { return rows.size(); }
+    @Override
+    public int getItemCount() {
+        return rows.size();
+    }
 
     @Override
     public void onAttachedToRecyclerView(@NonNull RecyclerView recyclerView) {
@@ -231,9 +245,12 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
 
     private static String itemTypeLabel(Context c, byte t) {
         switch (t) {
-            case TransferProtocol.ITEM_VCARD: return "名片";
-            case TransferProtocol.ITEM_PHOTO: return "相片／影片";
-            default: return "檔案";
+            case TransferProtocol.ITEM_VCARD:
+                return "名片";
+            case TransferProtocol.ITEM_PHOTO:
+                return "相片／影片";
+            default:
+                return "檔案";
         }
     }
 
@@ -246,11 +263,12 @@ public class SendListAdapter extends RecyclerView.Adapter<SendListAdapter.VH> {
         final TextView name, meta, status;
         final android.widget.ImageButton remove;
         @androidx.annotation.Nullable Uri thumbTag;
+
         VH(@NonNull View v) {
             super(v);
-            thumb  = v.findViewById(R.id.ivThumb);
-            name   = v.findViewById(R.id.tvName);
-            meta   = v.findViewById(R.id.tvMeta);
+            thumb = v.findViewById(R.id.ivThumb);
+            name = v.findViewById(R.id.tvName);
+            meta = v.findViewById(R.id.tvMeta);
             status = v.findViewById(R.id.tvStatus);
             remove = v.findViewById(R.id.ibRemove);
         }

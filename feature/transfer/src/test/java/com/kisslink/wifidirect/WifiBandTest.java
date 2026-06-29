@@ -5,15 +5,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.kisslink.wifidirect.WifiBand.Band;
-
 import org.junit.Test;
 
 /**
  * {@link WifiBand} 頻段分類的純單元測試。
  *
- * <p>鎖住 5GHz 門檻 {@link WifiBand#BAND_5GHZ_MIN_MHZ}（4900 MHz）與其邊界——此門檻
- * 同時被 {@code WifiDirectManager.canHostFastGroup} 用於「當 GO 是否會落在慢頻段」的決策，
- * 任何漂移都會直接影響配對頻段選擇與 SCC 診斷標籤。
+ * <p>鎖住 5GHz 門檻 {@link WifiBand#BAND_5GHZ_MIN_MHZ}（4900 MHz）與其邊界——此門檻 同時被 {@code
+ * WifiDirectManager.canHostFastGroup} 用於「當 GO 是否會落在慢頻段」的決策， 任何漂移都會直接影響配對頻段選擇與 SCC 診斷標籤。
  */
 public class WifiBandTest {
 
@@ -41,8 +39,8 @@ public class WifiBandTest {
 
     @Test
     public void nonPositiveFrequencyIsUnknown() {
-        assertEquals(Band.UNKNOWN, WifiBand.of(0));   // 未連線
-        assertEquals(Band.UNKNOWN, WifiBand.of(-1));  // 取不到
+        assertEquals(Band.UNKNOWN, WifiBand.of(0)); // 未連線
+        assertEquals(Band.UNKNOWN, WifiBand.of(-1)); // 取不到
     }
 
     // ── 門檻邊界 ──────────────────────────────────────────────
@@ -50,7 +48,7 @@ public class WifiBandTest {
     @Test
     public void thresholdBoundary_isInclusiveFor5GHz() {
         assertEquals(Band.BAND_2_4GHZ, WifiBand.of(WifiBand.BAND_5GHZ_MIN_MHZ - 1)); // 4899
-        assertEquals(Band.BAND_5GHZ, WifiBand.of(WifiBand.BAND_5GHZ_MIN_MHZ));       // 4900
+        assertEquals(Band.BAND_5GHZ, WifiBand.of(WifiBand.BAND_5GHZ_MIN_MHZ)); // 4900
     }
 
     // ── label() ───────────────────────────────────────────────
@@ -66,8 +64,8 @@ public class WifiBandTest {
 
     @Test
     public void isFastBand_trueFor5GHzAndUnknown_falseFor24GHz() {
-        assertTrue(WifiBand.isFastBand(5180));  // 5GHz → 快
-        assertTrue(WifiBand.isFastBand(0));     // 未知（未連 STA）→ 視為可當快 GO
+        assertTrue(WifiBand.isFastBand(5180)); // 5GHz → 快
+        assertTrue(WifiBand.isFastBand(0)); // 未知（未連 STA）→ 視為可當快 GO
         assertFalse(WifiBand.isFastBand(2412)); // 2.4GHz → 慢
     }
 }

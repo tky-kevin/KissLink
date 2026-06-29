@@ -2,13 +2,10 @@ package com.kisslink.transfer;
 
 import android.app.Service;
 import android.os.PowerManager;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-/**
- * Manages a partial wake lock to prevent CPU throttling during active transfers.
- */
+/** Manages a partial wake lock to prevent CPU throttling during active transfers. */
 final class WakeLockManager {
 
     private static final String TAG = "WakeLockManager";

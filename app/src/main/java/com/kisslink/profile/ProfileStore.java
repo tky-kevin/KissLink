@@ -6,23 +6,21 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * 名片資料的單一儲存點（process 範圍 singleton）：
+ *
  * <ul>
- *   <li>姓名 + 自訂欄位 → SharedPreferences（JSON）。</li>
- *   <li>頭像 → 內部儲存 {@code avatar.png}（置中裁切＋縮放，避免肥大）。</li>
- *   <li>{@link #avatarThumbBytes} 產生小縮圖供連線後 HELLO 交換給對方顯示。</li>
+ *   <li>姓名 + 自訂欄位 → SharedPreferences（JSON）。
+ *   <li>頭像 → 內部儲存 {@code avatar.png}（置中裁切＋縮放，避免肥大）。
+ *   <li>{@link #avatarThumbBytes} 產生小縮圖供連線後 HELLO 交換給對方顯示。
  * </ul>
  */
 public final class ProfileStore {
@@ -31,12 +29,12 @@ public final class ProfileStore {
 
     private static final String PREFS = "kisslink_profile";
     private static final String K_NAME = "name";
-    private static final String K_FIELDS = "fields";       // JSON array of {l,v}
+    private static final String K_FIELDS = "fields"; // JSON array of {l,v}
     private static final String K_AVATAR_VER = "avatar_ver";
     private static final String AVATAR_FILE = "avatar.png";
 
-    private static final int AVATAR_MAX = 512;     // 內部儲存頭像最大邊
-    private static final int THUMB_MAX = 192;       // 交換縮圖最大邊
+    private static final int AVATAR_MAX = 512; // 內部儲存頭像最大邊
+    private static final int THUMB_MAX = 192; // 交換縮圖最大邊
     private static final int THUMB_QUALITY = 80;
 
     private static volatile ProfileStore instance;
@@ -114,12 +112,18 @@ public final class ProfileStore {
 
     // ── 頭像 ──────────────────────────────────────────────────
 
-    public File avatarFile() { return new File(app.getFilesDir(), AVATAR_FILE); }
+    public File avatarFile() {
+        return new File(app.getFilesDir(), AVATAR_FILE);
+    }
 
-    public boolean hasAvatar() { return avatarFile().exists(); }
+    public boolean hasAvatar() {
+        return avatarFile().exists();
+    }
 
     /** 頭像版本號（每次更新 +1）——供 UI 快取失效。 */
-    public int avatarVersion() { return prefs.getInt(K_AVATAR_VER, 0); }
+    public int avatarVersion() {
+        return prefs.getInt(K_AVATAR_VER, 0);
+    }
 
     @Nullable
     public Bitmap loadAvatar() {
@@ -134,12 +138,12 @@ public final class ProfileStore {
     /**
      * 取得「可直接顯示」的方形頭像點陣圖：有自訂頭像回真實圖，否則把預設字符畫在透明方形畫布上。
      *
-     * <p>讓兩種狀態都走同一條顯示路徑（固定 {@code centerCrop} + 零內距），避免在
-     * 「切換 ImageView 內距/scaleType」時 centerCrop 矩陣沿用舊值而把頭像縮小或裁切。
+     * <p>讓兩種狀態都走同一條顯示路徑（固定 {@code centerCrop} + 零內距），避免在 「切換 ImageView 內距/scaleType」時 centerCrop
+     * 矩陣沿用舊值而把頭像縮小或裁切。
      *
-     * <p>{@code uiContext} 必須是「會跟隨 App 內深/淺色覆寫」的 themed context（Activity / Fragment
-     * 的 requireContext），不可用 application context——後者的 Configuration 不吃
-     * {@code AppCompatDelegate.setDefaultNightMode}，會導致預設頭像顏色固定不隨主題切換。
+     * <p>{@code uiContext} 必須是「會跟隨 App 內深/淺色覆寫」的 themed context（Activity / Fragment 的
+     * requireContext），不可用 application context——後者的 Configuration 不吃 {@code
+     * AppCompatDelegate.setDefaultNightMode}，會導致預設頭像顏色固定不隨主題切換。
      */
     @NonNull
     public Bitmap loadAvatarForDisplay(@NonNull Context uiContext, int sizePx) {
@@ -154,8 +158,9 @@ public final class ProfileStore {
         int size = Math.max(1, sizePx);
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         android.graphics.Canvas c = new android.graphics.Canvas(bmp);
-        android.graphics.drawable.Drawable d = androidx.core.content.ContextCompat.getDrawable(
-                uiContext, com.kisslink.R.drawable.ic_avatar_default);
+        android.graphics.drawable.Drawable d =
+                androidx.core.content.ContextCompat.getDrawable(
+                        uiContext, com.kisslink.R.drawable.ic_avatar_default);
         if (d != null) {
             int inset = Math.round(size * DEFAULT_GLYPH_INSET);
             d.setBounds(inset, inset, size - inset, size - inset);
@@ -182,8 +187,10 @@ public final class ProfileStore {
 
     public void clearAvatar() {
         File f = avatarFile();
-        if (f.exists()) //noinspection ResultOfMethodCallIgnored
+        if (f.exists()) {
+            // noinspection ResultOfMethodCallIgnored
             f.delete();
+        }
         prefs.edit().putInt(K_AVATAR_VER, avatarVersion() + 1).apply();
     }
 

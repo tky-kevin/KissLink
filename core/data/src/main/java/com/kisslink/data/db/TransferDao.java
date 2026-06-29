@@ -5,12 +5,9 @@ import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
-
 import java.util.List;
 
-/**
- * 傳輸紀錄的 Room DAO。
- */
+/** 傳輸紀錄的 Room DAO。 */
 @Dao
 public interface TransferDao {
 
@@ -32,13 +29,14 @@ public interface TransferDao {
     /**
      * 全文搜尋：在 fileName / peerDeviceName 中模糊匹配，可選擇限定方向。
      *
-     * @param query     LIKE 匹配字串，呼叫端需自行加 % 前後綴。
+     * @param query LIKE 匹配字串，呼叫端需自行加 % 前後綴。
      * @param direction 過濾方向（"SEND"/"RECEIVE"），傳 null 或 "" 表示不過濾。
      */
-    @Query("SELECT * FROM transfer_records "
-            + "WHERE (fileName LIKE :query OR peerDeviceName LIKE :query) "
-            + "  AND (:direction IS NULL OR :direction = '' OR direction = :direction) "
-            + "ORDER BY timestampMs DESC")
+    @Query(
+            "SELECT * FROM transfer_records "
+                    + "WHERE (fileName LIKE :query OR peerDeviceName LIKE :query) "
+                    + "  AND (:direction IS NULL OR :direction = '' OR direction = :direction) "
+                    + "ORDER BY timestampMs DESC")
     LiveData<List<TransferRecordEntity>> search(String query, String direction);
 
     @Query("DELETE FROM transfer_records WHERE id = :id")

@@ -1,11 +1,9 @@
 package com.kisslink.transfer;
 
-import android.os.Handler;
+import static org.junit.Assert.*;
 
 import org.junit.Before;
 import org.junit.Test;
-
-import static org.junit.Assert.*;
 
 public class SessionManagerTest {
 
@@ -42,7 +40,7 @@ public class SessionManagerTest {
 
     @Test
     public void clearPeerIdentity_resetsAll() {
-        sm.setPeerProfile("Alice", new byte[]{1, 2, 3});
+        sm.setPeerProfile("Alice", new byte[] {1, 2, 3});
         sm.clearPeerIdentity();
         assertNull(sm.getPeerNameFromHello());
         assertNull(sm.getPeerAvatarBytes());
@@ -51,7 +49,7 @@ public class SessionManagerTest {
 
     @Test
     public void resetSession_resetsAll() {
-        sm.setPeerProfile("Bob", new byte[]{4, 5, 6});
+        sm.setPeerProfile("Bob", new byte[] {4, 5, 6});
         sm.resetSession();
         assertNull(sm.getPendingSwitchPeer());
         assertFalse(sm.isTransferring());
@@ -80,28 +78,34 @@ public class SessionManagerTest {
 
     @Test
     public void mapPhase_latched() {
-        assertEquals(SessionState.Phase.PAIRING_LATCHED,
-                SessionManager.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.LATCHED).phase);
+        assertEquals(
+                SessionState.Phase.PAIRING_LATCHED,
+                SessionManager.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.LATCHED)
+                        .phase);
     }
 
     @Test
     public void mapPhase_connected() {
-        assertEquals(SessionState.Phase.CONNECTED,
-                SessionManager.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.CONNECTED).phase);
+        assertEquals(
+                SessionState.Phase.CONNECTED,
+                SessionManager.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.CONNECTED)
+                        .phase);
     }
 
     @Test
     public void mapPhase_idle() {
-        assertEquals(SessionState.Phase.IDLE,
+        assertEquals(
+                SessionState.Phase.IDLE,
                 SessionManager.mapPhase(com.kisslink.pairing.PairingCoordinator.Phase.IDLE).phase);
     }
 
     @Test
     public void mapTransfer_transferring() {
-        TransferProgress tp = new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .fileName("test.txt")
-                .build();
+        TransferProgress tp =
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .fileName("test.txt")
+                        .build();
         assertEquals(SessionState.Phase.TRANSFERRING, SessionManager.mapTransfer(tp).phase);
     }
 

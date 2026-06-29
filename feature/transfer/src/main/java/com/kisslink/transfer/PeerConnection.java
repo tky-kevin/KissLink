@@ -2,14 +2,11 @@ package com.kisslink.transfer;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.os.Environment;
 import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.Socket;
@@ -20,11 +17,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * 雙向 peer 傳輸通道——配對連線建立後,雙方各持一個 {@link Socket}。
  *
- * <p>本類別是薄協調器：持有 socket、write lock、進度 LiveData，並管理
- * {@link PeerSender}（送端執行緒）和 {@link PeerReceiver}（收端執行緒）的生命週期。
+ * <p>本類別是薄協調器：持有 socket、write lock、進度 LiveData，並管理 {@link PeerSender}（送端執行緒）和 {@link
+ * PeerReceiver}（收端執行緒）的生命週期。
  *
- * <p>共用型別 {@link Chunk}、{@link OutItem}、{@link #STOP} 供同套件的
- * PeerSender / PeerReceiver 直接存取（package-private）。
+ * <p>共用型別 {@link Chunk}、{@link OutItem}、{@link #STOP} 供同套件的 PeerSender / PeerReceiver
+ * 直接存取（package-private）。
  */
 public class PeerConnection {
 
@@ -34,15 +31,27 @@ public class PeerConnection {
     static final int CHUNK_POOL = 4;
 
     static final class Chunk {
-        final byte[] data; int len;
-        Chunk(int cap) { this.data = new byte[cap]; }
+        final byte[] data;
+        int len;
+
+        Chunk(int cap) {
+            this.data = new byte[cap];
+        }
     }
+
     static final Chunk CHUNK_EOF = new Chunk(0);
 
     static final class OutItem {
-        final SendItem item; final long batchId; final int index; final int count;
+        final SendItem item;
+        final long batchId;
+        final int index;
+        final int count;
+
         OutItem(SendItem item, long batchId, int index, int count) {
-            this.item = item; this.batchId = batchId; this.index = index; this.count = count;
+            this.item = item;
+            this.batchId = batchId;
+            this.index = index;
+            this.count = count;
         }
     }
 
@@ -52,7 +61,11 @@ public class PeerConnection {
     static final class PendingSend {
         final OutItem outItem;
         final long offsetBytes; // bytes already confirmed written to socket
-        PendingSend(OutItem item, long offset) { outItem = item; offsetBytes = offset; }
+
+        PendingSend(OutItem item, long offset) {
+            outItem = item;
+            offsetBytes = offset;
+        }
     }
 
     static final class PendingRecv {
@@ -63,12 +76,25 @@ public class PeerConnection {
         final int fileIndex, fileCount;
         final long batchId;
 
-        PendingRecv(String name, String mime, long totalSize,
-                    @Nullable android.net.Uri target, long received,
-                    byte itemType, int fileIndex, int fileCount, long batchId) {
-            this.name = name; this.mime = mime; this.totalSize = totalSize;
-            this.target = target; this.received = received; this.itemType = itemType;
-            this.fileIndex = fileIndex; this.fileCount = fileCount; this.batchId = batchId;
+        PendingRecv(
+                String name,
+                String mime,
+                long totalSize,
+                @Nullable android.net.Uri target,
+                long received,
+                byte itemType,
+                int fileIndex,
+                int fileCount,
+                long batchId) {
+            this.name = name;
+            this.mime = mime;
+            this.totalSize = totalSize;
+            this.target = target;
+            this.received = received;
+            this.itemType = itemType;
+            this.fileIndex = fileIndex;
+            this.fileCount = fileCount;
+            this.batchId = batchId;
         }
     }
 
@@ -83,15 +109,32 @@ public class PeerConnection {
         pendingRecvRef.set(pr);
     }
 
-    @Nullable public PendingSend takePendingSend() { return pendingSendRef.getAndSet(null); }
-    @Nullable public PendingRecv takePendingRecv() { return pendingRecvRef.getAndSet(null); }
+    @Nullable
+    public PendingSend takePendingSend() {
+        return pendingSendRef.getAndSet(null);
+    }
+
+    @Nullable
+    public PendingRecv takePendingRecv() {
+        return pendingRecvRef.getAndSet(null);
+    }
 
     public interface Listener {
-        void onItemCompleted(boolean sent, String name, long size, long avgSpeedBps,
-                             boolean success, byte itemType,
-                             @Nullable String contentUri, @Nullable String mime, long batchId);
+        void onItemCompleted(
+                boolean sent,
+                String name,
+                long size,
+                long avgSpeedBps,
+                boolean success,
+                byte itemType,
+                @Nullable String contentUri,
+                @Nullable String mime,
+                long batchId);
+
         void onDisconnected();
+
         void onPeerProfile(@Nullable String name, @Nullable byte[] avatarThumb);
+
         void onCardReceived(@Nullable byte[] vcard, String name);
     }
 
@@ -108,7 +151,7 @@ public class PeerConnection {
             new MutableLiveData<>(TransferProgress.connected());
 
     private static final int HEARTBEAT_INTERVAL_MS = 2500;
-    private static final int LIVENESS_TIMEOUT_MS   = 7000;
+    private static final int LIVENESS_TIMEOUT_MS = 7000;
 
     private volatile boolean running = false;
     private Thread senderThread, heartbeatThread;
@@ -118,25 +161,35 @@ public class PeerConnection {
 
     // ── Constructors ──────────────────────────────────────────
 
-    public PeerConnection(@NonNull Context context, @NonNull Socket socket, @NonNull Listener listener) {
+    public PeerConnection(
+            @NonNull Context context, @NonNull Socket socket, @NonNull Listener listener) {
         this(context, socket, listener, null, null);
     }
 
-    public PeerConnection(@NonNull Context context, @NonNull Socket socket, @NonNull Listener listener,
-                          @Nullable String selfName, @Nullable byte[] selfAvatarThumb) {
-        this.context  = context.getApplicationContext();
-        this.socket   = socket;
+    public PeerConnection(
+            @NonNull Context context,
+            @NonNull Socket socket,
+            @NonNull Listener listener,
+            @Nullable String selfName,
+            @Nullable byte[] selfAvatarThumb) {
+        this.context = context.getApplicationContext();
+        this.socket = socket;
         this.listener = listener;
         this.selfName = selfName;
         this.selfAvatarThumb = selfAvatarThumb;
-        this.verbose  = (this.context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        this.verbose =
+                (this.context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 
     // ── Public API ────────────────────────────────────────────
 
-    public LiveData<TransferProgress> getProgress() { return progressLd; }
+    public LiveData<TransferProgress> getProgress() {
+        return progressLd;
+    }
 
-    public boolean isAlive() { return running; }
+    public boolean isAlive() {
+        return running;
+    }
 
     public void start() {
         if (running) return;
@@ -146,7 +199,8 @@ public class PeerConnection {
             try {
                 socket.setSendBufferSize(1 << 20);
                 socket.setReceiveBufferSize(1 << 20);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             out = new BufferedOutputStream(socket.getOutputStream());
             socket.setSoTimeout(LIVENESS_TIMEOUT_MS);
         } catch (IOException e) {
@@ -156,14 +210,25 @@ public class PeerConnection {
             return;
         }
 
-        PeerSender.FrameWriter fw = (header, payload, off, len) -> writeFrame(header, payload, off, len);
-        PeerSender sender = new PeerSender(context, outQueue, fw, progressLd, listener,
-                selfName, selfAvatarThumb, verbose, pendingSendRef);
+        PeerSender.FrameWriter fw =
+                (header, payload, off, len) -> writeFrame(header, payload, off, len);
+        PeerSender sender =
+                new PeerSender(
+                        context,
+                        outQueue,
+                        fw,
+                        progressLd,
+                        listener,
+                        selfName,
+                        selfAvatarThumb,
+                        verbose,
+                        pendingSendRef);
         receiver = new PeerReceiver(context, socket, progressLd, listener, verbose, pendingRecvRef);
-        receiver.setRunning(true); // 對稱於 close() 的 setRunning(false)；漏設會讓 run() 迴圈一次都不跑→立即 onDisconnected
+        receiver.setRunning(
+                true); // 對稱於 close() 的 setRunning(false)；漏設會讓 run() 迴圈一次都不跑→立即 onDisconnected
 
-        senderThread    = new Thread(sender, "peer-sender");
-        Thread reader   = new Thread(receiver, "peer-reader");
+        senderThread = new Thread(sender, "peer-sender");
+        Thread reader = new Thread(receiver, "peer-reader");
         heartbeatThread = new Thread(this::heartbeatLoop, "peer-heartbeat");
         reader.start();
         senderThread.start();
@@ -183,7 +248,10 @@ public class PeerConnection {
         if (receiver != null) receiver.setRunning(false);
         outQueue.offer(STOP);
         if (heartbeatThread != null) heartbeatThread.interrupt();
-        try { socket.close(); } catch (IOException ignored) {}
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+        }
         joinQuietly(senderThread);
         joinQuietly(heartbeatThread);
         Log.d(TAG, "PeerConnection closed");
@@ -191,7 +259,8 @@ public class PeerConnection {
 
     // ── Write lock (shared by heartbeat + sender) ─────────────
 
-    private void writeFrame(byte[] header, @Nullable byte[] payload, int off, int len) throws IOException {
+    private void writeFrame(byte[] header, @Nullable byte[] payload, int off, int len)
+            throws IOException {
         synchronized (writeLock) {
             if (out == null) throw new IOException("stream closed");
             out.write(header);
@@ -205,10 +274,18 @@ public class PeerConnection {
     private void heartbeatLoop() {
         byte[] hb = TransferProtocol.encodeHeader(TransferProtocol.makeHeartbeat());
         while (running) {
-            try { Thread.sleep(HEARTBEAT_INTERVAL_MS); } catch (InterruptedException e) { break; }
+            try {
+                Thread.sleep(HEARTBEAT_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                break;
+            }
             if (!running) break;
-            try { writeFrame(hb, null, 0, 0); }
-            catch (IOException e) { Log.w(TAG, "heartbeat failed: " + e.getMessage()); break; }
+            try {
+                writeFrame(hb, null, 0, 0);
+            } catch (IOException e) {
+                Log.w(TAG, "heartbeat failed: " + e.getMessage());
+                break;
+            }
         }
     }
 
@@ -216,7 +293,9 @@ public class PeerConnection {
 
     private static void joinQuietly(@Nullable Thread t) {
         if (t == null) return;
-        try { t.join(2000); } catch (InterruptedException e) {
+        try {
+            t.join(2000);
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
     }
@@ -225,19 +304,28 @@ public class PeerConnection {
     @SuppressWarnings("deprecation")
     private void recordLinkInfo() {
         try {
-            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
-                    context.getSystemService(Context.WIFI_SERVICE);
+            android.net.wifi.WifiManager wm =
+                    (android.net.wifi.WifiManager) context.getSystemService(Context.WIFI_SERVICE);
             if (wm == null) return;
             android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
             if (wi == null) return;
             int freq = wi.getFrequency();
             // 一律寫入 flight recorder（非僅 verbose）：2.4GHz 常因 SCC 把 P2P 釘在慢頻段，
             // dump 時可據此解釋「為何傳輸偏慢」（見 com.kisslink.wifidirect.WifiBand）。
-            com.kisslink.diag.FlightRecorder.event(TAG,
-                    "LINK band=" + com.kisslink.wifidirect.WifiBand.label(freq)
-                            + " freq=" + freq + "MHz"
-                            + " linkSpeed=" + wi.getLinkSpeed() + "Mbps"
-                            + " rssi=" + wi.getRssi() + "dBm");
-        } catch (Exception ignored) {}
+            com.kisslink.diag.FlightRecorder.event(
+                    TAG,
+                    "LINK band="
+                            + com.kisslink.wifidirect.WifiBand.label(freq)
+                            + " freq="
+                            + freq
+                            + "MHz"
+                            + " linkSpeed="
+                            + wi.getLinkSpeed()
+                            + "Mbps"
+                            + " rssi="
+                            + wi.getRssi()
+                            + "dBm");
+        } catch (Exception ignored) {
+        }
     }
 }

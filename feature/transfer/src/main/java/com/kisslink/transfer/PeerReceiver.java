@@ -7,13 +7,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
-
-import org.json.JSONObject;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,16 +18,17 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import org.json.JSONObject;
 
 /**
- * Receiver thread: reads frames from the socket, writes received files to MediaStore
- * via a pipelined writer thread per {@link ReceivingItem}.
+ * Receiver thread: reads frames from the socket, writes received files to MediaStore via a
+ * pipelined writer thread per {@link ReceivingItem}.
  *
- * <p>Created by {@link PeerConnection#start()} and runs on its own thread.
- * Exits on EOF (peer closed) or socket timeout (liveness failure).
+ * <p>Created by {@link PeerConnection#start()} and runs on its own thread. Exits on EOF (peer
+ * closed) or socket timeout (liveness failure).
  *
- * <p>On unexpected disconnect mid-transfer, saves a {@link PeerConnection.PendingRecv} to
- * {@code pendingRecvRef} (keeping the partial MediaStore file) so the next connection can append.
+ * <p>On unexpected disconnect mid-transfer, saves a {@link PeerConnection.PendingRecv} to {@code
+ * pendingRecvRef} (keeping the partial MediaStore file) so the next connection can append.
  */
 final class PeerReceiver implements Runnable {
 
@@ -50,12 +47,13 @@ final class PeerReceiver implements Runnable {
     private long recvBatchId = 0;
     private long lastRecvActivity = 0;
 
-    PeerReceiver(@NonNull Context context,
-                 @NonNull Socket socket,
-                 @NonNull MutableLiveData<TransferProgress> progressLd,
-                 @NonNull PeerConnection.Listener listener,
-                 boolean verbose,
-                 @NonNull AtomicReference<PeerConnection.PendingRecv> pendingRecvRef) {
+    PeerReceiver(
+            @NonNull Context context,
+            @NonNull Socket socket,
+            @NonNull MutableLiveData<TransferProgress> progressLd,
+            @NonNull PeerConnection.Listener listener,
+            boolean verbose,
+            @NonNull AtomicReference<PeerConnection.PendingRecv> pendingRecvRef) {
         this.context = context;
         this.socket = socket;
         this.progressLd = progressLd;
@@ -64,7 +62,9 @@ final class PeerReceiver implements Runnable {
         this.pendingRecvRef = pendingRecvRef;
     }
 
-    void setRunning(boolean running) { this.running = running; }
+    void setRunning(boolean running) {
+        this.running = running;
+    }
 
     @Override
     public void run() {
@@ -87,104 +87,178 @@ final class PeerReceiver implements Runnable {
                         }
                         break;
 
-                    case TransferProtocol.TYPE_FILE_META: {
-                        byte[] mb = new byte[h.metaLen];
-                        readFully(in, mb, mb.length);
-                        JSONObject meta = new JSONObject(new String(mb, StandardCharsets.UTF_8));
-                        String name = meta.optString("n", "received_" + System.currentTimeMillis());
-                        String mime = meta.optString("m", "application/octet-stream");
-                        int fi = meta.optInt("i", 0);
-                        int fc = meta.optInt("c", 0);
-                        if (cur != null) cur.abort();
+                    case TransferProtocol.TYPE_FILE_META:
+                        {
+                            byte[] mb = new byte[h.metaLen];
+                            readFully(in, mb, mb.length);
+                            JSONObject meta =
+                                    new JSONObject(new String(mb, StandardCharsets.UTF_8));
+                            String name =
+                                    meta.optString("n", "received_" + System.currentTimeMillis());
+                            String mime = meta.optString("m", "application/octet-stream");
+                            int fi = meta.optInt("i", 0);
+                            int fc = meta.optInt("c", 0);
+                            if (cur != null) cur.abort();
 
-                        // Check if sender is resuming a file we previously partially received
-                        PeerConnection.PendingRecv pr = pendingRecvRef.getAndSet(null);
-                        if (pr != null && pr.name.equals(name)
-                                && pr.totalSize == h.totalSize && pr.target != null) {
-                            Log.i(TAG, "Resuming receive: " + name + " from offset=" + pr.received);
-                            recvBatchId = pr.batchId; // keep same batch so history groups correctly
-                            cur = new ReceivingItem(pr, fi, fc);
-                            emitProgress(false, name, h.totalSize, cur.received, cur.started,
-                                    cur.itemType, recvBatchId, fi, fc);
-                        } else {
-                            if (pr != null) {
-                                // Name or size mismatch — the sender is sending something different; discard partial
-                                try { context.getContentResolver().delete(pr.target, null, null); }
-                                catch (Exception ignored) {}
+                            // Check if sender is resuming a file we previously partially received
+                            PeerConnection.PendingRecv pr = pendingRecvRef.getAndSet(null);
+                            if (pr != null
+                                    && pr.name.equals(name)
+                                    && pr.totalSize == h.totalSize
+                                    && pr.target != null) {
+                                Log.i(
+                                        TAG,
+                                        "Resuming receive: "
+                                                + name
+                                                + " from offset="
+                                                + pr.received);
+                                recvBatchId =
+                                        pr.batchId; // keep same batch so history groups correctly
+                                cur = new ReceivingItem(pr, fi, fc);
+                                emitProgress(
+                                        false,
+                                        name,
+                                        h.totalSize,
+                                        cur.received,
+                                        cur.started,
+                                        cur.itemType,
+                                        recvBatchId,
+                                        fi,
+                                        fc);
+                            } else {
+                                if (pr != null) {
+                                    // Name or size mismatch — the sender is sending something
+                                    // different; discard partial
+                                    try {
+                                        context.getContentResolver().delete(pr.target, null, null);
+                                    } catch (Exception ignored) {
+                                    }
+                                }
+                                long now = System.currentTimeMillis();
+                                if (now - lastRecvActivity > RECV_BATCH_GAP_MS) recvBatchId = now;
+                                lastRecvActivity = now;
+                                cur =
+                                        new ReceivingItem(
+                                                name, mime, h.totalSize, h.itemType, fi, fc);
+                                emitProgress(
+                                        false,
+                                        name,
+                                        h.totalSize,
+                                        0,
+                                        cur.started,
+                                        cur.itemType,
+                                        recvBatchId,
+                                        fi,
+                                        fc);
                             }
-                            long now = System.currentTimeMillis();
-                            if (now - lastRecvActivity > RECV_BATCH_GAP_MS) recvBatchId = now;
-                            lastRecvActivity = now;
-                            cur = new ReceivingItem(name, mime, h.totalSize, h.itemType, fi, fc);
-                            emitProgress(false, name, h.totalSize, 0, cur.started,
-                                    cur.itemType, recvBatchId, fi, fc);
+                            break;
                         }
-                        break;
-                    }
 
-                    case TransferProtocol.TYPE_DATA_CHUNK: {
-                        if (cur != null) {
-                            long chunkEnd = h.offset + (long) h.chunkLen;
+                    case TransferProtocol.TYPE_DATA_CHUNK:
+                        {
+                            if (cur != null) {
+                                long chunkEnd = h.offset + (long) h.chunkLen;
 
-                            if (chunkEnd <= cur.resumeFrom) {
-                                // Entirely within already-received range — drain from wire and skip
+                                if (chunkEnd <= cur.resumeFrom) {
+                                    // Entirely within already-received range — drain from wire and
+                                    // skip
+                                    discard(in, h.chunkLen);
+                                    break;
+                                }
+
+                                PeerConnection.Chunk c = cur.wfree.take();
+                                try {
+                                    readFully(in, c.data, h.chunkLen);
+                                } catch (IOException e) {
+                                    cur.wfree.put(c);
+                                    throw e;
+                                }
+
+                                // CRC on full received bytes before any trimming
+                                int crc = TransferProtocol.crc32(c.data, 0, h.chunkLen);
+                                if (crc != h.crc32) {
+                                    Log.w(TAG, "CRC mismatch");
+                                    cur.corrupt = true;
+                                }
+
+                                // Trim bytes that overlap with data already on disk (resume partial
+                                // overlap)
+                                int writeLen = h.chunkLen;
+                                if (h.offset < cur.resumeFrom) {
+                                    int skip = (int) (cur.resumeFrom - h.offset);
+                                    System.arraycopy(c.data, skip, c.data, 0, h.chunkLen - skip);
+                                    writeLen = h.chunkLen - skip;
+                                }
+                                c.len = writeLen;
+                                cur.received += writeLen;
+                                cur.wqueue.put(c);
+                                emitProgress(
+                                        false,
+                                        cur.name,
+                                        cur.size,
+                                        cur.received,
+                                        cur.started,
+                                        cur.itemType,
+                                        recvBatchId,
+                                        cur.fileIndex,
+                                        cur.fileCount);
+                            } else {
                                 discard(in, h.chunkLen);
-                                break;
                             }
-
-                            PeerConnection.Chunk c = cur.wfree.take();
-                            try {
-                                readFully(in, c.data, h.chunkLen);
-                            } catch (IOException e) {
-                                cur.wfree.put(c);
-                                throw e;
-                            }
-
-                            // CRC on full received bytes before any trimming
-                            int crc = TransferProtocol.crc32(c.data, 0, h.chunkLen);
-                            if (crc != h.crc32) { Log.w(TAG, "CRC mismatch"); cur.corrupt = true; }
-
-                            // Trim bytes that overlap with data already on disk (resume partial overlap)
-                            int writeLen = h.chunkLen;
-                            if (h.offset < cur.resumeFrom) {
-                                int skip = (int) (cur.resumeFrom - h.offset);
-                                System.arraycopy(c.data, skip, c.data, 0, h.chunkLen - skip);
-                                writeLen = h.chunkLen - skip;
-                            }
-                            c.len = writeLen;
-                            cur.received += writeLen;
-                            cur.wqueue.put(c);
-                            emitProgress(false, cur.name, cur.size, cur.received, cur.started,
-                                    cur.itemType, recvBatchId, cur.fileIndex, cur.fileCount);
-                        } else {
-                            discard(in, h.chunkLen);
+                            break;
                         }
-                        break;
-                    }
 
-                    case TransferProtocol.TYPE_COMPLETE: {
-                        if (cur != null) {
-                            boolean ok = cur.finish();
-                            if (verbose) PeerSender.logThroughput("RECV", cur.name, cur.received, cur.started);
-                            long avg = PeerSender.avgSpeed(cur.size, cur.started);
-                            lastRecvActivity = System.currentTimeMillis();
-                            String uri = cur.target != null ? cur.target.toString() : null;
-                            listener.onItemCompleted(false, cur.name, cur.size, avg, ok, cur.itemType,
-                                    uri, cur.mime, recvBatchId);
-                            if (cur.itemType == TransferProtocol.ITEM_VCARD && cur.cardBytes() != null) {
-                                listener.onCardReceived(cur.cardBytes(), cur.name);
+                    case TransferProtocol.TYPE_COMPLETE:
+                        {
+                            if (cur != null) {
+                                boolean ok = cur.finish();
+                                if (verbose)
+                                    PeerSender.logThroughput(
+                                            "RECV", cur.name, cur.received, cur.started);
+                                long avg = PeerSender.avgSpeed(cur.size, cur.started);
+                                lastRecvActivity = System.currentTimeMillis();
+                                String uri = cur.target != null ? cur.target.toString() : null;
+                                listener.onItemCompleted(
+                                        false,
+                                        cur.name,
+                                        cur.size,
+                                        avg,
+                                        ok,
+                                        cur.itemType,
+                                        uri,
+                                        cur.mime,
+                                        recvBatchId);
+                                if (cur.itemType == TransferProtocol.ITEM_VCARD
+                                        && cur.cardBytes() != null) {
+                                    listener.onCardReceived(cur.cardBytes(), cur.name);
+                                }
+                                if (cur.fileCount > 0 && cur.fileIndex >= cur.fileCount - 1)
+                                    emitAllDone(
+                                            false,
+                                            cur.name,
+                                            cur.size,
+                                            cur.itemType,
+                                            recvBatchId,
+                                            cur.fileCount);
+                                else
+                                    emitDone(
+                                            false,
+                                            cur.name,
+                                            cur.size,
+                                            cur.itemType,
+                                            recvBatchId,
+                                            cur.fileIndex,
+                                            cur.fileCount);
+                                cur = null;
                             }
-                            if (cur.fileCount > 0 && cur.fileIndex >= cur.fileCount - 1)
-                                emitAllDone(false, cur.name, cur.size, cur.itemType, recvBatchId, cur.fileCount);
-                            else
-                                emitDone(false, cur.name, cur.size, cur.itemType, recvBatchId, cur.fileIndex, cur.fileCount);
-                            cur = null;
+                            break;
                         }
-                        break;
-                    }
 
                     case TransferProtocol.TYPE_CANCEL:
-                        if (cur != null) { cur.abort(); cur = null; }
+                        if (cur != null) {
+                            cur.abort();
+                            cur = null;
+                        }
                         break;
 
                     default:
@@ -221,28 +295,44 @@ final class PeerReceiver implements Runnable {
         final int fileIndex, fileCount;
         final long started = System.currentTimeMillis();
         long received;
+
         /** Byte offset to start writing from; 0 for a fresh receive, >0 when resuming. */
         final long resumeFrom;
+
         boolean corrupt = false;
         @Nullable Uri target;
         @Nullable OutputStream out;
         @Nullable java.io.ByteArrayOutputStream cardBuf;
 
-        final ArrayBlockingQueue<PeerConnection.Chunk> wfree = new ArrayBlockingQueue<>(PeerConnection.CHUNK_POOL);
-        final ArrayBlockingQueue<PeerConnection.Chunk> wqueue = new ArrayBlockingQueue<>(PeerConnection.CHUNK_POOL + 1);
+        final ArrayBlockingQueue<PeerConnection.Chunk> wfree =
+                new ArrayBlockingQueue<>(PeerConnection.CHUNK_POOL);
+        final ArrayBlockingQueue<PeerConnection.Chunk> wqueue =
+                new ArrayBlockingQueue<>(PeerConnection.CHUNK_POOL + 1);
         @Nullable volatile IOException writeErr;
         final Thread writer;
 
-        @Nullable byte[] cardBytes() { return cardBuf != null ? cardBuf.toByteArray() : null; }
+        @Nullable
+        byte[] cardBytes() {
+            return cardBuf != null ? cardBuf.toByteArray() : null;
+        }
 
         /** Normal (fresh) constructor. */
-        ReceivingItem(String name, String mime, long size, byte itemType, int fileIndex, int fileCount) {
-            this.name = name; this.mime = mime; this.size = size; this.itemType = itemType;
-            this.fileIndex = fileIndex; this.fileCount = fileCount;
-            this.received = 0; this.resumeFrom = 0;
-            if (itemType == TransferProtocol.ITEM_VCARD) cardBuf = new java.io.ByteArrayOutputStream();
-            String saveName = itemType == TransferProtocol.ITEM_TEXT
-                    ? "Shared_Text_" + System.currentTimeMillis() + ".txt" : name;
+        ReceivingItem(
+                String name, String mime, long size, byte itemType, int fileIndex, int fileCount) {
+            this.name = name;
+            this.mime = mime;
+            this.size = size;
+            this.itemType = itemType;
+            this.fileIndex = fileIndex;
+            this.fileCount = fileCount;
+            this.received = 0;
+            this.resumeFrom = 0;
+            if (itemType == TransferProtocol.ITEM_VCARD)
+                cardBuf = new java.io.ByteArrayOutputStream();
+            String saveName =
+                    itemType == TransferProtocol.ITEM_TEXT
+                            ? "Shared_Text_" + System.currentTimeMillis() + ".txt"
+                            : name;
             try {
                 ContentResolver cr = context.getContentResolver();
                 ContentValues v = new ContentValues();
@@ -257,33 +347,42 @@ final class PeerReceiver implements Runnable {
             } catch (Exception e) {
                 Log.e(TAG, "open receive output failed: " + name, e);
             }
-            for (int i = 0; i < PeerConnection.CHUNK_POOL; i++) wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
+            for (int i = 0; i < PeerConnection.CHUNK_POOL; i++)
+                wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
             writer = new Thread(this::writeLoop, "peer-recv-write");
             writer.start();
         }
 
         /** Resume constructor: re-opens existing MediaStore entry in append mode. */
         ReceivingItem(PeerConnection.PendingRecv pr, int fi, int fc) {
-            this.name = pr.name; this.mime = pr.mime; this.size = pr.totalSize;
-            this.itemType = pr.itemType; this.fileIndex = fi; this.fileCount = fc;
-            this.received = pr.received; this.resumeFrom = pr.received;
-            if (itemType == TransferProtocol.ITEM_VCARD) cardBuf = new java.io.ByteArrayOutputStream();
+            this.name = pr.name;
+            this.mime = pr.mime;
+            this.size = pr.totalSize;
+            this.itemType = pr.itemType;
+            this.fileIndex = fi;
+            this.fileCount = fc;
+            this.received = pr.received;
+            this.resumeFrom = pr.received;
+            if (itemType == TransferProtocol.ITEM_VCARD)
+                cardBuf = new java.io.ByteArrayOutputStream();
             try {
                 target = pr.target;
                 // "wa" = write-append: positions the write pointer at end of existing content
                 out = context.getContentResolver().openOutputStream(target, "wa");
             } catch (Exception e) {
                 Log.e(TAG, "resume open failed: " + pr.name, e);
-                target = null; out = null;
+                target = null;
+                out = null;
             }
-            for (int i = 0; i < PeerConnection.CHUNK_POOL; i++) wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
+            for (int i = 0; i < PeerConnection.CHUNK_POOL; i++)
+                wfree.add(new PeerConnection.Chunk(TransferProtocol.CHUNK_SIZE));
             writer = new Thread(this::writeLoop, "peer-recv-write");
             writer.start();
         }
 
         PeerConnection.PendingRecv toPendingRecv(long batchId) {
-            return new PeerConnection.PendingRecv(name, mime, size, target, received,
-                    itemType, fileIndex, fileCount, batchId);
+            return new PeerConnection.PendingRecv(
+                    name, mime, size, target, received, itemType, fileIndex, fileCount, batchId);
         }
 
         private void writeLoop() {
@@ -296,7 +395,8 @@ final class PeerReceiver implements Runnable {
                             out.write(c.data, 0, c.len);
                             if (cardBuf != null) cardBuf.write(c.data, 0, c.len);
                         } catch (IOException e) {
-                            writeErr = e; corrupt = true;
+                            writeErr = e;
+                            corrupt = true;
                         }
                     }
                     wfree.put(c);
@@ -308,7 +408,10 @@ final class PeerReceiver implements Runnable {
                 Log.w(TAG, "writeLoop unexpected error", e);
                 corrupt = true;
             } finally {
-                try { if (out != null) out.close(); } catch (IOException ignored) {}
+                try {
+                    if (out != null) out.close();
+                } catch (IOException ignored) {
+                }
                 out = null;
             }
         }
@@ -320,15 +423,26 @@ final class PeerReceiver implements Runnable {
                 if (writer.isAlive()) {
                     Log.w(TAG, "Writer thread stuck, forcing close");
                     corrupt = true;
-                    try { if (out != null) out.close(); } catch (IOException ignored) {}
+                    try {
+                        if (out != null) out.close();
+                    } catch (IOException ignored) {
+                    }
                     out = null;
                 }
-            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         boolean finish() {
             drainWriter();
-            try { if (out != null) { out.flush(); out.close(); } } catch (IOException ignored) {}
+            try {
+                if (out != null) {
+                    out.flush();
+                    out.close();
+                }
+            } catch (IOException ignored) {
+            }
             out = null;
             try {
                 if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -336,22 +450,31 @@ final class PeerReceiver implements Runnable {
                     v.put(android.provider.MediaStore.Downloads.IS_PENDING, 0);
                     context.getContentResolver().update(target, v, null, null);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             return !corrupt && writeErr == null && target != null;
         }
 
         void abort() {
             drainWriter();
-            try { if (out != null) out.close(); } catch (IOException ignored) {}
+            try {
+                if (out != null) out.close();
+            } catch (IOException ignored) {
+            }
             out = null;
-            try { if (target != null) context.getContentResolver().delete(target, null, null); }
-            catch (Exception ignored) {}
+            try {
+                if (target != null) context.getContentResolver().delete(target, null, null);
+            } catch (Exception ignored) {
+            }
         }
 
         /** Close writer without deleting the partial file — keeps bytes on disk for resume. */
         void closeKeepFile() {
             drainWriter();
-            try { if (out != null) out.close(); } catch (IOException ignored) {}
+            try {
+                if (out != null) out.close();
+            } catch (IOException ignored) {
+            }
             out = null;
             // IS_PENDING stays 1 while resumable; finish() clears it on successful completion
         }
@@ -365,8 +488,12 @@ final class PeerReceiver implements Runnable {
             String name = p.has("n") ? p.optString("n", null) : null;
             byte[] avatar = null;
             if (p.has("a")) {
-                try { avatar = android.util.Base64.decode(p.optString("a", ""), android.util.Base64.NO_WRAP); }
-                catch (Exception ignored) {}
+                try {
+                    avatar =
+                            android.util.Base64.decode(
+                                    p.optString("a", ""), android.util.Base64.NO_WRAP);
+                } catch (Exception ignored) {
+                }
             }
             listener.onPeerProfile(name, avatar);
         } catch (Exception e) {
@@ -376,36 +503,70 @@ final class PeerReceiver implements Runnable {
 
     // ── Progress emission ──
 
-    private void emitProgress(boolean sending, String name, long total, long done, long started,
-                              byte itemType, long batchId, int fileIndex, int fileCount) {
+    private void emitProgress(
+            boolean sending,
+            String name,
+            long total,
+            long done,
+            long started,
+            byte itemType,
+            long batchId,
+            int fileIndex,
+            int fileCount) {
         long speed = 0;
         long elapsed = System.currentTimeMillis() - started;
         if (elapsed > 0) speed = done * 1000L / elapsed;
-        progressLd.postValue(new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.TRANSFERRING)
-                .fileName(name).outgoing(sending).itemType(itemType).batchId(batchId)
-                .totalBytes(total).doneBytes(done).speedBps(speed)
-                .fileIndex(fileIndex).fileCount(fileCount)
-                .build());
+        progressLd.postValue(
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.TRANSFERRING)
+                        .fileName(name)
+                        .outgoing(sending)
+                        .itemType(itemType)
+                        .batchId(batchId)
+                        .totalBytes(total)
+                        .doneBytes(done)
+                        .speedBps(speed)
+                        .fileIndex(fileIndex)
+                        .fileCount(fileCount)
+                        .build());
     }
 
-    private void emitDone(boolean sending, String name, long size, byte itemType, long batchId,
-                          int fileIndex, int fileCount) {
-        progressLd.postValue(new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.FILE_DONE)
-                .fileName(name).outgoing(sending).itemType(itemType).batchId(batchId)
-                .totalBytes(size).doneBytes(size)
-                .fileIndex(fileIndex).fileCount(fileCount)
-                .build());
+    private void emitDone(
+            boolean sending,
+            String name,
+            long size,
+            byte itemType,
+            long batchId,
+            int fileIndex,
+            int fileCount) {
+        progressLd.postValue(
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.FILE_DONE)
+                        .fileName(name)
+                        .outgoing(sending)
+                        .itemType(itemType)
+                        .batchId(batchId)
+                        .totalBytes(size)
+                        .doneBytes(size)
+                        .fileIndex(fileIndex)
+                        .fileCount(fileCount)
+                        .build());
     }
 
-    private void emitAllDone(boolean sending, String name, long size, byte itemType, long batchId, int count) {
-        progressLd.postValue(new TransferProgress.Builder()
-                .phase(TransferProgress.Phase.ALL_DONE)
-                .fileName(name).outgoing(sending).itemType(itemType).batchId(batchId)
-                .totalBytes(size).doneBytes(size)
-                .fileIndex(Math.max(0, count - 1)).fileCount(count)
-                .build());
+    private void emitAllDone(
+            boolean sending, String name, long size, byte itemType, long batchId, int count) {
+        progressLd.postValue(
+                new TransferProgress.Builder()
+                        .phase(TransferProgress.Phase.ALL_DONE)
+                        .fileName(name)
+                        .outgoing(sending)
+                        .itemType(itemType)
+                        .batchId(batchId)
+                        .totalBytes(size)
+                        .doneBytes(size)
+                        .fileIndex(Math.max(0, count - 1))
+                        .fileCount(count)
+                        .build());
     }
 
     // ── Utilities ──

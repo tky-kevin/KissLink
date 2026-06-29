@@ -1,15 +1,14 @@
 package com.kisslink.profile;
 
 import androidx.annotation.NonNull;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * 個人名片資料模型——姓名 + 可自訂的聯絡欄位（電話／Email／公司…皆為自訂欄位）。
- * 頭像不存在這裡（由 {@link ProfileStore} 以檔案管理），這個物件只負責可序列化的文字資料。
+ * 個人名片資料模型——姓名 + 可自訂的聯絡欄位（電話／Email／公司…皆為自訂欄位）。 頭像不存在這裡（由 {@link ProfileStore}
+ * 以檔案管理），這個物件只負責可序列化的文字資料。
  */
 public final class Profile {
 
@@ -17,13 +16,24 @@ public final class Profile {
     public static final class Field {
         private final String label;
         private final String value;
-        public Field(String label, String value) { this.label = label; this.value = value; }
-        public String getLabel() { return label; }
-        public String getValue() { return value; }
+
+        public Field(String label, String value) {
+            this.label = label;
+            this.value = value;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public String getValue() {
+            return value;
+        }
     }
 
     private String name;
     private final List<Field> fields;
+
     /** 名片頭像（JPEG/PNG bytes，可為 null）——隨 vCard 以 PHOTO 欄位攜帶，供接收端顯示。 */
     @androidx.annotation.Nullable private byte[] photo;
 
@@ -36,23 +46,37 @@ public final class Profile {
         return new Profile("", new ArrayList<>());
     }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public String getName() {
+        return name;
+    }
 
-    @NonNull public List<Field> getFields() { return fields; }
-    public void addField(@NonNull Field field) { fields.add(field); }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    @androidx.annotation.Nullable public byte[] getPhoto() { return photo; }
-    public void setPhoto(@androidx.annotation.Nullable byte[] photo) { this.photo = photo; }
+    @NonNull
+    public List<Field> getFields() {
+        return fields;
+    }
+
+    public void addField(@NonNull Field field) {
+        fields.add(field);
+    }
+
+    @androidx.annotation.Nullable
+    public byte[] getPhoto() {
+        return photo;
+    }
+
+    public void setPhoto(@androidx.annotation.Nullable byte[] photo) {
+        this.photo = photo;
+    }
 
     public boolean isBlank() {
         return name.trim().isEmpty() && fields.isEmpty();
     }
 
-    /**
-     * 組成 vCard 3.0（可被系統聯絡人 App 匯入）。欄位 label 對應到常見 vCard 屬性，
-     * 認不得的就放進備註，確保不漏資料。
-     */
+    /** 組成 vCard 3.0（可被系統聯絡人 App 匯入）。欄位 label 對應到常見 vCard 屬性， 認不得的就放進備註，確保不漏資料。 */
     @NonNull
     public byte[] toVCard() {
         StringBuilder sb = new StringBuilder();
@@ -66,13 +90,16 @@ public final class Profile {
             if (f.value == null || f.value.trim().isEmpty()) continue;
             String key = f.label == null ? "" : f.label.trim().toLowerCase(Locale.ROOT);
             String v = escape(f.value.trim());
-            if (key.contains("phone") || key.contains("電話") || key.contains("手機") || key.contains("tel")) {
+            if (key.contains("phone")
+                    || key.contains("電話")
+                    || key.contains("手機")
+                    || key.contains("tel")) {
                 sb.append("TEL;TYPE=CELL:").append(v).append("\r\n");
             } else if (key.contains("mail") || key.contains("信箱") || key.contains("郵")) {
                 sb.append("EMAIL:").append(v).append("\r\n");
             } else if (key.contains("公司") || key.contains("org") || key.contains("company")) {
                 sb.append("ORG:").append(v).append("\r\n");
-            } else if (key.contains("title") || key.contains("職") ) {
+            } else if (key.contains("title") || key.contains("職")) {
                 sb.append("TITLE:").append(v).append("\r\n");
             } else if (key.contains("url") || key.contains("網") || key.contains("web")) {
                 sb.append("URL:").append(v).append("\r\n");
@@ -95,8 +122,12 @@ public final class Profile {
     }
 
     private static String escape(String s) {
-        return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
-                .replace("\r\n", "\\n").replace("\r", "\\n").replace("\n", "\\n");
+        return s.replace("\\", "\\\\")
+                .replace(";", "\\;")
+                .replace(",", "\\,")
+                .replace("\r\n", "\\n")
+                .replace("\r", "\\n")
+                .replace("\n", "\\n");
     }
 
     private static String unescape(String s) {
@@ -119,8 +150,10 @@ public final class Profile {
             if (key.equals("FN")) {
                 p.name = val;
             } else if (key.startsWith("PHOTO")) {
-                try { p.photo = java.util.Base64.getDecoder().decode(val); }
-                catch (Exception ignored) {}
+                try {
+                    p.photo = java.util.Base64.getDecoder().decode(val);
+                } catch (Exception ignored) {
+                }
             } else if (key.startsWith("TEL")) {
                 p.fields.add(new Field("電話", val));
             } else if (key.startsWith("EMAIL")) {

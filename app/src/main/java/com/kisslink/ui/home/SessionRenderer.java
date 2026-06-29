@@ -5,11 +5,9 @@ import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.FragmentActivity;
-
 import com.kisslink.R;
 import com.kisslink.profile.ProfileStore;
 import com.kisslink.transfer.SessionState;
@@ -17,23 +15,27 @@ import com.kisslink.transfer.TransferProgress;
 import com.kisslink.transfer.TransferProtocol;
 
 /**
- * 主畫面的渲染層：把單一 {@link SessionState} 對應成畫面（beam 階段、標題、速度、傳輸/完成版面、
- * 接收橫幅），以及就緒/閒置畫面。C3 最後一刀——原本這整層散在 {@link HomeActivity} 的 onSession
- * 大 switch 與十餘個 render helper 都收斂於此，{@code beam} 也完全封裝在內。
+ * 主畫面的渲染層：把單一 {@link SessionState} 對應成畫面（beam 階段、標題、速度、傳輸/完成版面、 接收橫幅），以及就緒/閒置畫面。C3 最後一刀——原本這整層散在
+ * {@link HomeActivity} 的 onSession 大 switch 與十餘個 render helper 都收斂於此，{@code beam} 也完全封裝在內。
  *
- * <p>單向資料流：事件（SessionState / 選取變動）→ 渲染。少數需要回到 Activity 的「動作」
- * （NFC 解鎖、送出、送名片、取得對方身份）透過 {@link Host} 介面外送，渲染層本身不持有 binder/NFC。
- * 狀態真相仍在 {@link HomeViewModel}；本類別與兩個子 presenter（清單、待傳疊圖）協作。
+ * <p>單向資料流：事件（SessionState / 選取變動）→ 渲染。少數需要回到 Activity 的「動作」 （NFC 解鎖、送出、送名片、取得對方身份）透過 {@link Host}
+ * 介面外送，渲染層本身不持有 binder/NFC。 狀態真相仍在 {@link HomeViewModel}；本類別與兩個子 presenter（清單、待傳疊圖）協作。
  */
 final class SessionRenderer {
 
     /** 渲染層需要 Activity 代為執行的少數動作（持有 binder / NFC 的那一側）。 */
     interface Host {
-        @Nullable String peerName();
-        @Nullable byte[] peerAvatar();
+        @Nullable
+        String peerName();
+
+        @Nullable
+        byte[] peerAvatar();
+
         void resetLatchedNfc();
-        void requestSend();              // 連上後自動送出待傳清單
-        void requestSendProfileCard();   // 連上後送出排隊的名片
+
+        void requestSend(); // 連上後自動送出待傳清單
+
+        void requestSendProfileCard(); // 連上後送出排隊的名片
     }
 
     private final FragmentActivity ctx;
@@ -48,11 +50,18 @@ final class SessionRenderer {
     private final TextView tvReceived;
     private final Host host;
 
-    SessionRenderer(@NonNull FragmentActivity ctx, @NonNull Handler main, @NonNull BeamStageView beam,
-                    @NonNull TransferUiController ui, @NonNull TransferListPresenter transferList,
-                    @NonNull SendStackPresenter sendStack, @NonNull HomeViewModel vm,
-                    @NonNull View pickRow, @NonNull LinearLayout receivedBanner,
-                    @NonNull TextView tvReceived, @NonNull Host host) {
+    SessionRenderer(
+            @NonNull FragmentActivity ctx,
+            @NonNull Handler main,
+            @NonNull BeamStageView beam,
+            @NonNull TransferUiController ui,
+            @NonNull TransferListPresenter transferList,
+            @NonNull SendStackPresenter sendStack,
+            @NonNull HomeViewModel vm,
+            @NonNull View pickRow,
+            @NonNull LinearLayout receivedBanner,
+            @NonNull TextView tvReceived,
+            @NonNull Host host) {
         this.ctx = ctx;
         this.main = main;
         this.beam = beam;
@@ -77,7 +86,7 @@ final class SessionRenderer {
             case IDLE:
             case CANCELLED:
                 ui.stopStageTicker();
-                resetSessionState();   // 真正回到閒置 → 清空 VM 持久狀態（重建走的是 renderReady，不清）
+                resetSessionState(); // 真正回到閒置 → 清空 VM 持久狀態（重建走的是 renderReady，不清）
                 renderReady();
                 if (vm.lastPhase() != SessionState.Phase.IDLE) host.resetLatchedNfc();
                 break;
@@ -100,25 +109,31 @@ final class SessionRenderer {
             case CONNECTED:
                 // 不立刻切「已連線」:讓階段 ticker 把最後的「建立 TCP 通道」走完並停留一拍再切,
                 // 避免 socket 太快時 TCP 階段只閃一下。ticker 未在跑時會立即執行。
-                ui.completeStagesThen(() -> {
-                    beam.setPhase(BeamStageView.CONNECTED);
-                    ui.showPeerIdentity(beam, host.peerName(), host.peerAvatar(),
-                            ProfileStore.get(ctx).name(), ProfileStore.get(ctx).loadAvatar());
-                    ui.showHeadlineText(ctx.getString(R.string.home_connected_title), connectedSub());
-                    host.resetLatchedNfc();
-                    exitTransferUi();
-                    transferList.restoreIfAny();
-                    vm.setSending(false);
-                    sendStack.updateButton();
-                    sendStack.rebuild();
-                    if (vm.isPendingCardSend()) {
-                        vm.setPendingCardSend(false);
-                        main.post(host::requestSendProfileCard);
-                    }
-                    if (!vm.isSelectionEmpty()) {
-                        main.post(host::requestSend);
-                    }
-                });
+                ui.completeStagesThen(
+                        () -> {
+                            beam.setPhase(BeamStageView.CONNECTED);
+                            ui.showPeerIdentity(
+                                    beam,
+                                    host.peerName(),
+                                    host.peerAvatar(),
+                                    ProfileStore.get(ctx).name(),
+                                    ProfileStore.get(ctx).loadAvatar());
+                            ui.showHeadlineText(
+                                    ctx.getString(R.string.home_connected_title), connectedSub());
+                            host.resetLatchedNfc();
+                            exitTransferUi();
+                            transferList.restoreIfAny();
+                            vm.setSending(false);
+                            sendStack.updateButton();
+                            sendStack.rebuild();
+                            if (vm.isPendingCardSend()) {
+                                vm.setPendingCardSend(false);
+                                main.post(host::requestSendProfileCard);
+                            }
+                            if (!vm.isSelectionEmpty()) {
+                                main.post(host::requestSend);
+                            }
+                        });
                 break;
 
             case TRANSFERRING:
@@ -134,12 +149,14 @@ final class SessionRenderer {
             case ERROR:
                 ui.stopStageTicker();
                 beam.setPhase(BeamStageView.ERROR);
-                ui.showHeadlineText(ctx.getString(R.string.home_error_title),
+                ui.showHeadlineText(
+                        ctx.getString(R.string.home_error_title),
                         st.error != null ? st.error : ctx.getString(R.string.home_error_retry));
                 host.resetLatchedNfc();
                 break;
 
-            default: break;
+            default:
+                break;
         }
         vm.onSession(st);
     }
@@ -150,10 +167,10 @@ final class SessionRenderer {
     // 的 IDLE/CANCELLED 處理。否則重建時這裡會把待還原的接收清單清掉，replay 只補回最後一檔 → 剩 1 項。
     void renderReady() {
         beam.setPhase(BeamStageView.READY);
-        ui.showPeerIdentity(beam, null, null,
-                ProfileStore.get(ctx).name(), ProfileStore.get(ctx).loadAvatar());
-        ui.showHeadlineText(ctx.getString(R.string.home_ready_title),
-                ctx.getString(R.string.home_ready_sub));
+        ui.showPeerIdentity(
+                beam, null, null, ProfileStore.get(ctx).name(), ProfileStore.get(ctx).loadAvatar());
+        ui.showHeadlineText(
+                ctx.getString(R.string.home_ready_title), ctx.getString(R.string.home_ready_sub));
         // 收合傳輸中列表方塊、顯示挑檔列（接收清單若仍有資料，連線 replay 後由 restoreIfAny 還原）。
         transferList.reset();
         pickRow.setVisibility(View.VISIBLE);
@@ -175,9 +192,10 @@ final class SessionRenderer {
     // ── beam 的其他入口（供 Activity 在非 SessionState 路徑呼叫）────
     void haptic() {
         // CONFIRM 是 API 30 才有的觸覺常數；minSdk 29 上退回 VIRTUAL_KEY，避免 InlinedApi。
-        int feedback = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
-                ? HapticFeedbackConstants.CONFIRM
-                : HapticFeedbackConstants.VIRTUAL_KEY;
+        int feedback =
+                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R
+                        ? HapticFeedbackConstants.CONFIRM
+                        : HapticFeedbackConstants.VIRTUAL_KEY;
         beam.performHapticFeedback(feedback);
     }
 
@@ -187,7 +205,7 @@ final class SessionRenderer {
     }
 
     void playCardFly() {
-        beam.playCardFly();   // 名片縮入對方頭像的 genie 動畫
+        beam.playCardFly(); // 名片縮入對方頭像的 genie 動畫
     }
 
     // ══════════════════════════════════════════════════════════
@@ -196,7 +214,7 @@ final class SessionRenderer {
 
     /** 真正回到閒置：清空接收清單/慶祝旗標/送出中等 ViewModel 持久狀態（與單純的畫面重建區隔）。 */
     private void resetSessionState() {
-        vm.clearReceivedList();   // 內含 resetReceived（橫幅計數歸零）
+        vm.clearReceivedList(); // 內含 resetReceived（橫幅計數歸零）
         vm.resetCelebration();
         vm.setSending(false);
     }
@@ -204,7 +222,8 @@ final class SessionRenderer {
     /** 已連線副標：「已連線至 ◯◯」；無對方名稱時回退「對方」。 */
     private String connectedSub() {
         String peer = host.peerName();
-        return ctx.getString(R.string.home_connected_sub,
+        return ctx.getString(
+                R.string.home_connected_sub,
                 peer != null ? peer : ctx.getString(R.string.peer_fallback));
     }
 
@@ -216,9 +235,10 @@ final class SessionRenderer {
         boolean outgoing = tp.outgoing;
         beam.setDirection(outgoing ? BeamStageView.SEND : BeamStageView.RECEIVE);
         beam.setPhase(BeamStageView.TRANSFERRING);
-        beam.setProgress(vm.batchProgress(tp));   // #3：整包進度
+        beam.setProgress(vm.batchProgress(tp)); // #3：整包進度
         // 速度作為主角：大字 + tabular 數字（取代「已連線」與小灰字）
-        ui.showSpeedHero(TransferUiController.speedNumber(tp.speedBps),
+        ui.showSpeedHero(
+                TransferUiController.speedNumber(tp.speedBps),
                 TransferUiController.speedUnit(tp.speedBps));
         // 進入傳輸版面的第一幀重置自動捲動（之後每幀都會走到這，但只重置一次）。
         transferList.beginTransferFrame();
@@ -257,12 +277,16 @@ final class SessionRenderer {
                 beam.setPhase(BeamStageView.CONNECTED);
                 beam.setProgress(1f);
                 ui.hidePercent();
-                ui.showPeerIdentity(beam, host.peerName(), host.peerAvatar(),
-                        ProfileStore.get(ctx).name(), ProfileStore.get(ctx).loadAvatar());
+                ui.showPeerIdentity(
+                        beam,
+                        host.peerName(),
+                        host.peerAvatar(),
+                        ProfileStore.get(ctx).name(),
+                        ProfileStore.get(ctx).loadAvatar());
                 ui.showHeadlineText(ctx.getString(R.string.home_connected_title), connectedSub());
             }
             exitTransferUi();
-            transferList.restoreIfAny();   // 重建後（如切換深淺色）把 VM 中的接收列表重新顯示
+            transferList.restoreIfAny(); // 重建後（如切換深淺色）把 VM 中的接收列表重新顯示
             sendStack.updateButton();
             sendStack.rebuild();
             return;
@@ -275,8 +299,11 @@ final class SessionRenderer {
         exitTransferUi();
         String peer = host.peerName();
         String who = peer != null ? peer : ctx.getString(R.string.peer_fallback);
-        ui.showHeadlineText(ctx.getString(R.string.transfer_done),
-                outgoing ? ctx.getString(R.string.sent_to, who) : ctx.getString(R.string.received_from, who));
+        ui.showHeadlineText(
+                ctx.getString(R.string.transfer_done),
+                outgoing
+                        ? ctx.getString(R.string.sent_to, who)
+                        : ctx.getString(R.string.received_from, who));
 
         if (isVcard) {
             // 名片獨立傳送，不影響待傳清單
@@ -291,13 +318,16 @@ final class SessionRenderer {
         }
 
         // 短暫顯示完成後回到「已連線」可再選
-        main.postDelayed(() -> {
-            SessionState.Phase last = vm.lastPhase();
-            if ((last == SessionState.Phase.ALL_DONE || last == SessionState.Phase.FILE_DONE)
-                    && vm.isConnected()) {
-                beam.setPhase(BeamStageView.CONNECTED);
-            }
-        }, 1400);
+        main.postDelayed(
+                () -> {
+                    SessionState.Phase last = vm.lastPhase();
+                    if ((last == SessionState.Phase.ALL_DONE
+                                    || last == SessionState.Phase.FILE_DONE)
+                            && vm.isConnected()) {
+                        beam.setPhase(BeamStageView.CONNECTED);
+                    }
+                },
+                1400);
         sendStack.updateButton();
     }
 
@@ -308,12 +338,9 @@ final class SessionRenderer {
         receivedBanner.setVisibility(View.GONE);
     }
 
-    /**
-     * 離開「傳輸中」版面（回到已連線/完成/就緒）：還原挑檔列與待傳/送出。
-     * 送出列表收合；接收列表為持久顯示（收完仍保留，供檢視/點開）→ 不收合。
-     */
+    /** 離開「傳輸中」版面（回到已連線/完成/就緒）：還原挑檔列與待傳/送出。 送出列表收合；接收列表為持久顯示（收完仍保留，供檢視/點開）→ 不收合。 */
     private void exitTransferUi() {
-        transferList.exitTransfer();   // 送出列表收合；接收列表持久 → 不收合（由 presenter 判斷）
+        transferList.exitTransfer(); // 送出列表收合；接收列表持久 → 不收合（由 presenter 判斷）
         pickRow.setVisibility(View.VISIBLE);
         sendStack.rebuild();
         sendStack.updateButton();
