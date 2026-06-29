@@ -168,7 +168,7 @@ public class PeerConnection {
         reader.start();
         senderThread.start();
         heartbeatThread.start();
-        if (verbose) logLinkInfo();
+        recordLinkInfo();
         Log.i(TAG, "PeerConnection started");
     }
 
@@ -223,15 +223,21 @@ public class PeerConnection {
 
     // getConnectionInfo() 已棄用;替代品需 API 31+ 非同步 callback,minSdk 29 下保留同步查詢。
     @SuppressWarnings("deprecation")
-    private void logLinkInfo() {
+    private void recordLinkInfo() {
         try {
             android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
                     context.getSystemService(Context.WIFI_SERVICE);
             if (wm == null) return;
             android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
             if (wi == null) return;
-            Log.i(TAG, "LINK linkSpeed=" + wi.getLinkSpeed() + "Mbps rssi=" + wi.getRssi()
-                    + "dBm freq=" + wi.getFrequency() + "MHz");
+            int freq = wi.getFrequency();
+            // 一律寫入 flight recorder（非僅 verbose）：2.4GHz 常因 SCC 把 P2P 釘在慢頻段，
+            // dump 時可據此解釋「為何傳輸偏慢」（見 com.kisslink.wifidirect.WifiBand）。
+            com.kisslink.diag.FlightRecorder.event(TAG,
+                    "LINK band=" + com.kisslink.wifidirect.WifiBand.label(freq)
+                            + " freq=" + freq + "MHz"
+                            + " linkSpeed=" + wi.getLinkSpeed() + "Mbps"
+                            + " rssi=" + wi.getRssi() + "dBm");
         } catch (Exception ignored) {}
     }
 }

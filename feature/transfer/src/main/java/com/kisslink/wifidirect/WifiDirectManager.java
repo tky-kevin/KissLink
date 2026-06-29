@@ -284,8 +284,7 @@ public class WifiDirectManager implements WifiDirectEventCallback {
             if (!wm.is5GHzBandSupported()) return false;          // 硬體不支援 5GHz → 當 GO 必慢
             android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
             if (wi == null || wi.getNetworkId() == -1) return true; // 未連 STA → GO 可自選 5GHz
-            int freq = wi.getFrequency();
-            return freq <= 0 || freq >= 4900;                     // 5GHz/未知 → 可；2.4GHz → 不可
+            return WifiBand.isFastBand(wi.getFrequency());        // 5GHz/未知 → 可；2.4GHz → 不可
         } catch (Exception e) {
             return true;
         }
