@@ -1,2 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      ClientConnector 透過 ConnectivityManager.getNetworkCapabilities /
+      registerNetworkCallback 挑出真正的 P2P 網路來綁定，這些 API 需要
+      ACCESS_NETWORK_STATE。在 library 模組宣告，使模組獨立 lint 時可見此權限
+      （與 :app 的宣告合併，不會重複）；否則 lint 會誤報 MissingPermission。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>
