@@ -1,31 +1,27 @@
 package com.kisslink.wifidirect;
 
+import static org.junit.Assert.*;
+
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pInfo;
 import android.net.wifi.p2p.WifiP2pManager;
-
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
-
+import java.net.InetAddress;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.net.InetAddress;
-
-import static org.junit.Assert.*;
-
 /**
  * {@link WifiDirectReceiver} 的裝置端 Instrumented 測試。
  *
- * <p><b>執行方式</b>：需連接實體裝置或啟動模擬器。
- * Android Studio → 右鍵此檔案 → Run 'WifiDirectReceiverTest'
- * 或終端機：{@code ./gradlew connectedAndroidTest}
+ * <p><b>執行方式</b>：需連接實體裝置或啟動模擬器。 Android Studio → 右鍵此檔案 → Run 'WifiDirectReceiverTest' 或終端機：{@code
+ * ./gradlew connectedAndroidTest}
  *
- * <p>此測試使用 {@link FakeWifiDirectEventCallback} 替代真實的 {@link WifiDirectManager}，
- * 僅驗證 Receiver 對廣播 Intent 的解析邏輯，不觸碰 Wi-Fi 硬體。
+ * <p>此測試使用 {@link FakeWifiDirectEventCallback} 替代真實的 {@link WifiDirectManager}， 僅驗證 Receiver 對廣播
+ * Intent 的解析邏輯，不觸碰 Wi-Fi 硬體。
  */
 @RunWith(AndroidJUnit4.class)
 public class WifiDirectReceiverTest {
@@ -35,13 +31,13 @@ public class WifiDirectReceiverTest {
     /** 作為 {@link WifiDirectEventCallback} 的測試替身（Test Double）。 */
     static class FakeWifiDirectEventCallback implements WifiDirectEventCallback {
 
-        boolean lastP2pEnabled          = false;
-        boolean p2pStateChangedCalled   = false;
+        boolean lastP2pEnabled = false;
+        boolean p2pStateChangedCalled = false;
         boolean connectionChangedCalled = false; // 新增：onConnectionChanged()
-        boolean connectionInfoCalled    = false;
-        boolean disconnectedCalled      = false;
-        boolean deviceChangedCalled     = false;
-        WifiP2pInfo   lastInfo   = null;
+        boolean connectionInfoCalled = false;
+        boolean disconnectedCalled = false;
+        boolean deviceChangedCalled = false;
+        WifiP2pInfo lastInfo = null;
         WifiP2pDevice lastDevice = null;
 
         @Override
@@ -76,8 +72,8 @@ public class WifiDirectReceiverTest {
         void reset() {
             lastP2pEnabled = false;
             connectionChangedCalled = false;
-            p2pStateChangedCalled = connectionInfoCalled
-                    = disconnectedCalled = deviceChangedCalled = false;
+            p2pStateChangedCalled =
+                    connectionInfoCalled = disconnectedCalled = deviceChangedCalled = false;
             lastInfo = null;
             lastDevice = null;
         }
@@ -103,8 +99,7 @@ public class WifiDirectReceiverTest {
     @Test
     public void p2pStateEnabled_callsCallback_withTrue() {
         Intent intent = new Intent(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
-        intent.putExtra(WifiP2pManager.EXTRA_WIFI_STATE,
-                WifiP2pManager.WIFI_P2P_STATE_ENABLED);
+        intent.putExtra(WifiP2pManager.EXTRA_WIFI_STATE, WifiP2pManager.WIFI_P2P_STATE_ENABLED);
 
         receiver.onReceive(ctx, intent);
 
@@ -115,8 +110,7 @@ public class WifiDirectReceiverTest {
     @Test
     public void p2pStateDisabled_callsCallback_withFalse() {
         Intent intent = new Intent(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
-        intent.putExtra(WifiP2pManager.EXTRA_WIFI_STATE,
-                WifiP2pManager.WIFI_P2P_STATE_DISABLED);
+        intent.putExtra(WifiP2pManager.EXTRA_WIFI_STATE, WifiP2pManager.WIFI_P2P_STATE_DISABLED);
 
         receiver.onReceive(ctx, intent);
 
@@ -166,8 +160,7 @@ public class WifiDirectReceiverTest {
 
         receiver.onReceive(ctx, intent);
 
-        assertTrue("onConnectionChanged 應被呼叫（不論 groupFormed 值）",
-                fake.connectionChangedCalled);
+        assertTrue("onConnectionChanged 應被呼叫（不論 groupFormed 值）", fake.connectionChangedCalled);
     }
 
     @Test
@@ -187,7 +180,7 @@ public class WifiDirectReceiverTest {
     @Test
     public void deviceChanged_withDevice_callsOnThisDeviceChanged() {
         WifiP2pDevice device = new WifiP2pDevice();
-        device.deviceName    = "TestPhone";
+        device.deviceName = "TestPhone";
         device.deviceAddress = "aa:bb:cc:dd:ee:ff";
 
         Intent intent = new Intent(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION);
@@ -243,8 +236,8 @@ public class WifiDirectReceiverTest {
     // ══════════════════════════════════════════════════════════
 
     /**
-     * 使用 reflection 建立 {@link WifiP2pInfo} 並設定 groupFormed 欄位。
-     * （WifiP2pInfo 的建構子是 package-private，只能透過 reflection 注入測試資料。）
+     * 使用 reflection 建立 {@link WifiP2pInfo} 並設定 groupFormed 欄位。 （WifiP2pInfo 的建構子是
+     * package-private，只能透過 reflection 注入測試資料。）
      */
     private static WifiP2pInfo buildP2pInfo(boolean groupFormed) throws Exception {
         WifiP2pInfo info = new WifiP2pInfo();

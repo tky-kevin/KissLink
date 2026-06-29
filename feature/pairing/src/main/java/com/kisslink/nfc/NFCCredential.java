@@ -1,16 +1,15 @@
 package com.kisslink.nfc;
 
 import com.kisslink.model.GroupCredential;
-
+import java.nio.charset.StandardCharsets;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.nio.charset.StandardCharsets;
 
 /**
  * NFC 傳輸用的憑證封裝，負責 {@link GroupCredential} ↔ JSON bytes 的序列化。
  *
  * <p>JSON 格式（最大 ~120 bytes，遠低於 APDU 上限）：
+ *
  * <pre>
  *   {"s":"DIRECT-KL-AB12","p":"SecurePass16","i":"192.168.49.1","t":47890}
  * </pre>
@@ -44,11 +43,7 @@ public final class NFCCredential {
             String json = new String(bytes, StandardCharsets.UTF_8);
             JSONObject o = new JSONObject(json);
             return new GroupCredential(
-                    o.getString("s"),
-                    o.getString("p"),
-                    o.getString("i"),
-                    o.getInt("t")
-            );
+                    o.getString("s"), o.getString("p"), o.getString("i"), o.getInt("t"));
         } catch (JSONException e) {
             throw new IllegalArgumentException("NFCCredential parse error: " + e.getMessage(), e);
         }

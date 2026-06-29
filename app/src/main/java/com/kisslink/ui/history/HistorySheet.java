@@ -20,13 +20,11 @@ import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
 import android.widget.ImageButton;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -37,7 +35,6 @@ import com.kisslink.data.db.TransferRecordEntity;
 import com.kisslink.data.repository.TransferRepository;
 import com.kisslink.util.FileUtils;
 import com.kisslink.util.ThumbUtils;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -45,8 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 傳輸紀錄 bottom sheet——每筆傳輸（同方向、相近時間）整理成一塊，點檔案即開啟。
- * 支援關鍵字搜尋（fileName/peerDeviceName）與方向篩選（全部/傳送/接收）。
+ * 傳輸紀錄 bottom sheet——每筆傳輸（同方向、相近時間）整理成一塊，點檔案即開啟。 支援關鍵字搜尋（fileName/peerDeviceName）與方向篩選（全部/傳送/接收）。
  */
 public class HistorySheet extends BottomSheetDialogFragment {
 
@@ -62,7 +58,7 @@ public class HistorySheet extends BottomSheetDialogFragment {
 
     // 搜尋 / 篩選狀態
     private String currentQuery = "";
-    private String currentDirection = "";  // "" = 全部, "SEND", "RECEIVE"
+    private String currentDirection = ""; // "" = 全部, "SEND", "RECEIVE"
     @Nullable private LiveData<List<TransferRecordEntity>> currentLiveData;
     private long batchId;
 
@@ -75,9 +71,12 @@ public class HistorySheet extends BottomSheetDialogFragment {
         return s;
     }
 
-    @Nullable @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-                             @Nullable Bundle saved) {
+    @Nullable
+    @Override
+    public View onCreateView(
+            @NonNull LayoutInflater inflater,
+            @Nullable ViewGroup container,
+            @Nullable Bundle saved) {
         return inflater.inflate(R.layout.sheet_history, container, false);
     }
 
@@ -101,41 +100,50 @@ public class HistorySheet extends BottomSheetDialogFragment {
         }
 
         ImageButton btnClearAll = v.findViewById(R.id.btnClearAll);
-        btnClearAll.setOnClickListener(x -> {
-            TransferRepository repo = TransferRepository.getInstance(requireContext());
-            if (batchId != 0) {
-                repo.deleteByBatch(batchId);
-                getParentFragmentManager().setFragmentResult(RESULT_BATCH_CLEARED, Bundle.EMPTY);
-            } else {
-                repo.clearAll();
-            }
-            dismiss();
-        });
+        btnClearAll.setOnClickListener(
+                x -> {
+                    TransferRepository repo = TransferRepository.getInstance(requireContext());
+                    if (batchId != 0) {
+                        repo.deleteByBatch(batchId);
+                        getParentFragmentManager()
+                                .setFragmentResult(RESULT_BATCH_CLEARED, Bundle.EMPTY);
+                    } else {
+                        repo.clearAll();
+                    }
+                    dismiss();
+                });
 
         // 搜尋欄
         TextInputEditText etSearch = v.findViewById(R.id.etSearch);
         if (etSearch != null) {
-            etSearch.addTextChangedListener(new TextWatcher() {
-                @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-                @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-                @Override public void afterTextChanged(Editable s) {
-                    currentQuery = s == null ? "" : s.toString().trim();
-                    rebindLiveData();
-                }
-            });
+            etSearch.addTextChangedListener(
+                    new TextWatcher() {
+                        @Override
+                        public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+
+                        @Override
+                        public void onTextChanged(CharSequence s, int st, int b, int c) {}
+
+                        @Override
+                        public void afterTextChanged(Editable s) {
+                            currentQuery = s == null ? "" : s.toString().trim();
+                            rebindLiveData();
+                        }
+                    });
         }
 
         // 篩選 chips
         ChipGroup chipGroup = v.findViewById(R.id.chipGroup);
         if (chipGroup != null) {
-            chipGroup.setOnCheckedStateChangeListener((group, checkedIds) -> {
-                if (checkedIds.isEmpty()) return;
-                int id = checkedIds.get(0);
-                if (id == R.id.chipSend) currentDirection = "SEND";
-                else if (id == R.id.chipReceive) currentDirection = "RECEIVE";
-                else currentDirection = "";
-                rebindLiveData();
-            });
+            chipGroup.setOnCheckedStateChangeListener(
+                    (group, checkedIds) -> {
+                        if (checkedIds.isEmpty()) return;
+                        int id = checkedIds.get(0);
+                        if (id == R.id.chipSend) currentDirection = "SEND";
+                        else if (id == R.id.chipReceive) currentDirection = "RECEIVE";
+                        else currentDirection = "";
+                        rebindLiveData();
+                    });
         }
 
         rebindLiveData();
@@ -153,26 +161,26 @@ public class HistorySheet extends BottomSheetDialogFragment {
         } else if (currentQuery.isEmpty() && currentDirection.isEmpty()) {
             next = repo.getAllRecords();
         } else {
-            next = repo.search(
-                    currentQuery.isEmpty() ? "" : currentQuery,
-                    currentDirection);
+            next = repo.search(currentQuery.isEmpty() ? "" : currentQuery, currentDirection);
         }
 
         // 移除舊觀察者，換新觀察者
         if (currentLiveData != null) currentLiveData.removeObservers(getViewLifecycleOwner());
         currentLiveData = next;
-        currentLiveData.observe(getViewLifecycleOwner(), records -> {
-            List<Object> flat = group(records);
-            adapter.submit(flat);
-            boolean empty = flat.isEmpty();
-            tvEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
-            rv.setVisibility(empty ? View.GONE : View.VISIBLE);
-            if (empty && !currentQuery.isEmpty()) {
-                tvEmpty.setText(R.string.history_search_empty);
-            } else {
-                tvEmpty.setText(R.string.history_empty);
-            }
-        });
+        currentLiveData.observe(
+                getViewLifecycleOwner(),
+                records -> {
+                    List<Object> flat = group(records);
+                    adapter.submit(flat);
+                    boolean empty = flat.isEmpty();
+                    tvEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+                    rv.setVisibility(empty ? View.GONE : View.VISIBLE);
+                    if (empty && !currentQuery.isEmpty()) {
+                        tvEmpty.setText(R.string.history_search_empty);
+                    } else {
+                        tvEmpty.setText(R.string.history_empty);
+                    }
+                });
     }
 
     // ── 分塊 ──────────────────────────────────────────────────
@@ -182,8 +190,11 @@ public class HistorySheet extends BottomSheetDialogFragment {
         final String peer;
         final long timestamp;
         int count;
+
         Header(String direction, String peer, long ts) {
-            this.direction = direction; this.peer = peer; this.timestamp = ts;
+            this.direction = direction;
+            this.peer = peer;
+            this.timestamp = ts;
         }
     }
 
@@ -212,7 +223,9 @@ public class HistorySheet extends BottomSheetDialogFragment {
         return Math.abs(a.timestampMs - b.timestampMs) <= GROUP_GAP_MS;
     }
 
-    private static String safe(String s) { return s == null ? "" : s; }
+    private static String safe(String s) {
+        return s == null ? "" : s;
+    }
 
     // ── Adapter ───────────────────────────────────────────────
 
@@ -223,16 +236,20 @@ public class HistorySheet extends BottomSheetDialogFragment {
         private final Handler main = new Handler(Looper.getMainLooper());
 
         private ExecutorService createThumbPool() {
-            return Executors.newFixedThreadPool(2, r -> {
-                Thread t = new Thread(r, "history-thumb");
-                t.setDaemon(true);
-                return t;
-            });
+            return Executors.newFixedThreadPool(
+                    2,
+                    r -> {
+                        Thread t = new Thread(r, "history-thumb");
+                        t.setDaemon(true);
+                        return t;
+                    });
         }
 
         @SuppressWarnings("NotifyDataSetChanged")
         void submit(List<Object> next) {
-            items.clear(); items.addAll(next); notifyDataSetChanged();
+            items.clear();
+            items.addAll(next);
+            notifyDataSetChanged();
         }
 
         @Override
@@ -249,11 +266,13 @@ public class HistorySheet extends BottomSheetDialogFragment {
             }
         }
 
-        @Override public int getItemViewType(int position) {
+        @Override
+        public int getItemViewType(int position) {
             return items.get(position) instanceof Header ? T_HEADER : T_FILE;
         }
 
-        @NonNull @Override
+        @NonNull
+        @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             LayoutInflater inf = LayoutInflater.from(parent.getContext());
             if (viewType == T_HEADER)
@@ -270,8 +289,14 @@ public class HistorySheet extends BottomSheetDialogFragment {
                 HeaderVH vh = (HeaderVH) h;
                 boolean send = "SEND".equals(hd.direction);
                 vh.dir.setText(send ? R.string.history_send : R.string.history_receive);
-                String when = DateUtils.getRelativeDateTimeString(ctx, hd.timestamp,
-                        DateUtils.MINUTE_IN_MILLIS, DateUtils.WEEK_IN_MILLIS, 0).toString();
+                String when =
+                        DateUtils.getRelativeDateTimeString(
+                                        ctx,
+                                        hd.timestamp,
+                                        DateUtils.MINUTE_IN_MILLIS,
+                                        DateUtils.WEEK_IN_MILLIS,
+                                        0)
+                                .toString();
                 String peer = hd.peer != null && !hd.peer.isEmpty() ? " · " + hd.peer : "";
                 vh.peerTime.setText("· " + when + peer);
 
@@ -280,19 +305,23 @@ public class HistorySheet extends BottomSheetDialogFragment {
                 FileVH vh = (FileVH) h;
                 vh.name.setText(r.fileName);
                 vh.meta.setText(sizeLabel(r.fileSizeBytes) + (r.success ? "" : " · 未完成"));
-                int icon = r.mimeType != null ? FileUtils.guessIconFromMime(r.mimeType)
-                                             : FileUtils.guessIcon(r.fileName);
+                int icon =
+                        r.mimeType != null
+                                ? FileUtils.guessIconFromMime(r.mimeType)
+                                : FileUtils.guessIcon(r.fileName);
                 vh.thumb.setImageResource(icon);
                 vh.thumb.setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 8));
                 vh.thumbTag = r.filePath;
                 loadThumbIfImage(ctx, r, vh);
                 vh.itemView.setOnClickListener(x -> openFile(ctx, r));
-                vh.delete.setOnClickListener(x ->
-                        TransferRepository.getInstance(ctx).delete(r.id));
+                vh.delete.setOnClickListener(x -> TransferRepository.getInstance(ctx).delete(r.id));
             }
         }
 
-        @Override public int getItemCount() { return items.size(); }
+        @Override
+        public int getItemCount() {
+            return items.size();
+        }
 
         private void loadThumbIfImage(Context ctx, TransferRecordEntity r, FileVH vh) {
             if (r.filePath == null || !r.filePath.startsWith("content:")) return;
@@ -302,17 +331,21 @@ public class HistorySheet extends BottomSheetDialogFragment {
             if (!isImage && !isVideo) return;
             final String want = r.filePath;
             final Uri uri = Uri.parse(r.filePath);
-            thumbPool.execute(() -> {
-                Bitmap bm = isVideo ? ThumbUtils.decodeVideo(ctx, uri, dp(ctx, 48))
-                                    : ThumbUtils.decodeImage(ctx, uri, dp(ctx, 48));
-                if (bm == null) return;
-                main.post(() -> {
-                    if (want.equals(vh.thumbTag)) {
-                        vh.thumb.setPadding(0, 0, 0, 0);
-                        vh.thumb.setImageBitmap(bm);
-                    }
-                });
-            });
+            thumbPool.execute(
+                    () -> {
+                        Bitmap bm =
+                                isVideo
+                                        ? ThumbUtils.decodeVideo(ctx, uri, dp(ctx, 48))
+                                        : ThumbUtils.decodeImage(ctx, uri, dp(ctx, 48));
+                        if (bm == null) return;
+                        main.post(
+                                () -> {
+                                    if (want.equals(vh.thumbTag)) {
+                                        vh.thumb.setPadding(0, 0, 0, 0);
+                                        vh.thumb.setImageBitmap(bm);
+                                    }
+                                });
+                    });
         }
     }
 
@@ -341,26 +374,34 @@ public class HistorySheet extends BottomSheetDialogFragment {
     private void showTextRecordDialog(Context ctx, TransferRecordEntity r) {
         String text = r.fileName;
         boolean isLink = android.util.Patterns.WEB_URL.matcher(text).matches();
-        MaterialAlertDialogBuilder b = new MaterialAlertDialogBuilder(ctx)
-                .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
-                .setMessage(text)
-                .setPositiveButton(R.string.action_copy, (d, w) -> {
-                    ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-                    if (cm != null) {
-                        cm.setPrimaryClip(ClipData.newPlainText("KissLink", text));
-                        toast("已複製到剪貼簿");
-                    }
-                })
-                .setNegativeButton(R.string.btn_cancel, null);
+        MaterialAlertDialogBuilder b =
+                new MaterialAlertDialogBuilder(ctx)
+                        .setTitle(isLink ? R.string.share_link_title : R.string.share_text_title)
+                        .setMessage(text)
+                        .setPositiveButton(
+                                R.string.action_copy,
+                                (d, w) -> {
+                                    ClipboardManager cm =
+                                            (ClipboardManager)
+                                                    ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                                    if (cm != null) {
+                                        cm.setPrimaryClip(ClipData.newPlainText("KissLink", text));
+                                        toast("已複製到剪貼簿");
+                                    }
+                                })
+                        .setNegativeButton(R.string.btn_cancel, null);
         if (isLink) {
-            b.setNeutralButton(R.string.action_open, (d, w) -> {
-                try {
-                    ctx.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(text))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } catch (Exception e) {
-                    toast("找不到可開啟連結的應用程式");
-                }
-            });
+            b.setNeutralButton(
+                    R.string.action_open,
+                    (d, w) -> {
+                        try {
+                            ctx.startActivity(
+                                    new Intent(Intent.ACTION_VIEW, Uri.parse(text))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception e) {
+                            toast("找不到可開啟連結的應用程式");
+                        }
+                    });
         }
         androidx.appcompat.app.AlertDialog dialog = b.show();
         TextView msgTv = dialog.findViewById(android.R.id.message);
@@ -373,23 +414,27 @@ public class HistorySheet extends BottomSheetDialogFragment {
 
     private void toast(String m) {
         if (getContext() != null)
-            android.widget.Toast.makeText(getContext(), m, android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(getContext(), m, android.widget.Toast.LENGTH_SHORT)
+                    .show();
     }
 
     // ── ViewHolders ──
     static class HeaderVH extends RecyclerView.ViewHolder {
         final TextView dir, peerTime;
+
         HeaderVH(@NonNull View v) {
             super(v);
             dir = v.findViewById(R.id.tvDir);
             peerTime = v.findViewById(R.id.tvPeerTime);
         }
     }
+
     static class FileVH extends RecyclerView.ViewHolder {
         final ShapeableImageView thumb;
         final TextView name, meta;
         final ImageButton delete;
         @Nullable String thumbTag;
+
         FileVH(@NonNull View v) {
             super(v);
             thumb = v.findViewById(R.id.ivThumb);
@@ -400,7 +445,8 @@ public class HistorySheet extends BottomSheetDialogFragment {
     }
 
     // ── 工具 ──
-    @Nullable private static String guessMime(String name) {
+    @Nullable
+    private static String guessMime(String name) {
         if (name == null) return null;
         int dot = name.lastIndexOf('.');
         if (dot < 0) return null;

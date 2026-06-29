@@ -1,44 +1,44 @@
 plugins {
-    id 'com.android.library'
-    id 'org.jetbrains.kotlin.android'
-    id 'org.jetbrains.kotlin.plugin.compose'
+	id 'com.android.library'
+	id 'org.jetbrains.kotlin.android'
+	id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
-    namespace = 'com.kisslink.feature.home'
-    compileSdk = 34
+	namespace = 'com.kisslink.feature.home'
+	compileSdk = 34
 
-    defaultConfig {
-        minSdk = 29
-    }
+	defaultConfig {
+		minSdk = 29
+	}
 
-    buildFeatures {
-        compose = true
-    }
+	buildFeatures {
+		compose = true
+	}
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
+	compileOptions {
+		sourceCompatibility = JavaVersion.VERSION_11
+		targetCompatibility = JavaVersion.VERSION_11
+	}
 
-    kotlinOptions {
-        jvmTarget = '11'
-    }
+	kotlinOptions {
+		jvmTarget = '11'
+	}
 }
 
 dependencies {
-    implementation project(':core:domain')
-    implementation project(':core:data')
-    implementation project(':feature:pairing')
-    implementation project(':feature:transfer')
+	implementation project(':core:domain')
+	implementation project(':core:data')
+	implementation project(':feature:pairing')
+	implementation project(':feature:transfer')
 
-    implementation 'androidx.annotation:annotation:1.8.0'
-    implementation 'androidx.core:core:1.13.1'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel:2.8.0'
-    implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
-    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+	implementation 'androidx.annotation:annotation:1.8.0'
+	implementation 'androidx.core:core:1.13.1'
+	implementation 'androidx.appcompat:appcompat:1.7.0'
+	implementation 'androidx.lifecycle:lifecycle-viewmodel:2.8.0'
+	implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
+	implementation 'androidx.recyclerview:recyclerview:1.3.2'
 
-    testImplementation 'junit:junit:4.13.2'
-    testImplementation 'androidx.arch.core:core-runtime:2.2.0'
+	testImplementation 'junit:junit:4.13.2'
+	testImplementation 'androidx.arch.core:core-runtime:2.2.0'
 }

@@ -12,14 +12,13 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * 驅動 Wi-Fi Direct 狀態機的「意圖」事件。各角色控制器
- * （{@link GroupOwnerController}、{@link ClientConnector}、{@link GoDetectionPoller}、
- * 門面 {@link WifiDirectManager}）<b>不</b>直接寫狀態，而是呼叫
- * {@link WifiDirectCore#dispatch(WifiDirectEvent)} 投遞事件；由 {@code core} 作為唯一寫入者
- * 把事件映射到目標 {@link ConnectionState}，並對照 {@link #legalFrom} 驗證轉移合法性。
+ * 驅動 Wi-Fi Direct 狀態機的「意圖」事件。各角色控制器 （{@link GroupOwnerController}、{@link ClientConnector}、{@link
+ * GoDetectionPoller}、 門面 {@link WifiDirectManager}）<b>不</b>直接寫狀態，而是呼叫 {@link
+ * WifiDirectCore#dispatch(WifiDirectEvent)} 投遞事件；由 {@code core} 作為唯一寫入者 把事件映射到目標 {@link
+ * ConnectionState}，並對照 {@link #legalFrom} 驗證轉移合法性。
  *
- * <p>每個事件對應「目前程式碼某個 {@code setState(...)} 呼叫點」，target 與該呼叫點一致，
- * 故轉換為事件模型後行為不變；唯一新增的是非法來源狀態時寫入 FlightRecorder 的診斷紀錄。
+ * <p>每個事件對應「目前程式碼某個 {@code setState(...)} 呼叫點」，target 與該呼叫點一致， 故轉換為事件模型後行為不變；唯一新增的是非法來源狀態時寫入
+ * FlightRecorder 的診斷紀錄。
  */
 enum WifiDirectEvent {
 

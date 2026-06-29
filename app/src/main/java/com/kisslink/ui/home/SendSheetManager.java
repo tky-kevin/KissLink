@@ -6,30 +6,31 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.kisslink.R;
 
 /**
  * Builds and shows the send-sheet BottomSheetDialog (full selectable list with remove).
  *
- * <p>Keeps all the programmatic layout construction in one place so HomeActivity
- * doesn't have to deal with density math, view hierarchy, or dialog lifecycle.
+ * <p>Keeps all the programmatic layout construction in one place so HomeActivity doesn't have to
+ * deal with density math, view hierarchy, or dialog lifecycle.
  */
 final class SendSheetManager {
 
-    interface OnClearAll { void onClearAll(); }
+    interface OnClearAll {
+        void onClearAll();
+    }
 
     @Nullable private BottomSheetDialog current;
 
-    void showIfNotEmpty(@NonNull Activity activity,
-                        @NonNull SendListAdapter adapter,
-                        @NonNull OnClearAll onClearAll) {
+    void showIfNotEmpty(
+            @NonNull Activity activity,
+            @NonNull SendListAdapter adapter,
+            @NonNull OnClearAll onClearAll) {
         if (current != null && current.isShowing()) return;
 
         float d = activity.getResources().getDisplayMetrics().density;
@@ -50,8 +51,8 @@ final class SendSheetManager {
         title.setTextColor(activity.getColor(R.color.beam_ink));
         title.setTextSize(18);
         title.setTypeface(title.getTypeface(), Typeface.BOLD);
-        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams titleLp =
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         title.setLayoutParams(titleLp);
         titleRow.addView(title);
 
@@ -63,10 +64,11 @@ final class SendSheetManager {
         btnClear.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
         int btnPad = Math.round(6 * d);
         btnClear.setPadding(btnPad, btnPad, btnPad, btnPad);
-        btnClear.setOnClickListener(v -> {
-            onClearAll.onClearAll();
-            dismiss();
-        });
+        btnClear.setOnClickListener(
+                v -> {
+                    onClearAll.onClearAll();
+                    dismiss();
+                });
         titleRow.addView(btnClear);
         content.addView(titleRow);
 
@@ -74,14 +76,19 @@ final class SendSheetManager {
         RecyclerView rv = new RecyclerView(activity);
         rv.setLayoutManager(new LinearLayoutManager(activity));
         rv.setAdapter(adapter);
-        LinearLayout.LayoutParams rvlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams rvlp =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rvlp.topMargin = Math.round(10 * d);
         rv.setLayoutParams(rvlp);
         content.addView(rv);
 
         dlg.setContentView(content);
-        dlg.setOnDismissListener(x -> { rv.setAdapter(null); current = null; });
+        dlg.setOnDismissListener(
+                x -> {
+                    rv.setAdapter(null);
+                    current = null;
+                });
         current = dlg;
         dlg.show();
     }

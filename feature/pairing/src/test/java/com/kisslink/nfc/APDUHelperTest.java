@@ -7,8 +7,7 @@ import org.junit.Test;
 /**
  * {@link APDUHelper} 的純邏輯單元測試——NFC APDU 的建構與解析。
  *
- * <p>這是 reader↔HCE 交握的線上格式，任何位元組偏移錯誤都會讓配對在裝置上靜默失敗，
- * 卻不易在整合測試中重現，故以純 JUnit 完整覆蓋編解碼與邊界。
+ * <p>這是 reader↔HCE 交握的線上格式，任何位元組偏移錯誤都會讓配對在裝置上靜默失敗， 卻不易在整合測試中重現，故以純 JUnit 完整覆蓋編解碼與邊界。
  */
 public class APDUHelperTest {
 
@@ -20,10 +19,10 @@ public class APDUHelperTest {
 
         // 5 byte header + AID + 1 byte Le
         assertEquals(5 + APDUHelper.AID.length + 1, apdu.length);
-        assertEquals((byte) 0x00, apdu[0]);       // CLA
-        assertEquals((byte) 0xA4, apdu[1]);       // INS = SELECT
-        assertEquals((byte) 0x04, apdu[2]);       // P1  = by name
-        assertEquals((byte) 0x00, apdu[3]);       // P2
+        assertEquals((byte) 0x00, apdu[0]); // CLA
+        assertEquals((byte) 0xA4, apdu[1]); // INS = SELECT
+        assertEquals((byte) 0x04, apdu[2]); // P1  = by name
+        assertEquals((byte) 0x00, apdu[3]); // P2
         assertEquals((byte) APDUHelper.AID.length, apdu[4]); // Lc
 
         for (int i = 0; i < APDUHelper.AID.length; i++) {
@@ -128,6 +127,6 @@ public class APDUHelperTest {
 
     @Test
     public void extractPayload_rejectsTooShort() {
-        assertNull(APDUHelper.extractPayload(new byte[]{(byte) 0x90}));
+        assertNull(APDUHelper.extractPayload(new byte[] {(byte) 0x90}));
     }
 }

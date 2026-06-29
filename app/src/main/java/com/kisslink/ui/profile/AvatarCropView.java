@@ -12,20 +12,18 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
  * 圓形頭像裁切視圖：載入來源圖後可拖曳平移、雙指縮放，圈內即為最終顯示範圍。
  *
- * <p>恆保證圓形被圖片完整覆蓋（縮放下限＝覆蓋圈、平移夾住不露白），按套用時把圈的外接方形
- * 渲染成方形點陣圖回傳（圓形遮罩交由顯示端的 ShapeableImageView 完成）。
+ * <p>恆保證圓形被圖片完整覆蓋（縮放下限＝覆蓋圈、平移夾住不露白），按套用時把圈的外接方形 渲染成方形點陣圖回傳（圓形遮罩交由顯示端的 ShapeableImageView 完成）。
  */
 public class AvatarCropView extends View {
 
     private static final int INVALID_POINTER = -1;
-    private static final float MAX_SCALE_MULT = 6f;   // 相對覆蓋下限的最大放大倍數
+    private static final float MAX_SCALE_MULT = 6f; // 相對覆蓋下限的最大放大倍數
 
     @Nullable private Bitmap source;
     private final Matrix matrix = new Matrix();
@@ -35,7 +33,7 @@ public class AvatarCropView extends View {
     private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path dimPath = new Path();
 
-    private float cx, cy, radius;        // 裁切圈(view 座標)
+    private float cx, cy, radius; // 裁切圈(view 座標)
     private float minScale = 1f;
     private final float marginPx;
 
@@ -44,14 +42,16 @@ public class AvatarCropView extends View {
     private int activePointer = INVALID_POINTER;
     private final RectF mapped = new RectF();
 
-    public AvatarCropView(Context c) { this(c, null); }
+    public AvatarCropView(Context c) {
+        this(c, null);
+    }
 
     public AvatarCropView(Context c, @Nullable AttributeSet a) {
         super(c, a);
         float density = getResources().getDisplayMetrics().density;
         marginPx = 28 * density;
 
-        dimPaint.setColor(0xB3000000);            // 70% 黑遮罩(圈外)
+        dimPaint.setColor(0xB3000000); // 70% 黑遮罩(圈外)
         dimPaint.setStyle(Paint.Style.FILL);
         ringPaint.setColor(Color.WHITE);
         ringPaint.setStyle(Paint.Style.STROKE);
@@ -133,16 +133,17 @@ public class AvatarCropView extends View {
                     }
                 }
                 break;
-            case MotionEvent.ACTION_POINTER_UP: {
-                int upIdx = e.getActionIndex();
-                if (e.getPointerId(upIdx) == activePointer) {
-                    int newIdx = upIdx == 0 ? 1 : 0;
-                    activePointer = e.getPointerId(newIdx);
-                    lastX = e.getX(newIdx);
-                    lastY = e.getY(newIdx);
+            case MotionEvent.ACTION_POINTER_UP:
+                {
+                    int upIdx = e.getActionIndex();
+                    if (e.getPointerId(upIdx) == activePointer) {
+                        int newIdx = upIdx == 0 ? 1 : 0;
+                        activePointer = e.getPointerId(newIdx);
+                        lastX = e.getX(newIdx);
+                        lastY = e.getY(newIdx);
+                    }
+                    break;
                 }
-                break;
-            }
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 activePointer = INVALID_POINTER;
@@ -191,7 +192,7 @@ public class AvatarCropView extends View {
         Bitmap out = Bitmap.createBitmap(outSize, outSize, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(out);
         Matrix render = new Matrix(matrix);
-        render.postTranslate(-(cx - radius), -(cy - radius));   // 圈左上角 → 原點
+        render.postTranslate(-(cx - radius), -(cy - radius)); // 圈左上角 → 原點
         float s = outSize / (2f * radius);
         render.postScale(s, s);
         if (source != null) c.drawBitmap(source, render, imagePaint);

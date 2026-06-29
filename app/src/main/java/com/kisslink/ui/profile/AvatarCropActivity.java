@@ -7,24 +7,20 @@ import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Toast;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.IntentCompat;
-
 import com.kisslink.R;
 import com.kisslink.profile.ProfileStore;
-
 import dagger.hilt.android.AndroidEntryPoint;
-
 import java.io.IOException;
 
 /**
  * 圓形頭像裁切頁：載入使用者選的圖 → 拖曳/縮放選範圍 → 套用後存入 {@link ProfileStore}。
  *
- * <p>解碼走 {@link ImageDecoder}（自動套用 EXIF 方向、降採樣大圖、輸出軟體點陣圖以便畫到
- * 軟體 Canvas）。套用成功回 {@link #RESULT_OK}，呼叫端據此重繪頭像。
+ * <p>解碼走 {@link ImageDecoder}（自動套用 EXIF 方向、降採樣大圖、輸出軟體點陣圖以便畫到 軟體 Canvas）。套用成功回 {@link
+ * #RESULT_OK}，呼叫端據此重繪頭像。
  */
 @AndroidEntryPoint
 public class AvatarCropActivity extends AppCompatActivity {
@@ -49,9 +45,14 @@ public class AvatarCropActivity extends AppCompatActivity {
         setContentView(R.layout.activity_avatar_crop);
         cropView = findViewById(R.id.cropView);
 
-        Uri uri = getIntent() != null
-                ? IntentCompat.getParcelableExtra(getIntent(), EXTRA_URI, Uri.class) : null;
-        if (uri == null) { finish(); return; }
+        Uri uri =
+                getIntent() != null
+                        ? IntentCompat.getParcelableExtra(getIntent(), EXTRA_URI, Uri.class)
+                        : null;
+        if (uri == null) {
+            finish();
+            return;
+        }
 
         Bitmap src;
         try {
@@ -63,7 +64,12 @@ public class AvatarCropActivity extends AppCompatActivity {
         }
         cropView.setImage(src);
 
-        findViewById(R.id.btnCropCancel).setOnClickListener(v -> { setResult(RESULT_CANCELED); finish(); });
+        findViewById(R.id.btnCropCancel)
+                .setOnClickListener(
+                        v -> {
+                            setResult(RESULT_CANCELED);
+                            finish();
+                        });
         findViewById(R.id.btnCropApply).setOnClickListener(v -> apply());
     }
 
@@ -78,12 +84,14 @@ public class AvatarCropActivity extends AppCompatActivity {
     @NonNull
     private Bitmap decodeBounded(@NonNull Uri uri) throws IOException {
         ImageDecoder.Source source = ImageDecoder.createSource(getContentResolver(), uri);
-        return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> {
-            decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-            int maxEdge = Math.max(info.getSize().getWidth(), info.getSize().getHeight());
-            int sample = 1;
-            while (maxEdge / sample > DECODE_MAX_EDGE) sample *= 2;
-            if (sample > 1) decoder.setTargetSampleSize(sample);
-        });
+        return ImageDecoder.decodeBitmap(
+                source,
+                (decoder, info, src) -> {
+                    decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                    int maxEdge = Math.max(info.getSize().getWidth(), info.getSize().getHeight());
+                    int sample = 1;
+                    while (maxEdge / sample > DECODE_MAX_EDGE) sample *= 2;
+                    if (sample > 1) decoder.setTargetSampleSize(sample);
+                });
     }
 }

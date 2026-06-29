@@ -4,9 +4,9 @@ import android.os.Handler;
 import android.util.Log;
 
 /**
- * Manages idle teardown timer for the transfer service.
- * When the app is in background and not transferring, the service will be
- * stopped after {@link #IDLE_TEARDOWN_MS} to release Wi-Fi Direct resources.
+ * Manages idle teardown timer for the transfer service. When the app is in background and not
+ * transferring, the service will be stopped after {@link #IDLE_TEARDOWN_MS} to release Wi-Fi Direct
+ * resources.
  */
 final class IdleTeardownManager {
 
@@ -18,12 +18,13 @@ final class IdleTeardownManager {
     private volatile boolean uiBound = false;
     private volatile boolean transferring = false;
 
-    private final Runnable idleTeardown = () -> {
-        if (!uiBound && !transferring) {
-            Log.i(TAG, "Idle in background → stopping service to release Wi-Fi Direct");
-            if (onTeardown != null) onTeardown.run();
-        }
-    };
+    private final Runnable idleTeardown =
+            () -> {
+                if (!uiBound && !transferring) {
+                    Log.i(TAG, "Idle in background → stopping service to release Wi-Fi Direct");
+                    if (onTeardown != null) onTeardown.run();
+                }
+            };
 
     IdleTeardownManager(Handler mainHandler, Runnable onTeardown) {
         this.mainHandler = mainHandler;

@@ -8,6 +8,7 @@ import java.util.zip.CRC32;
  * KissLink 二進位傳輸協定（版本 1）。
  *
  * <h3>封包結構（Header 固定 64 bytes，Big-Endian）</h3>
+ *
  * <pre>
  *  Offset │ Size │ Field
  *  ───────┼──────┼─────────────────────────────────
@@ -27,6 +28,7 @@ import java.util.zip.CRC32;
  * </pre>
  *
  * <h3>交握流程</h3>
+ *
  * <pre>
  *  CLIENT (接收方 / 非 GO)         SERVER (傳送方 / GO)
  *  ─────────────────────           ────────────────────────
@@ -47,7 +49,7 @@ public final class TransferProtocol {
     private TransferProtocol() {}
 
     // ── Magic & Version ────────────────────────────────────────
-    public static final int  MAGIC   = 0x4B4C494E;
+    public static final int MAGIC = 0x4B4C494E;
     public static final byte VERSION = 0x01;
 
     // ── Header Size ────────────────────────────────────────────
@@ -58,35 +60,37 @@ public final class TransferProtocol {
     public static final int CHUNK_SIZE = 512 * 1024;
 
     /**
-     * 任一封包 payload（CHUNK / HELLO profile）的上限——等於 {@link #CHUNK_SIZE}。
-     * 對端宣告的 chunkLen 必須落在 [0, MAX_PAYLOAD]，否則視為惡意/損毀封包並斷線；
-     * 這同時保護接收端 pooled buffer（容量 = CHUNK_SIZE）不被超長宣告溢位。
+     * 任一封包 payload（CHUNK / HELLO profile）的上限——等於 {@link #CHUNK_SIZE}。 對端宣告的 chunkLen 必須落在 [0,
+     * MAX_PAYLOAD]，否則視為惡意/損毀封包並斷線； 這同時保護接收端 pooled buffer（容量 = CHUNK_SIZE）不被超長宣告溢位。
      */
     public static final int MAX_PAYLOAD = CHUNK_SIZE;
+
     /** FILE_META 的 JSON 長度上限（檔名/MIME 等小欄位，遠小於此）。 */
     public static final int MAX_META_LEN = 32 * 1024;
 
     // ── Packet Types ───────────────────────────────────────────
-    public static final byte TYPE_HANDSHAKE     = 0x01;
+    public static final byte TYPE_HANDSHAKE = 0x01;
     public static final byte TYPE_HANDSHAKE_ACK = 0x02;
-    public static final byte TYPE_FILE_META     = 0x03;
-    public static final byte TYPE_READY_ACK     = 0x04;
-    public static final byte TYPE_DATA_CHUNK    = 0x05;
-    public static final byte TYPE_PROGRESS_ACK  = 0x06;
-    public static final byte TYPE_COMPLETE      = 0x07;
-    public static final byte TYPE_COMPLETE_ACK  = 0x08;
-    public static final byte TYPE_CANCEL        = 0x09;
-    public static final byte TYPE_ERROR         = 0x0A;
+    public static final byte TYPE_FILE_META = 0x03;
+    public static final byte TYPE_READY_ACK = 0x04;
+    public static final byte TYPE_DATA_CHUNK = 0x05;
+    public static final byte TYPE_PROGRESS_ACK = 0x06;
+    public static final byte TYPE_COMPLETE = 0x07;
+    public static final byte TYPE_COMPLETE_ACK = 0x08;
+    public static final byte TYPE_CANCEL = 0x09;
+    public static final byte TYPE_ERROR = 0x0A;
+
     /** peer 雙向模型的開場握手(連上後雙方各送一次)。 */
-    public static final byte TYPE_HELLO         = 0x0B;
+    public static final byte TYPE_HELLO = 0x0B;
+
     /** 心跳:雙方各自定期送,讓對端據此判斷連線存活(SO_TIMEOUT 內沒收到任何封包即視為斷線)。 */
-    public static final byte TYPE_HEARTBEAT     = 0x0C;
+    public static final byte TYPE_HEARTBEAT = 0x0C;
 
     // ── Item Types（雙向 peer：一條 socket 可送多種內容）─────────
-    public static final byte ITEM_FILE  = 0;
+    public static final byte ITEM_FILE = 0;
     public static final byte ITEM_VCARD = 1; // 名片（vCard）
     public static final byte ITEM_PHOTO = 2;
-    public static final byte ITEM_TEXT  = 3; // 純文字/連結
+    public static final byte ITEM_TEXT = 3; // 純文字/連結
 
     /** 由 MIME 判定 item 型別：圖片/影片 → {@link #ITEM_PHOTO}（可顯示縮圖）；其餘 → {@link #ITEM_FILE}。 */
     public static byte itemTypeForMime(@androidx.annotation.Nullable String mime) {
@@ -101,17 +105,17 @@ public final class TransferProtocol {
     // ══════════════════════════════════════════════════════════
 
     public static class Header {
-        public int   magic     = MAGIC;
-        public byte  version   = VERSION;
-        public byte  type;
+        public int magic = MAGIC;
+        public byte version = VERSION;
+        public byte type;
         public short fileCount;
-        public int   fileId;
-        public long  totalSize;
-        public long  offset;
-        public int   chunkLen;
+        public int fileId;
+        public long totalSize;
+        public long offset;
+        public int chunkLen;
         public short metaLen;
-        public int   crc32;
-        public byte  itemType;   // 見 ITEM_* 常數（僅 FILE_META 有意義）
+        public int crc32;
+        public byte itemType; // 見 ITEM_* 常數（僅 FILE_META 有意義）
     }
 
     // ══════════════════════════════════════════════════════════
@@ -140,17 +144,17 @@ public final class TransferProtocol {
             throw new InvalidPacketException("Header too short: " + (raw == null ? 0 : raw.length));
         ByteBuffer buf = ByteBuffer.wrap(raw, 0, HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
         Header h = new Header();
-        h.magic     = buf.getInt();
-        h.version   = buf.get();
-        h.type      = buf.get();
+        h.magic = buf.getInt();
+        h.version = buf.get();
+        h.type = buf.get();
         h.fileCount = buf.getShort();
-        h.fileId    = buf.getInt();
+        h.fileId = buf.getInt();
         h.totalSize = buf.getLong();
-        h.offset    = buf.getLong();
-        h.chunkLen  = buf.getInt();
-        h.metaLen   = buf.getShort();
-        h.crc32     = buf.getInt();
-        h.itemType  = buf.get();
+        h.offset = buf.getLong();
+        h.chunkLen = buf.getInt();
+        h.metaLen = buf.getShort();
+        h.crc32 = buf.getInt();
+        h.itemType = buf.get();
         if (h.magic != MAGIC)
             throw new InvalidPacketException("Bad magic: 0x" + Integer.toHexString(h.magic));
         // 對端宣告的長度一律驗證上限：杜絕惡意/損毀 header 觸發 `new byte[巨值]`（OOM）
@@ -167,11 +171,17 @@ public final class TransferProtocol {
     // ══════════════════════════════════════════════════════════
 
     public static Header makeHandshake() {
-        Header h = new Header(); h.type = TYPE_HANDSHAKE; return h;
+        Header h = new Header();
+        h.type = TYPE_HANDSHAKE;
+        return h;
     }
+
     public static Header makeHandshakeAck() {
-        Header h = new Header(); h.type = TYPE_HANDSHAKE_ACK; return h;
+        Header h = new Header();
+        h.type = TYPE_HANDSHAKE_ACK;
+        return h;
     }
+
     public static Header makeFileMeta(int fileId, int fileCount, long totalSize, int metaLen) {
         Header h = new Header();
         h.type = TYPE_FILE_META;
@@ -181,43 +191,73 @@ public final class TransferProtocol {
         h.metaLen = metaLen > Short.MAX_VALUE ? Short.MAX_VALUE : (short) metaLen;
         return h;
     }
+
     public static Header makeHello() {
-        Header h = new Header(); h.type = TYPE_HELLO; return h;
+        Header h = new Header();
+        h.type = TYPE_HELLO;
+        return h;
     }
+
     /** 帶 profile payload 的 HELLO：payload 長度放在 chunkLen（int，足以容納頭像縮圖）。 */
     public static Header makeHelloWithProfile(int payloadLen) {
-        Header h = new Header(); h.type = TYPE_HELLO; h.chunkLen = payloadLen; return h;
+        Header h = new Header();
+        h.type = TYPE_HELLO;
+        h.chunkLen = payloadLen;
+        return h;
     }
+
     public static Header makeHeartbeat() {
-        Header h = new Header(); h.type = TYPE_HEARTBEAT; return h;
+        Header h = new Header();
+        h.type = TYPE_HEARTBEAT;
+        return h;
     }
+
     /** 雙向 peer 的項目 meta：帶 itemType。 */
     public static Header makeItemMeta(int itemId, byte itemType, long totalSize, int metaLen) {
         Header h = new Header();
         h.type = TYPE_FILE_META;
-        h.fileId = itemId; h.itemType = itemType;
+        h.fileId = itemId;
+        h.itemType = itemType;
         h.totalSize = totalSize;
         h.metaLen = metaLen > Short.MAX_VALUE ? Short.MAX_VALUE : (short) metaLen;
         return h;
     }
+
     public static Header makeReadyAck(int fileId) {
-        Header h = new Header(); h.type = TYPE_READY_ACK; h.fileId = fileId; return h;
+        Header h = new Header();
+        h.type = TYPE_READY_ACK;
+        h.fileId = fileId;
+        return h;
     }
+
     public static Header makeDataChunk(int fileId, long offset, int chunkLen, int crc32) {
         Header h = new Header();
         h.type = TYPE_DATA_CHUNK;
-        h.fileId = fileId; h.offset = offset;
-        h.chunkLen = chunkLen; h.crc32 = crc32;
+        h.fileId = fileId;
+        h.offset = offset;
+        h.chunkLen = chunkLen;
+        h.crc32 = crc32;
         return h;
     }
+
     public static Header makeComplete(int fileId) {
-        Header h = new Header(); h.type = TYPE_COMPLETE; h.fileId = fileId; return h;
+        Header h = new Header();
+        h.type = TYPE_COMPLETE;
+        h.fileId = fileId;
+        return h;
     }
+
     public static Header makeCompleteAck(int fileId) {
-        Header h = new Header(); h.type = TYPE_COMPLETE_ACK; h.fileId = fileId; return h;
+        Header h = new Header();
+        h.type = TYPE_COMPLETE_ACK;
+        h.fileId = fileId;
+        return h;
     }
+
     public static Header makeCancel() {
-        Header h = new Header(); h.type = TYPE_CANCEL; return h;
+        Header h = new Header();
+        h.type = TYPE_CANCEL;
+        return h;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -235,6 +275,8 @@ public final class TransferProtocol {
     // ══════════════════════════════════════════════════════════
 
     public static class InvalidPacketException extends Exception {
-        public InvalidPacketException(String msg) { super(msg); }
+        public InvalidPacketException(String msg) {
+            super(msg);
+        }
     }
 }

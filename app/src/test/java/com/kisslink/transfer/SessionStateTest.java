@@ -1,8 +1,8 @@
 package com.kisslink.transfer;
 
-import org.junit.Test;
-
 import static org.junit.Assert.*;
+
+import org.junit.Test;
 
 /** SessionState 是純值物件：只測值建構與自身 phase 判斷。跨 enum 轉譯在 SessionManagerTest。 */
 public class SessionStateTest {

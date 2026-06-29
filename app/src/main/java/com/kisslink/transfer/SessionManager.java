@@ -3,20 +3,18 @@ package com.kisslink.transfer;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-
+import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.MainThread;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
-
 import com.kisslink.pairing.PairingCoordinator;
 import com.kisslink.pairing.PairingToken;
 
 /**
- * Manages session state and peer identity.
- * FileTransferService delegates state transitions here for a clean single source of truth.
+ * Manages session state and peer identity. FileTransferService delegates state transitions here for
+ * a clean single source of truth.
  */
 public final class SessionManager {
 
@@ -41,11 +39,17 @@ public final class SessionManager {
     @Nullable private LiveData<TransferProgress> peerProgressSrc;
     @Nullable private Observer<TransferProgress> peerProgressObs;
 
-    public LiveData<SessionState> getState() { return sessionLd; }
+    public LiveData<SessionState> getState() {
+        return sessionLd;
+    }
 
-    public int getSessionGen() { return sessionGen; }
+    public int getSessionGen() {
+        return sessionGen;
+    }
 
-    public boolean isPendingReset() { return pendingReset; }
+    public boolean isPendingReset() {
+        return pendingReset;
+    }
 
     /** 從 sessionLd 派生，消除獨立布林值的同步窗口。 */
     public boolean isTransferring() {
@@ -54,26 +58,37 @@ public final class SessionManager {
     }
 
     @Nullable
-    public PairingToken getConnectedPeerToken() { return connectedPeerToken; }
+    public PairingToken getConnectedPeerToken() {
+        return connectedPeerToken;
+    }
 
     @Nullable
-    public PairingToken getPendingSwitchPeer() { return pendingSwitchPeer; }
+    public PairingToken getPendingSwitchPeer() {
+        return pendingSwitchPeer;
+    }
 
-    public boolean hasPendingSwitch() { return pendingSwitchPeer != null; }
+    public boolean hasPendingSwitch() {
+        return pendingSwitchPeer != null;
+    }
 
     /** 目前已連線對方的顯示名稱（HELLO 名片優先，其次 token）。 */
     @Nullable
     public String currentPeerName() {
         if (peerNameFromHello != null && !peerNameFromHello.isEmpty()) return peerNameFromHello;
         return connectedPeerToken != null && !connectedPeerToken.deviceName.isEmpty()
-                ? connectedPeerToken.deviceName : null;
+                ? connectedPeerToken.deviceName
+                : null;
     }
 
     @Nullable
-    public String getPeerNameFromHello() { return peerNameFromHello; }
+    public String getPeerNameFromHello() {
+        return peerNameFromHello;
+    }
 
     @Nullable
-    public byte[] getPeerAvatarBytes() { return peerAvatarBytes; }
+    public byte[] getPeerAvatarBytes() {
+        return peerAvatarBytes;
+    }
 
     // ══════════════════════════════════════════════════════════
     //  State transitions
@@ -84,18 +99,29 @@ public final class SessionManager {
     }
 
     // ── 語意化轉移：呼叫端表達意圖，SessionState 的建構收斂於此（單一寫入者）──
-    public void toIdle()                      { publish(SessionState.idle()); }
-    public void toResetting()                 { publish(SessionState.of(SessionState.Phase.RESETTING)); }
-    public void toConnected()                 { publish(SessionState.of(SessionState.Phase.CONNECTED)); }
-    public void toError(@NonNull String msg)  { publish(SessionState.error(msg)); }
+    public void toIdle() {
+        publish(SessionState.idle());
+    }
+
+    public void toResetting() {
+        publish(SessionState.of(SessionState.Phase.RESETTING));
+    }
+
+    public void toConnected() {
+        publish(SessionState.of(SessionState.Phase.CONNECTED));
+    }
+
+    public void toError(@NonNull String msg) {
+        publish(SessionState.error(msg));
+    }
 
     public void onPhase(@NonNull PairingCoordinator.Phase phase, int currentGen) {
         if (currentGen != sessionGen) return;
         publish(mapPhase(phase));
     }
 
-    public void onPaired(boolean groupOwner, int currentGen,
-                         @NonNull PairingCoordinator coordinator) {
+    public void onPaired(
+            boolean groupOwner, int currentGen, @NonNull PairingCoordinator coordinator) {
         if (currentGen != sessionGen) return;
         connectedPeerToken = coordinator.peerToken();
         // P2P 群組已成形,進入「建立 TCP 通道」視窗(socket 仍在背景建,peer 尚未 alive)。
@@ -109,11 +135,10 @@ public final class SessionManager {
     }
 
     /**
-     * Publish a session state to LiveData safely from any thread.
-     * LiveData.setValue() must run on the main thread; PeerConnector callbacks
-     * (peer-accept / peer-connect threads) reach us off the main thread, so we
-     * fall back to postValue there. Main-thread callers keep synchronous setValue
-     * so existing ordering/test semantics are preserved.
+     * Publish a session state to LiveData safely from any thread. LiveData.setValue() must run on
+     * the main thread; PeerConnector callbacks (peer-accept / peer-connect threads) reach us off
+     * the main thread, so we fall back to postValue there. Main-thread callers keep synchronous
+     * setValue so existing ordering/test semantics are preserved.
      */
     private void publish(@NonNull SessionState state) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -130,13 +155,14 @@ public final class SessionManager {
     /**
      * NFC latch 單一序列化入口。
      *
-     * @return true if the latch should be delivered (clean state or post-settle),
-     *         false if ignored (in-progress, same-peer resume, or queued switch).
+     * @return true if the latch should be delivered (clean state or post-settle), false if ignored
+     *     (in-progress, same-peer resume, or queued switch).
      */
     @MainThread
-    public LatchResult handleLatch(@Nullable PairingToken tappedPeer,
-                                   @NonNull PairingCoordinator coordinator,
-                                   boolean isPeerAlive) {
+    public LatchResult handleLatch(
+            @Nullable PairingToken tappedPeer,
+            @NonNull PairingCoordinator coordinator,
+            boolean isPeerAlive) {
         if (coordinator.hasStarted() && !coordinator.isFinished()) {
             return LatchResult.IGNORED;
         }
@@ -158,32 +184,35 @@ public final class SessionManager {
     }
 
     public enum LatchResult {
-        IGNORED,        // Coordinator in progress
-        RESUME,         // Same peer, already connected
-        QUEUED_SWITCH,  // New peer, transfer in progress
-        PROCEED         // Clean or dirty state, proceed with latch
+        IGNORED, // Coordinator in progress
+        RESUME, // Same peer, already connected
+        QUEUED_SWITCH, // New peer, transfer in progress
+        PROCEED // Clean or dirty state, proceed with latch
     }
 
     // ══════════════════════════════════════════════════════════
     //  Progress bridging
     // ══════════════════════════════════════════════════════════
 
-    public void setupProgressObserver(@NonNull LiveData<TransferProgress> progressSrc,
-                                       @NonNull Handler mainHandler,
-                                       @NonNull Runnable onTransferEnded) {
+    public void setupProgressObserver(
+            @NonNull LiveData<TransferProgress> progressSrc,
+            @NonNull Handler mainHandler,
+            @NonNull Runnable onTransferEnded) {
         teardownProgressObserver(mainHandler);
         peerProgressSrc = progressSrc;
-        peerProgressObs = tp -> {
-            if (tp == null) return;
-            boolean wasTransferring = isTransferring();
-            sessionLd.setValue(mapTransfer(tp));
-            boolean nowTransferring = (tp.phase == TransferProgress.Phase.TRANSFERRING);
-            if (wasTransferring && !nowTransferring) onTransferEnded.run();
-        };
-        mainHandler.post(() -> {
-            if (peerProgressSrc != null && peerProgressObs != null)
-                peerProgressSrc.observeForever(peerProgressObs);
-        });
+        peerProgressObs =
+                tp -> {
+                    if (tp == null) return;
+                    boolean wasTransferring = isTransferring();
+                    sessionLd.setValue(mapTransfer(tp));
+                    boolean nowTransferring = (tp.phase == TransferProgress.Phase.TRANSFERRING);
+                    if (wasTransferring && !nowTransferring) onTransferEnded.run();
+                };
+        mainHandler.post(
+                () -> {
+                    if (peerProgressSrc != null && peerProgressObs != null)
+                        peerProgressSrc.observeForever(peerProgressObs);
+                });
     }
 
     public void teardownProgressObserver(@NonNull Handler mainHandler) {
@@ -228,13 +257,19 @@ public final class SessionManager {
     static SessionState mapPhase(PairingCoordinator.Phase p) {
         if (p == null) return SessionState.idle();
         switch (p) {
-            case LATCHED:    return SessionState.of(SessionState.Phase.PAIRING_LATCHED);
-            case LINKING:    return SessionState.of(SessionState.Phase.PAIRING_LINKING);
-            case ELECTING:   return SessionState.of(SessionState.Phase.PAIRING_ELECTING);
-            case CONNECTING: return SessionState.of(SessionState.Phase.CONNECTING);
-            case CONNECTED:  return SessionState.of(SessionState.Phase.CONNECTED);
+            case LATCHED:
+                return SessionState.of(SessionState.Phase.PAIRING_LATCHED);
+            case LINKING:
+                return SessionState.of(SessionState.Phase.PAIRING_LINKING);
+            case ELECTING:
+                return SessionState.of(SessionState.Phase.PAIRING_ELECTING);
+            case CONNECTING:
+                return SessionState.of(SessionState.Phase.CONNECTING);
+            case CONNECTED:
+                return SessionState.of(SessionState.Phase.CONNECTED);
             case IDLE:
-            default:         return SessionState.idle();
+            default:
+                return SessionState.idle();
         }
     }
 
@@ -242,13 +277,20 @@ public final class SessionManager {
     static SessionState mapTransfer(TransferProgress tp) {
         if (tp == null) return SessionState.idle();
         switch (tp.phase) {
-            case CONNECTED:    return new SessionState(SessionState.Phase.CONNECTED, null, tp);
-            case TRANSFERRING: return new SessionState(SessionState.Phase.TRANSFERRING, null, tp);
-            case FILE_DONE:    return new SessionState(SessionState.Phase.FILE_DONE, null, tp);
-            case ALL_DONE:     return new SessionState(SessionState.Phase.ALL_DONE, null, tp);
-            case CANCELLED:    return new SessionState(SessionState.Phase.CANCELLED, null, tp);
-            case ERROR:        return new SessionState(SessionState.Phase.ERROR, tp.errorMessage, tp);
-            default:           return new SessionState(SessionState.Phase.CONNECTING, null, null);
+            case CONNECTED:
+                return new SessionState(SessionState.Phase.CONNECTED, null, tp);
+            case TRANSFERRING:
+                return new SessionState(SessionState.Phase.TRANSFERRING, null, tp);
+            case FILE_DONE:
+                return new SessionState(SessionState.Phase.FILE_DONE, null, tp);
+            case ALL_DONE:
+                return new SessionState(SessionState.Phase.ALL_DONE, null, tp);
+            case CANCELLED:
+                return new SessionState(SessionState.Phase.CANCELLED, null, tp);
+            case ERROR:
+                return new SessionState(SessionState.Phase.ERROR, tp.errorMessage, tp);
+            default:
+                return new SessionState(SessionState.Phase.CONNECTING, null, null);
         }
     }
 }

@@ -2,18 +2,17 @@ package com.kisslink.pairing;
 
 import static org.junit.Assert.*;
 
-import org.junit.Test;
-
 import java.util.Random;
+import org.junit.Test;
 
 /**
  * {@link PairingToken} 的純邏輯單元測試，聚焦 GO 選舉 {@link PairingToken#shouldBeGroupOwner}。
  *
- * <p>選舉必須<b>反對稱</b>：雙方各持相同的兩份 token 計算，必得相反結果，否則會雙雙搶當 GO
- * 或雙雙退讓 → 連線失敗。此性質難以在裝置整合測試中覆蓋所有分支，故以純 JUnit 驗證。
+ * <p>選舉必須<b>反對稱</b>：雙方各持相同的兩份 token 計算，必得相反結果，否則會雙雙搶當 GO 或雙雙退讓 → 連線失敗。此性質難以在裝置整合測試中覆蓋所有分支，故以純 JUnit
+ * 驗證。
  *
- * <p>刻意避開 {@code toUri/fromUri/nonceB64}——它們依賴 {@code android.net.Uri} 與
- * {@code android.util.Base64}，需 Robolectric；本檔只測不碰 Android framework 的純方法。
+ * <p>刻意避開 {@code toUri/fromUri/nonceB64}——它們依賴 {@code android.net.Uri} 與 {@code
+ * android.util.Base64}，需 Robolectric；本檔只測不碰 Android framework 的純方法。
  */
 public class PairingTokenTest {
 
@@ -28,8 +27,8 @@ public class PairingTokenTest {
     @Test
     public void bandCompat_restrictedDeviceBecomesOwner_evenWithLowerGoIntent() {
         // 被 2.4GHz 綁住者（canHost5G=false）優先當 GO，群組才落在兩端都能加入的頻段。
-        PairingToken restricted = token(0, false, (byte) 1);   // 低 goIntent 但受限
-        PairingToken capable    = token(255, true, (byte) 2);  // 高 goIntent 但能跑 5G
+        PairingToken restricted = token(0, false, (byte) 1); // 低 goIntent 但受限
+        PairingToken capable = token(255, true, (byte) 2); // 高 goIntent 但能跑 5G
 
         assertTrue("受限端應當 GO", restricted.shouldBeGroupOwner(capable));
         assertFalse("能跑 5G 端應退讓", capable.shouldBeGroupOwner(restricted));
@@ -50,7 +49,7 @@ public class PairingTokenTest {
 
     @Test
     public void nonce_lexicographicallyLargerWins_whenGoIntentEqual() {
-        PairingToken bigNonce   = token(50, true, (byte) 0x02);
+        PairingToken bigNonce = token(50, true, (byte) 0x02);
         PairingToken smallNonce = token(50, true, (byte) 0x01);
 
         assertTrue(bigNonce.shouldBeGroupOwner(smallNonce));
@@ -61,7 +60,7 @@ public class PairingTokenTest {
     public void nonce_comparedUnsigned() {
         // 0x80 應大於 0x01（無號比較）——若用有號 byte 比較會判反。
         PairingToken high = token(50, true, (byte) 0x80);
-        PairingToken low  = token(50, true, (byte) 0x01);
+        PairingToken low = token(50, true, (byte) 0x01);
 
         assertTrue(high.shouldBeGroupOwner(low));
         assertFalse(low.shouldBeGroupOwner(high));
@@ -102,9 +101,9 @@ public class PairingTokenTest {
 
     @Test
     public void constructor_masksGoIntentToByte() {
-        assertEquals(0, token(256, true, (byte) 1).goIntent);   // 256 & 0xFF
-        assertEquals(44, token(300, true, (byte) 1).goIntent);  // 300 & 0xFF
-        assertEquals(255, token(-1, true, (byte) 1).goIntent);  // -1 & 0xFF
+        assertEquals(0, token(256, true, (byte) 1).goIntent); // 256 & 0xFF
+        assertEquals(44, token(300, true, (byte) 1).goIntent); // 300 & 0xFF
+        assertEquals(255, token(-1, true, (byte) 1).goIntent); // -1 & 0xFF
     }
 
     @Test
@@ -136,7 +135,8 @@ public class PairingTokenTest {
         assertFalse(next.canHost5G);
         // 選舉結果不因換酬載而漂移（goIntent/nonce 相同、canHost5G 相同時）
         PairingToken peer = token(50, false, (byte) 1);
-        assertEquals(orig.withPayload("x", false).shouldBeGroupOwner(peer),
+        assertEquals(
+                orig.withPayload("x", false).shouldBeGroupOwner(peer),
                 next.shouldBeGroupOwner(peer));
     }
 

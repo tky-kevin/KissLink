@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-
 import androidx.annotation.Nullable;
 
 /** 名片類置中卡片對話框的共用視窗設定：透明底、暗化、背景模糊、進場淡入上滑。 */
@@ -28,7 +27,8 @@ final class CardDialogs {
         w.setDimAmount(0f);
         final boolean blur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
         if (blur) {
-            w.setFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+            w.setFlags(
+                    WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
                     WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
             WindowManager.LayoutParams lp0 = w.getAttributes();
             lp0.setBlurBehindRadius(0);
@@ -36,13 +36,14 @@ final class CardDialogs {
         }
         ValueAnimator bgIn = ValueAnimator.ofFloat(0f, 1f);
         bgIn.setDuration(360);
-        bgIn.addUpdateListener(a -> {
-            float p = (float) a.getAnimatedValue();
-            WindowManager.LayoutParams lp = w.getAttributes();
-            lp.dimAmount = 0.55f * p;
-            if (blur) lp.setBlurBehindRadius((int) (48 * p));
-            w.setAttributes(lp);
-        });
+        bgIn.addUpdateListener(
+                a -> {
+                    float p = (float) a.getAnimatedValue();
+                    WindowManager.LayoutParams lp = w.getAttributes();
+                    lp.dimAmount = 0.55f * p;
+                    if (blur) lp.setBlurBehindRadius((int) (48 * p));
+                    w.setAttributes(lp);
+                });
         bgIn.start();
         // 進場：卡片淡入 + 輕微上滑 + 放大（有機感）
         View content = w.getDecorView();
@@ -50,7 +51,11 @@ final class CardDialogs {
         content.setTranslationY(dp(content, 24));
         content.setScaleX(0.96f);
         content.setScaleY(0.96f);
-        content.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+        content.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
                 .setDuration(360)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f))
                 .start();

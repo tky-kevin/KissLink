@@ -5,20 +5,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import org.junit.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
+import org.junit.Test;
 
 /**
- * 用 {@link LoopbackPeers} 框架把真實 {@link TransferProtocol} 幀序列推過本機 TCP，
- * 驗證 framing 在真實 stream 上的端到端行為——這是純編解碼的 {@link TransferProtocolTest}
- * 涵蓋不到的：連續多幀排序、TCP 分段下的重組、緩衝/flush 邊界、CRC 在傳輸中的偵錯。
+ * 用 {@link LoopbackPeers} 框架把真實 {@link TransferProtocol} 幀序列推過本機 TCP， 驗證 framing 在真實 stream
+ * 上的端到端行為——這是純編解碼的 {@link TransferProtocolTest} 涵蓋不到的：連續多幀排序、TCP 分段下的重組、緩衝/flush 邊界、CRC 在傳輸中的偵錯。
  *
- * <p>傳/收輔助方法（{@link #sendItem}/{@link #receiveItem}）刻意鏡像生產端
- * {@code PeerSender} 的分塊 framing 與 {@code PeerReceiver} 的逐幀重組+CRC 契約，
- * 因此這裡跑過的線格式即真實 Wi-Fi Direct 通道上的線格式。
+ * <p>傳/收輔助方法（{@link #sendItem}/{@link #receiveItem}）刻意鏡像生產端 {@code PeerSender} 的分塊 framing 與 {@code
+ * PeerReceiver} 的逐幀重組+CRC 契約， 因此這裡跑過的線格式即真實 Wi-Fi Direct 通道上的線格式。
  */
 public class TransferProtocolLoopbackTest {
 
@@ -41,9 +38,9 @@ public class TransferProtocolLoopbackTest {
     public void singleFile_chunkedAcrossFrames_reassemblesExactly() throws Exception {
         byte[] data = randomBytes(200 * 1024, 1); // 200 KB
         try (LoopbackPeers link = LoopbackPeers.open()) {
-            // sender runs on its own thread; receiver pulls on the test thread (avoids socket-buffer deadlock).
-            Async sendErr = runAsync(() ->
-                    sendItem(link.a(), 0, 1, "photo.jpg", data, 64 * 1024));
+            // sender runs on its own thread; receiver pulls on the test thread (avoids
+            // socket-buffer deadlock).
+            Async sendErr = runAsync(() -> sendItem(link.a(), 0, 1, "photo.jpg", data, 64 * 1024));
             ReceivedItem got = receiveItem(link.b());
             rethrow(sendErr);
 
@@ -58,8 +55,16 @@ public class TransferProtocolLoopbackTest {
         // payload spanning multiple max-size chunks; stresses TCP segmentation + readFully.
         byte[] data = randomBytes(TransferProtocol.CHUNK_SIZE + 123_456, 7);
         try (LoopbackPeers link = LoopbackPeers.open()) {
-            Async sendErr = runAsync(() ->
-                    sendItem(link.a(), 0, 1, "blob.bin", data, TransferProtocol.CHUNK_SIZE));
+            Async sendErr =
+                    runAsync(
+                            () ->
+                                    sendItem(
+                                            link.a(),
+                                            0,
+                                            1,
+                                            "blob.bin",
+                                            data,
+                                            TransferProtocol.CHUNK_SIZE));
             ReceivedItem got = receiveItem(link.b());
             rethrow(sendErr);
             assertArrayEquals(data, got.bytes);
@@ -71,17 +76,23 @@ public class TransferProtocolLoopbackTest {
     @Test
     public void multiFileBatch_eachFileReconstructedInOrder() throws Exception {
         byte[][] files = {
-                randomBytes(10_000, 11),
-                randomBytes(70_000, 22),
-                randomBytes(1, 33),
+            randomBytes(10_000, 11), randomBytes(70_000, 22), randomBytes(1, 33),
         };
         String[] names = {"a.txt", "b.dat", "c.bin"};
         try (LoopbackPeers link = LoopbackPeers.open()) {
-            Async sendErr = runAsync(() -> {
-                for (int i = 0; i < files.length; i++) {
-                    sendItem(link.a(), i, files.length, names[i], files[i], 32 * 1024);
-                }
-            });
+            Async sendErr =
+                    runAsync(
+                            () -> {
+                                for (int i = 0; i < files.length; i++) {
+                                    sendItem(
+                                            link.a(),
+                                            i,
+                                            files.length,
+                                            names[i],
+                                            files[i],
+                                            32 * 1024);
+                                }
+                            });
             for (int i = 0; i < files.length; i++) {
                 ReceivedItem got = receiveItem(link.b());
                 assertEquals("file " + i + " name", names[i], got.name);
@@ -97,13 +108,19 @@ public class TransferProtocolLoopbackTest {
     public void manyBackToBackFrames_keepBoundaries() throws Exception {
         int n = 500;
         try (LoopbackPeers link = LoopbackPeers.open()) {
-            Async sendErr = runAsync(() -> {
-                for (int i = 0; i < n; i++) {
-                    byte[] p = new byte[]{(byte) i, (byte) (i >> 8)};
-                    int crc = TransferProtocol.crc32(p, 0, p.length);
-                    link.a().sendFrame(TransferProtocol.makeDataChunk(0, i, p.length, crc), p);
-                }
-            });
+            Async sendErr =
+                    runAsync(
+                            () -> {
+                                for (int i = 0; i < n; i++) {
+                                    byte[] p = new byte[] {(byte) i, (byte) (i >> 8)};
+                                    int crc = TransferProtocol.crc32(p, 0, p.length);
+                                    link.a()
+                                            .sendFrame(
+                                                    TransferProtocol.makeDataChunk(
+                                                            0, i, p.length, crc),
+                                                    p);
+                                }
+                            });
             for (int i = 0; i < n; i++) {
                 LoopbackPeers.Frame f = link.b().receiveFrame();
                 assertEquals(TransferProtocol.TYPE_DATA_CHUNK, f.header.type);
@@ -126,11 +143,14 @@ public class TransferProtocolLoopbackTest {
 
         try (LoopbackPeers link = LoopbackPeers.open()) {
             // header advertises the CRC of the ORIGINAL bytes, but tampered bytes go on the wire.
-            link.a().sendFrame(
-                    TransferProtocol.makeDataChunk(0, 0, tampered.length, goodCrc), tampered);
+            link.a()
+                    .sendFrame(
+                            TransferProtocol.makeDataChunk(0, 0, tampered.length, goodCrc),
+                            tampered);
             LoopbackPeers.Frame f = link.b().receiveFrame();
             int recomputed = TransferProtocol.crc32(f.payload, 0, f.payload.length);
-            assertFalse("CRC over received bytes must differ from advertised",
+            assertFalse(
+                    "CRC over received bytes must differ from advertised",
                     recomputed == f.header.crc32);
         }
     }
@@ -147,17 +167,23 @@ public class TransferProtocolLoopbackTest {
         int chunk = 4096;
 
         try (LoopbackPeers link = LoopbackPeers.open()) {
-            Async sendErr = runAsync(() -> {
-                // sender naively re-sends the whole file in 4096-byte chunks from offset 0.
-                for (long off = 0; off < full.length; off += chunk) {
-                    int len = (int) Math.min(chunk, full.length - off);
-                    byte[] part = slice(full, (int) off, len);
-                    int crc = TransferProtocol.crc32(part, 0, len);
-                    link.a().sendFrame(
-                            TransferProtocol.makeDataChunk(0, off, len, crc), part);
-                }
-                link.a().sendFrame(TransferProtocol.makeComplete(0), null);
-            });
+            Async sendErr =
+                    runAsync(
+                            () -> {
+                                // sender naively re-sends the whole file in 4096-byte chunks from
+                                // offset 0.
+                                for (long off = 0; off < full.length; off += chunk) {
+                                    int len = (int) Math.min(chunk, full.length - off);
+                                    byte[] part = slice(full, (int) off, len);
+                                    int crc = TransferProtocol.crc32(part, 0, len);
+                                    link.a()
+                                            .sendFrame(
+                                                    TransferProtocol.makeDataChunk(
+                                                            0, off, len, crc),
+                                                    part);
+                                }
+                                link.a().sendFrame(TransferProtocol.makeComplete(0), null);
+                            });
 
             // receiver reconstructs ONLY the bytes from resumeFrom onward, applying skip+trim.
             ByteArrayOutputStream tail = new ByteArrayOutputStream();
@@ -167,9 +193,10 @@ public class TransferProtocolLoopbackTest {
                 long off = f.header.offset;
                 int chunkLen = f.header.chunkLen;
                 long chunkEnd = off + chunkLen;
-                if (chunkEnd <= resumeFrom) continue;            // fully already-received → skip
+                if (chunkEnd <= resumeFrom) continue; // fully already-received → skip
                 int writeFrom = 0;
-                if (off < resumeFrom) writeFrom = (int) (resumeFrom - off); // straddling → trim head
+                if (off < resumeFrom)
+                    writeFrom = (int) (resumeFrom - off); // straddling → trim head
                 tail.write(f.payload, writeFrom, chunkLen - writeFrom);
             }
             rethrow(sendErr);
@@ -199,11 +226,13 @@ public class TransferProtocolLoopbackTest {
     // ══════════════════════════════════════════════════════════
 
     /** Frame an item as PeerSender does: FILE_META(name) → DATA_CHUNK×N → COMPLETE. */
-    private static void sendItem(LoopbackPeers.Peer peer, int id, int count,
-                                 String name, byte[] data, int chunkSize) throws Exception {
+    private static void sendItem(
+            LoopbackPeers.Peer peer, int id, int count, String name, byte[] data, int chunkSize)
+            throws Exception {
         byte[] meta = name.getBytes(StandardCharsets.UTF_8);
         peer.sendFrame(
-                TransferProtocol.makeItemMeta(id, TransferProtocol.ITEM_FILE, data.length, meta.length),
+                TransferProtocol.makeItemMeta(
+                        id, TransferProtocol.ITEM_FILE, data.length, meta.length),
                 meta);
         for (long off = 0; off < data.length; off += chunkSize) {
             int len = (int) Math.min(chunkSize, data.length - off);
@@ -259,7 +288,9 @@ public class TransferProtocolLoopbackTest {
     }
 
     /** Run a throwing task on a background thread; returns a handle to join + surface its error. */
-    private interface ThrowingRunnable { void run() throws Exception; }
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
 
     private static final class Async {
         Thread thread;
@@ -272,9 +303,16 @@ public class TransferProtocolLoopbackTest {
      */
     private static Async runAsync(ThrowingRunnable task) {
         final Async async = new Async();
-        async.thread = new Thread(() -> {
-            try { task.run(); } catch (Throwable e) { async.error = e; }
-        }, "loopback-sender");
+        async.thread =
+                new Thread(
+                        () -> {
+                            try {
+                                task.run();
+                            } catch (Throwable e) {
+                                async.error = e;
+                            }
+                        },
+                        "loopback-sender");
         async.thread.setDaemon(true);
         async.thread.start();
         return async;

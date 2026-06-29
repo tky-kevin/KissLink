@@ -1,43 +1,43 @@
 plugins {
-    id 'com.android.library'
-    id 'org.jetbrains.kotlin.android'
+	id 'com.android.library'
+	id 'org.jetbrains.kotlin.android'
 }
 
 android {
-    namespace = 'com.kisslink.core.data'
-    compileSdk = 34
+	namespace = 'com.kisslink.core.data'
+	compileSdk = 34
 
-    defaultConfig {
-        minSdk = 29
-        javaCompileOptions {
-            annotationProcessorOptions {
-                arguments += ['room.schemaLocation': "$projectDir/schemas"]
-            }
-        }
-    }
+	defaultConfig {
+		minSdk = 29
+		javaCompileOptions {
+			annotationProcessorOptions {
+				arguments += ['room.schemaLocation': "$projectDir/schemas"]
+			}
+		}
+	}
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
+	compileOptions {
+		sourceCompatibility = JavaVersion.VERSION_11
+		targetCompatibility = JavaVersion.VERSION_11
+	}
 
-    kotlinOptions {
-        jvmTarget = '11'
-    }
+	kotlinOptions {
+		jvmTarget = '11'
+	}
 }
 
 dependencies {
-    api project(':core:domain')
+	api project(':core:domain')
 
-    // Room
-    implementation 'androidx.room:room-runtime:2.6.1'
-    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+	// Room
+	implementation 'androidx.room:room-runtime:2.6.1'
+	annotationProcessor 'androidx.room:room-compiler:2.6.1'
 
-    // LiveData (TransferRepository returns LiveData)
-    implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
+	// LiveData (TransferRepository returns LiveData)
+	implementation 'androidx.lifecycle:lifecycle-livedata:2.8.0'
 
-    // Coroutines (for ITransferRepository Flow impl)
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+	// Coroutines (for ITransferRepository Flow impl)
+	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
 
-    implementation 'androidx.core:core:1.13.1'
+	implementation 'androidx.core:core:1.13.1'
 }

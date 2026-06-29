@@ -5,9 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
-
 import androidx.annotation.Nullable;
-
 import java.io.InputStream;
 
 /**
@@ -48,7 +46,10 @@ public final class ThumbUtils {
         } catch (Exception e) {
             return null;
         } finally {
-            try { retriever.release(); } catch (Exception ignored) {}
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
         }
     }
 

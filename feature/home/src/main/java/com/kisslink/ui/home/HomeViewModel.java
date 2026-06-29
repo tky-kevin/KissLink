@@ -4,23 +4,20 @@ import androidx.annotation.NonNull;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
-
 import com.kisslink.transfer.SendItem;
 import com.kisslink.transfer.SessionState;
 import com.kisslink.transfer.TransferProgress;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Home 畫面的狀態持有者（MVVM 的 VM）：把原本散在 {@code HomeActivity} 的選取／傳輸／接收
- * 狀態與其衍生判斷集中於此，與 Android View 解耦以利單元測試。
+ * Home 畫面的狀態持有者（MVVM 的 VM）：把原本散在 {@code HomeActivity} 的選取／傳輸／接收 狀態與其衍生判斷集中於此，與 Android View
+ * 解耦以利單元測試。
  *
- * <p>本類別「不」持有任何 View / Context，也不直接觸碰 Service binding——綁定生命週期仍由
- * Activity 管理；Activity 把來自 binder 的 {@link SessionState} 透過 {@link #onSession} 餵入，
- * VM 更新內部狀態並以 LiveData / 衍生方法對外揭露，由 Activity 負責渲染。
+ * <p>本類別「不」持有任何 View / Context，也不直接觸碰 Service binding——綁定生命週期仍由 Activity 管理；Activity 把來自 binder 的
+ * {@link SessionState} 透過 {@link #onSession} 餵入， VM 更新內部狀態並以 LiveData / 衍生方法對外揭露，由 Activity 負責渲染。
  */
 public class HomeViewModel extends ViewModel {
 
@@ -45,30 +42,49 @@ public class HomeViewModel extends ViewModel {
         public final byte type;
         public int percent = -1;
         public boolean done;
-        public boolean highlight;   // 當前正在接收的那一檔
-        @androidx.annotation.Nullable public String uri;   // 存檔位置（收完才有，供點開）
+        public boolean highlight; // 當前正在接收的那一檔
+        @androidx.annotation.Nullable public String uri; // 存檔位置（收完才有，供點開）
         @androidx.annotation.Nullable public String mime;
-        RecvFile(String name, long size, byte type) { this.name = name; this.size = size; this.type = type; }
+
+        RecvFile(String name, long size, byte type) {
+            this.name = name;
+            this.size = size;
+            this.type = type;
+        }
     }
-    private final java.util.LinkedHashMap<String, RecvFile> received = new java.util.LinkedHashMap<>();
+
+    private final java.util.LinkedHashMap<String, RecvFile> received =
+            new java.util.LinkedHashMap<>();
     private long receiveListBatchId = 0;
 
-    public java.util.Collection<RecvFile> receivedFiles() { return received.values(); }
-    public boolean hasReceivedList() { return !received.isEmpty(); }
+    public java.util.Collection<RecvFile> receivedFiles() {
+        return received.values();
+    }
+
+    public boolean hasReceivedList() {
+        return !received.isEmpty();
+    }
 
     /**
      * 接收到某檔的進度/完成；遇到新批次先清空。高亮設於當前傳輸中的那一檔。
+     *
      * @return true 表示此檔為新加入（以前不在清單中）
      */
-    public boolean upsertReceived(long batchId, @NonNull String name, long size, byte type,
-                                  int percent, boolean done) {
-        if (batchId != receiveListBatchId) { received.clear(); receiveListBatchId = batchId; }
+    public boolean upsertReceived(
+            long batchId, @NonNull String name, long size, byte type, int percent, boolean done) {
+        if (batchId != receiveListBatchId) {
+            received.clear();
+            receiveListBatchId = batchId;
+        }
         RecvFile f = received.get(name);
         boolean isNew = (f == null);
         if (isNew) {
             // 接收是循序的：新檔出現代表先前各檔皆已完成。FILE_DONE 事件經 LiveData 投遞會被合併
             // 丟棄（快速小檔尤甚），不可依賴；改用「下一檔開始」這個更可靠的訊號回填前面各檔的完成。
-            for (RecvFile o : received.values()) { o.done = true; o.percent = 100; }
+            for (RecvFile o : received.values()) {
+                o.done = true;
+                o.percent = 100;
+            }
             f = new RecvFile(name, size, type);
             received.put(name, f);
         }
@@ -80,10 +96,15 @@ public class HomeViewModel extends ViewModel {
     }
 
     /** 收完某檔 → 補上存檔 Uri/MIME，使該列可點開。 */
-    public void setReceivedUri(@NonNull String name, @androidx.annotation.Nullable String uri,
-                               @androidx.annotation.Nullable String mime) {
+    public void setReceivedUri(
+            @NonNull String name,
+            @androidx.annotation.Nullable String uri,
+            @androidx.annotation.Nullable String mime) {
         RecvFile f = received.get(name);
-        if (f != null) { f.uri = uri; f.mime = mime; }
+        if (f != null) {
+            f.uri = uri;
+            f.mime = mime;
+        }
     }
 
     /**
@@ -229,9 +250,9 @@ public class HomeViewModel extends ViewModel {
     }
 
     /**
-     * 完成動畫一次性閘門：對某批次回 {@code true} 僅一次（首次真實送達的 ALL_DONE）。
-     * 重綁/重建補送同批 ALL_DONE 時回 {@code false}，呼叫端據此略過打勾/彩帶、只呈現已連線穩態。
-     * 每批完成事件只會送達一次（單檔走 ALL_DONE、多檔中間檔走 FILE_DONE 不到此），故以 batchId 為鍵安全。
+     * 完成動畫一次性閘門：對某批次回 {@code true} 僅一次（首次真實送達的 ALL_DONE）。 重綁/重建補送同批 ALL_DONE 時回 {@code
+     * false}，呼叫端據此略過打勾/彩帶、只呈現已連線穩態。 每批完成事件只會送達一次（單檔走 ALL_DONE、多檔中間檔走 FILE_DONE 不到此），故以 batchId
+     * 為鍵安全。
      */
     public boolean shouldCelebrate(long batchId) {
         if (batchId == celebratedBatchId) return false;
@@ -252,10 +273,7 @@ public class HomeViewModel extends ViewModel {
                 || lastPhase == SessionState.Phase.ALL_DONE;
     }
 
-    /**
-     * 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。
-     * 不用 lastPhase 判斷——否則「接收對方一包檔」期間/結束會誤把送出鈕藏掉。
-     */
+    /** 送出鈕：只要「已連線且待傳清單有東西」就顯示；僅在本端正在送出時隱藏。 不用 lastPhase 判斷——否則「接收對方一包檔」期間/結束會誤把送出鈕藏掉。 */
     public boolean shouldShowSendButton() {
         return isConnected() && !selection.isEmpty() && !sending;
     }
@@ -283,9 +301,8 @@ public class HomeViewModel extends ViewModel {
     // ══════════════════════════════════════════════════════════
 
     /**
-     * 進度 0..1，同段內單調不回退。
-     * 傳送多檔（fileCount&gt;1）→ (已完成檔數 + 當前檔比例)/總檔數，整包進度；
-     * 接收或單檔（fileCount≤1）→ 當前檔比例（換檔時重置）。
+     * 進度 0..1，同段內單調不回退。 傳送多檔（fileCount&gt;1）→ (已完成檔數 + 當前檔比例)/總檔數，整包進度； 接收或單檔（fileCount≤1）→
+     * 當前檔比例（換檔時重置）。
      */
     public float batchProgress(@NonNull TransferProgress tp) {
         boolean wholeBatch = tp.fileCount > 1;

@@ -8,6 +8,40 @@ plugins {
     id 'com.diffplug.spotless' version '6.25.0' apply false
 }
 
+// spotless + ktlint：對每個有原始碼的葉模組（:app + core/* + feature/*）統一套用同一份
+// 格式規範，讓 CI 的 spotlessCheck / ktlintCheck 能 gate 整個 repo，而不只是 :app。
+// 只套用葉模組（childProjects 為空）：跳過 :core / :feature 容器專案——它們沒有 java/android
+// 外掛，spotless 無從推斷 target 會建置失敗。設定鏡像自原本 app/build.gradle 的內容。
+configure(subprojects.findAll { it.childProjects.isEmpty() }) {
+    apply plugin: 'com.diffplug.spotless'
+    apply plugin: 'org.jlleitschuh.gradle.ktlint'
+
+    spotless {
+        java {
+            // 必須明確指定 target：Android 模組套的是 com.android.* 外掛，並未套 'java' 外掛，
+            // spotless 因此無法自動推斷 java 來源集——漏掉 target 會讓 java 檢查靜默變成空集合
+            // （check 永遠綠燈卻什麼都沒驗）。涵蓋 main/test/androidTest。
+            target 'src/**/*.java'
+            googleJavaFormat('1.19.2').aosp()
+            removeUnusedImports()
+            trimTrailingWhitespace()
+            endWithNewline()
+        }
+        groovyGradle {
+            greclipse()
+        }
+    }
+
+    ktlint {
+        ignoreFailures = false
+        enableExperimentalRules = true
+        filter {
+            exclude("**/build/**")
+            exclude("**/generated/**")
+        }
+    }
+}
+
 // Hilt 2.51.1 transitively requests older lifecycle/core/coroutines versions that are
 // not in the offline Gradle cache.  Force every submodule to the cached versions that
 // the :app module already uses so --offline builds work uniformly across all modules.
