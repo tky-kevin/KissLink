@@ -71,6 +71,11 @@ public final class SessionManager {
         return pendingSwitchPeer != null;
     }
 
+    /** 清掉「傳完再切換」的待切換對象（自動切換實作前，傳輸完成後呼叫以免殘留 stale 狀態）。 */
+    public void clearPendingSwitch() {
+        pendingSwitchPeer = null;
+    }
+
     /** 目前已連線對方的顯示名稱（HELLO 名片優先，其次 token）。 */
     @Nullable
     public String currentPeerName() {

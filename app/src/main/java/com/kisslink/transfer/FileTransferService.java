@@ -306,11 +306,13 @@ public class FileTransferService extends Service {
             case RESUME:
                 return;
             case QUEUED_SWITCH:
+                // 自動切換尚未實作（見 docs/LESSONS_LEARNED.md 第 7 章）；訊息只能誠實提示
+                // 使用者「待這次傳完後再碰一下」，不可承諾會自動切換（會讓人以為壞掉）。
                 mainHandler.post(
                         () ->
                                 android.widget.Toast.makeText(
                                                 this,
-                                                "傳輸完成後切換至新裝置",
+                                                "傳輸進行中，待完成後再碰一下即可連線新裝置",
                                                 android.widget.Toast.LENGTH_LONG)
                                         .show());
                 return;
@@ -408,7 +410,7 @@ public class FileTransferService extends Service {
         String peerName = sessionMgr.currentPeerName();
         TransferRepository repo = TransferRepository.getInstance(this);
         repo.insert(
-                repo.buildRecord(
+                TransferRepository.buildRecord(
                         dir,
                         name,
                         size,
@@ -552,8 +554,12 @@ public class FileTransferService extends Service {
     }
 
     private void onTransferCompleted() {
+        // NOTE: auto-switching to a peer that tapped mid-transfer is not yet implemented (planned —
+        // see docs/LESSONS_LEARNED.md ch.7). The QUEUED_SWITCH toast asks the user to re-tap the
+        // new device after this transfer; clear the stale queued peer so it doesn't linger.
         if (sessionMgr.hasPendingSwitch()) {
-            // TODO: implement queued peer switch
+            // TODO: consume pendingSwitchPeer here to auto-switch instead of clearing.
+            sessionMgr.clearPendingSwitch();
         }
         idleManager.scheduleIfIdle();
     }
